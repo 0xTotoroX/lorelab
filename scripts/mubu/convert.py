@@ -11,6 +11,7 @@ Roadmap 阶段新增能力：
 """
 
 import re
+import time
 from typing import Dict, Any, List
 
 from mubu.config import MubuError
@@ -299,6 +300,50 @@ def markdown_to_doc(md: str) -> Dict[str, Any]:
             continue
 
     return {"node": root_node}
+
+
+def normalize_node(node: Dict[str, Any]) -> Dict[str, Any]:
+    """递归补全 changeset 节点缺失的契约字段（对齐网页端 ``tr()`` 序列化器产出）。
+
+    仅对**缺失**字段补保守默认值，已存在的字段原样保留（不动 ``id``/``text``/
+    ``children``/``checked`` 等既有内容）：
+
+    - ``note``: ``""``
+    - ``collapsed``: ``False``
+    - ``finish``: ``False``
+    - ``priority``: ``0``
+    - ``color``: ``0``
+    - ``createTime`` / ``modifyTime`` / ``timestamp``: 节点已有则沿用，否则
+      ``int(time.time() * 1000)``
+
+    用途：加固 ``build_update_event`` —— 当 ``nodes`` 由 ``markdown_to_doc`` 构造
+    （缺上述字段）直喂 ``save`` 时，避免残缺 payload 触发服务端 ``code:17 illegal
+    request``（hypothesis 2 闭环）。``get_doc`` 返回的完整 ``nodes`` 经此函数无副作用
+    （字段本就齐全，仅对极端缺失项补默认值），不破坏标准 save 路径。
+    """
+    if not isinstance(node, dict):
+        return node
+    now = int(time.time() * 1000)
+    if node.get("note") is None:
+        node["note"] = ""
+    if node.get("collapsed") is None:
+        node["collapsed"] = False
+    if node.get("finish") is None:
+        node["finish"] = False
+    if node.get("priority") is None:
+        node["priority"] = 0
+    if node.get("color") is None:
+        node["color"] = 0
+    if node.get("createTime") is None:
+        node["createTime"] = node.get("timestamp") or now
+    if node.get("modifyTime") is None:
+        node["modifyTime"] = node.get("timestamp") or now
+    if node.get("timestamp") is None:
+        node["timestamp"] = now
+    # 递归归一化子树
+    for child in node.get("children") or []:
+        normalize_node(child)
+    return node
 
 
 def format_list(data: Dict) -> str:

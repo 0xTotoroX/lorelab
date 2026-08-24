@@ -983,7 +983,19 @@ class TestApiMethodPayloads:
         assert update_event["name"] == "update"
         root = update_event["updated"][0]["updated"]
         assert root["id"] == "D9"
-        assert root["children"] == [{"id": "n1", "text": "A"}]
+        # v1.3.14（hypothesis 2 加固）：build_update_event 对节点做归一化，
+        # 断言归一化后的关键字段而非精确形状（时间戳为动态值，仅校验类型）。
+        child = root["children"][0]
+        assert child["id"] == "n1"
+        assert child["text"] == "A"
+        assert child["note"] == ""
+        assert child["collapsed"] is False
+        assert child["finish"] is False
+        assert child["priority"] == 0
+        assert child["color"] == 0
+        assert isinstance(child["createTime"], int)
+        assert isinstance(child["modifyTime"], int)
+        assert isinstance(child["timestamp"], int)
         # 幂等：updated == original
         assert update_event["updated"][0]["updated"] == update_event["updated"][0]["original"]
 
@@ -995,7 +1007,20 @@ class TestApiMethodPayloads:
         assert event["name"] == "update"
         pair = event["updated"][0]
         assert pair["updated"]["id"] == "D9"
-        assert pair["updated"]["children"] == [{"id": "n1", "text": "A", "children": []}]
+        # v1.3.14（hypothesis 2 加固）：节点经归一化补全契约字段，断言关键字段而非
+        # 精确形状（时间戳为动态值，仅校验类型）。
+        child = pair["updated"]["children"][0]
+        assert child["id"] == "n1"
+        assert child["text"] == "A"
+        assert child["children"] == []
+        assert child["note"] == ""
+        assert child["collapsed"] is False
+        assert child["finish"] is False
+        assert child["priority"] == 0
+        assert child["color"] == 0
+        assert isinstance(child["createTime"], int)
+        assert isinstance(child["modifyTime"], int)
+        assert isinstance(child["timestamp"], int)
         assert isinstance(pair["updated"]["modified"], int)
         # 幂等：updated 与 original 完全一致
         assert pair["updated"] == pair["original"]

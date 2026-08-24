@@ -31,6 +31,7 @@ from mubu.config import (
 from mubu.convert import (
     export_markdown,
     _safe_filename,
+    normalize_node,
 )
 
 
@@ -412,14 +413,17 @@ class MubuClient:
                 形如 ``{"nodes": [...]}``。
             doc_id: 文档 ID（作为 rootNode 的 id）。
         """
-        # 注意：此处直接透传调用方传入的 nodes，不做字段补全（如 note/collapsed/
-        # finish/priority/color/时间戳）。约定 nodes 已是服务端契约形状（get_doc 返回的
-        # definition 天然满足；若由 markdown_to_doc 构造，调用方需自行保证字段完整，
-        # 否则残缺 payload 可能触发服务端 code:17 illegal request）。
+        # 加固（hypothesis 2，v1.3.14）：递归归一化每个顶层节点及其子树，补全网页端
+        # tr() 序列化器产出的契约字段（note/collapsed/finish/priority/color/时间戳）。
+        # get_doc 返回的完整 nodes 字段本就齐全、不受此影响；而 markdown_to_doc 构造的
+        # 缺字段 nodes 直喂 save 时，经此归一化可避免残缺 payload 触发服务端
+        # code:17 illegal request（hypothesis 2 闭环）。
         nodes = doc_definition.get("nodes", []) if isinstance(doc_definition, dict) else []
+        normalized_nodes = [normalize_node(n) for n in nodes]
         # root.id 取 doc_id：逆向自网页端「文档根节点 id == 文档 id」的假设，v1.3.9 真机验证可用；
-        # 若服务端后续改为下发真实根节点 id，需在此对齐（保留现状，保守不改）。
-        root = {"id": doc_id, "children": nodes, "modified": int(time.time() * 1000)}
+        # 无法从 get_doc 返回（仅 {"name","nodes"}，无独立根 id 字段）确证真实根 id，
+        # 故保留现状、保守不改。
+        root = {"id": doc_id, "children": normalized_nodes, "modified": int(time.time() * 1000)}
         return {"name": "update", "updated": [{"updated": root, "original": root}]}
 
     def save_doc(self, doc_id: str, events: Optional[List[Dict]] = None,

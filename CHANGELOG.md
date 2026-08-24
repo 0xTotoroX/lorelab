@@ -2,6 +2,32 @@
 
 记录 mubu-integration Skill 的里程碑演化。
 
+## v1.3.14（本期发布版本 · hypothesis 2 归一化加固，2026-08-25）
+
+本期闭环 hypothesis 2：changeset 节点未做网页端 `tr()` 归一化（缺 note/collapsed/
+finish/priority/color/时间戳等字段），markdown 直转产物若直喂 save 理论上仍可能触发
+`illegal request`。经核查，CLI `save` 命令（`scripts/mubu/cli.py:225-237`）确会把
+`markdown_to_doc` 的根节点直接包成 `{"nodes":[...]}` 喂入 `build_update_event` → `save_doc`，
+该路径真实可达，故需加固。
+
+- **fix(save): changeset 节点归一化加固（hypothesis 2 闭环）**：新增 `normalize_node`
+  （`scripts/mubu/convert.py`），**递归**补全缺失的契约字段——`note=""`、`collapsed=False`、
+  `finish=False`、`priority=0`、`color=0`，时间戳 `createTime`/`modifyTime`/`timestamp`
+  用节点已有值或 `int(time.time()*1000)`；已存在的 `id`/`text`/`children`/`checked` 等字段
+  原样保留。在 `build_update_event`（`scripts/mubu/client.py`）构造 children 前对每个节点归一化。
+  `get_doc` 返回的完整 nodes 字段本就齐全、不受此影响，**不破坏标准 save 路径**；仅对
+  `markdown_to_doc` 构造的缺字段节点做补全，避免残缺 payload 触发服务端 `code:17 illegal request`。
+- **root.id 维持 doc_id（保守不改）**：`build_update_event` 的 `root.id` 仍取 `doc_id`
+  （逆向自「文档根节点 id == 文档 id」假设，v1.3.9 真机验证可用）。无法从 `get_doc` 返回
+  （仅 `{"name","nodes"}`，无独立根 id 字段）确证真实根 id，故保留现状并加注释，未盲目改动。
+- **测试同步更新（2 例精确形状断言改为关键字段断言）**：`test_save_doc_auto_fetches_version_and_definition`
+  与 `test_build_update_event_shape` 原断言节点精确形状（如 `{"id":"n1","text":"A"}`），归一化后
+  节点含补全字段，改为断言关键字段存在 + 时间戳类型为 int；`markdown_to_doc` 自身单元不受影响。
+- **⚠️ KNOWN LIMITATION（重申）**：`memberId` 仍无法经任何 API 自动获取，`save` 写回必须手动设置
+  `MUBU_MEMBER_ID`（见 v1.3.13）；本次仅补足节点契约字段，不改变该前置条件。另：本次归一化属客户端
+  契约补全，`save` 端到端落库仍受服务端反爬签名前置条件约束（同历史 KNOWN LIMITATION）。
+- test: **113 passed（0 失败，较 v1.3.13 同步更新 2 例 save 路径断言以匹配归一化形状，无新增用例、无回归）**。
+
 ## v1.3.13（本期发布版本 · issue #8 修复，2026-08-23）
 
 本期修复 issue #8「幕布成功创建了同名文档，但正文保存被服务端以 illegal request 拒绝」的根因，
