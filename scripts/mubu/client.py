@@ -321,6 +321,11 @@ class MubuClient:
         self.token = data["token"]
         self.user_id = data["id"]
         self.username = data["name"]
+        # v1.3.13：防御性尝试从登录响应读取 colla memberId。已知限制：幕布登录响应
+        # 不含 memberId（任何 API 均不返回），此处仅作无害兜底；读不到则保持原值
+        #（来自 ~/.mubu_token 缓存或 MUBU_MEMBER_ID 环境变量，由 P0 校验兜底）。
+        if not self.member_id:
+            self.member_id = data.get("memberId") or data.get("member_id")
         self._save_token()
 
         return {
@@ -407,7 +412,13 @@ class MubuClient:
                 形如 ``{"nodes": [...]}``。
             doc_id: 文档 ID（作为 rootNode 的 id）。
         """
+        # 注意：此处直接透传调用方传入的 nodes，不做字段补全（如 note/collapsed/
+        # finish/priority/color/时间戳）。约定 nodes 已是服务端契约形状（get_doc 返回的
+        # definition 天然满足；若由 markdown_to_doc 构造，调用方需自行保证字段完整，
+        # 否则残缺 payload 可能触发服务端 code:17 illegal request）。
         nodes = doc_definition.get("nodes", []) if isinstance(doc_definition, dict) else []
+        # root.id 取 doc_id：逆向自网页端「文档根节点 id == 文档 id」的假设，v1.3.9 真机验证可用；
+        # 若服务端后续改为下发真实根节点 id，需在此对齐（保留现状，保守不改）。
         root = {"id": doc_id, "children": nodes, "modified": int(time.time() * 1000)}
         return {"name": "update", "updated": [{"updated": root, "original": root}]}
 
@@ -453,8 +464,18 @@ class MubuClient:
             if events is None:
                 definition = json.loads(raw["definition"])
                 events = [self.build_update_event(definition, doc_id)]
+        # v1.3.13（issue #8 修复）：save_doc 必须有 member_id（colla 会话 id）。
+        # 该值任何 API 都不返回（KNOWN LIMITATION），无法自动获取；缺失时绝不再静默
+        # 发空串（空串会被服务端以 code:17 illegal request 拒绝），改为明确报错引导配置。
+        if not self.member_id:
+            raise MubuError(
+                "保存正文需要幕布 colla 成员 ID（member_id）。该值无法经任何 API 自动获取，"
+                "请设置环境变量 MUBU_MEMBER_ID 后重试（其值可在浏览器登录 mubu.com 后，"
+                "从发往 /colla/events 或 /v3/api 的请求 payload / 网络请求中查到 memberId 字段）。",
+                status_code=None,
+            )
         payload = {
-            "memberId": self.member_id or "",
+            "memberId": self.member_id,
             "type": "CHANGE",
             "version": version,
             "documentId": doc_id,

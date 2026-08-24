@@ -1000,6 +1000,21 @@ class TestApiMethodPayloads:
         # 幂等：updated 与 original 完全一致
         assert pair["updated"] == pair["original"]
 
+    def test_save_doc_raises_without_member_id(self, isolated_client):
+        """issue #8 修复（P0）：member_id 缺失时 save_doc 必须明确抛 MubuError，
+        而非静默发空串（空串会被服务端以 code:17 illegal request 拒绝）。
+        且不应发起任何网络请求（events/version 已提供，直接走到 member_id 校验）。"""
+        # isolated_client 默认 member_id = None（fixture 未设置）
+        with pytest.raises(MubuError) as ei:
+            isolated_client.save_doc(
+                "D9",
+                events=[isolated_client.build_update_event(
+                    {"nodes": [{"id": "n1", "text": "A"}]}, "D9")],
+                version=3,
+            )
+        # 报错需引导用户配置 MUBU_MEMBER_ID
+        assert "MUBU_MEMBER_ID" in ei.value.msg
+
     @responses.activate
     def test_delete_body(self, isolated_client):
         captured = {}

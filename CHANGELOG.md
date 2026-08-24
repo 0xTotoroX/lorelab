@@ -2,6 +2,27 @@
 
 记录 mubu-integration Skill 的里程碑演化。
 
+## v1.3.13（本期发布版本 · issue #8 修复，2026-08-23）
+
+本期修复 issue #8「幕布成功创建了同名文档，但正文保存被服务端以 illegal request 拒绝」的根因，
+并修正文档中与代码矛盾的「memberId 可自动缓存、无需手动设置」误导表述。
+
+- **fix(save): member_id 缺失时明确报错（替代静默发空串）**：`save_doc`（`scripts/mubu/client.py`）
+  构造 `/colla/events` payload 前校验 `member_id`；缺失时抛 `MubuError` 明确提示配置
+  `MUBU_MEMBER_ID`（附浏览器抓包获取 memberId 的方法），不再静默发空串被服务端以
+  `code:17 / illegal request` 拒绝。这是 issue #8「能建文档、存正文被拒」的 100% 吻合根因
+  （`create_doc` 不需要 memberId，`save_doc` 需要）。
+- **fix(login): 防御性读取 memberId**：`login()` 读取 token/id/name 后，尝试从登录响应读取
+  `memberId`/`member_id` 作兜底；已知限制下登录响应不含该字段，读不到则保持原值（由上方校验兜底），
+  属无害加固。
+- **doc(SKILL.md): 修正「自动缓存、无需手动设置」误导表述**：删除「登录后自动缓存到
+  `~/.mubu_token`，一般无需手动设置」等错误描述，明确说明「`memberId` 任何 API 都不暴露，
+  `save` 写回**必须手动**设置 `MUBU_MEMBER_ID`（或提前写入 token 缓存的 `member_id`）；
+  缺失时 `save` 会明确报错，不影响 `get`/`create`/`move`/`rename`」。与 M19 KNOWN LIMITATION 对齐。
+- **⚠️ KNOWN LIMITATION（重申）**：个人文档的 `memberId` 仍无法经任何 API 自动获取，工具无法绕过；
+  必须手动设置 `MUBU_MEMBER_ID`。v1.3.13 仅让缺失时的报错清晰可操作，并非自动解决（服务端限制）。
+- test: **113 passed（0 失败，较 v1.3.12 的 112 新增 1 例 save_doc 缺失 member_id 回归测试，无回归）**。
+
 ## v1.3.12（本期发布版本 · P0 落地页，2026-08-06）
 
 - **README 落地页化**：英文 `README.md` 重写为产品落地页（social-preview 头图、`assets/demo.gif` 动图、能力对比表、3 个 Use Case、Reliability 章节）；新增 `README.zh-CN.md` 全量中文版（英文默认 + 中文全量）。
