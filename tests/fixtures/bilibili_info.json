@@ -1,0 +1,24 @@
+{
+  "code": 200,
+  "data": {
+    "View": {
+      "bvid": "BV1M1421t7hT",
+      "aid": 123456,
+      "cid": 654321,
+      "title": "示例视频",
+      "owner": {"name": "UP主", "mid": 1},
+      "pubdate": 1710000000,
+      "duration": 120,
+      "subtitle": {
+        "list": [
+          {
+            "lan": "zh-CN",
+            "lan_doc": "中文",
+            "subtitle_url": "https://i0.hdslb.com/bfs/subtitle/example.json",
+            "type": 0
+          }
+        ]
+      }
+    }
+  }
+}

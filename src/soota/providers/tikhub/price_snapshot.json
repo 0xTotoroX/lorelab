@@ -1,0 +1,25 @@
+{
+  "as_of": "2026-08-25",
+  "currency": "USD",
+  "source": "TikHub get_endpoint_info live 2026-08-25",
+  "endpoints": {
+    "/api/v1/youtube/web_v2/get_video_info_v2": 0.001,
+    "/api/v1/youtube/web_v2/get_video_captions": 0.008,
+    "/api/v1/youtube/web_v2/get_video_captions_result": 0.0,
+    "/api/v1/youtube/web_v2/get_video_streams_v2": 0.003,
+    "/api/v1/bilibili/web/fetch_one_video": 0.001,
+    "/api/v1/bilibili/web/fetch_one_video_v3": 0.001,
+    "/api/v1/bilibili/web/fetch_video_subtitle": 0.001,
+    "/api/v1/bilibili/web/fetch_video_playurl": 0.001
+  },
+  "allow_free_credit": {
+    "/api/v1/youtube/web_v2/get_video_info_v2": false,
+    "/api/v1/youtube/web_v2/get_video_captions": false,
+    "/api/v1/youtube/web_v2/get_video_captions_result": false,
+    "/api/v1/youtube/web_v2/get_video_streams_v2": false,
+    "/api/v1/bilibili/web/fetch_one_video": true,
+    "/api/v1/bilibili/web/fetch_one_video_v3": true,
+    "/api/v1/bilibili/web/fetch_video_subtitle": false,
+    "/api/v1/bilibili/web/fetch_video_playurl": true
+  }
+}

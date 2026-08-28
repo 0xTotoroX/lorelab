@@ -1,0 +1,13 @@
+{
+  "code": 200,
+  "data": {
+    "adaptive_formats": [
+      {
+        "itag": 140,
+        "mime_type": "audio/mp4",
+        "bitrate": 128000,
+        "url": "https://rr1.googlevideo.com/videoplayback?expire=1710000000&sig=SUPERSECRET123456"
+      }
+    ]
+  }
+}
