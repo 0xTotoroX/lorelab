@@ -123,8 +123,8 @@ pip install -r requirements.txt
 mubu-integration 调用的是**与幕布 Web 端相同的 HTTPS 接口** —— 不爬取、不操控浏览器。
 
 - ✅ **已对线上环境真机验证** —— 最近一次真机校验为 **2026-08-05**，针对 mubu.com 生产环境。`move`、`save_doc`、`rename`、OPML、FreeMind、`export-tree` 均已确认可用。
-- ✅ **84 用例 × 4 个 Python 版本，每次全绿** —— GitHub Actions 矩阵在每次 push 和 PR 时于 Python 3.9 / 3.10 / 3.11 / 3.12 上运行。
-- ✅ **零人工介入鉴权** —— Token 过期后用缓存凭据自动重新登录，无需手动干预。
+- ✅ **115 用例 × 4 个 Python 版本，每次全绿** —— GitHub Actions 矩阵在每次 push 和 PR 时于 Python 3.9 / 3.10 / 3.11 / 3.12 上运行。
+- ✅ **自动刷新鉴权** —— Token 过期后用缓存凭据（环境变量 / `~/.workbuddy/.env.mubu`）自动重新登录，初始配置后无需再次手动输入。
 - ✅ **依赖全量锁定** —— `requirements.txt` 锁定精确版本；Dependabot 自动跟进更新。
 - ✅ **数据边界清晰** —— 工具仅以你的凭据访问你自己账号下的数据。凭据仅本地存储于 `~/.mubu_token`，权限 `0o600`（仅本人可读写）。
 
@@ -256,13 +256,13 @@ python3 scripts/mubu_api.py opml <doc_id> --format freeplane
 
 ## 🧪 测试与 CI
 
-本地运行全部测试（共 **84** 个 pytest 用例）：
+本地运行全部测试（共 **115** 个 pytest 用例）：
 
 ```bash
 PYTHONPATH=scripts python -m pytest -v
 ```
 
-持续集成：在 push 到 `main` 分支或提交 Pull Request 时，GitHub Actions 会于 **Python 3.9 / 3.10 / 3.11 / 3.12** 矩阵中自动运行测试。84 个用例在四个 Python 版本上均真实执行（非假成功）。
+持续集成：在 push 到 `main` 分支或提交 Pull Request 时，GitHub Actions 会于 **Python 3.9 / 3.10 / 3.11 / 3.12** 矩阵中自动运行测试。115 个用例在四个 Python 版本上均真实执行（非假成功）。
 
 ---
 

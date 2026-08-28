@@ -194,8 +194,9 @@ class MubuClient:
         此层只负责网络健壮性，**不触发重登**：
         - requests.exceptions.RequestException（超时/连接错误/网络抖动）→ 重试
         - HTTP 5xx（服务端错误）→ 重试
+        - HTTP 429（限流）→ 按 Retry-After 退避后重试
         重试上限 MAX_NETWORK_RETRIES（即最多共发起 3 次请求），退避见 NETWORK_BACKOFF。
-        4xx（含 401）等非 5xx 响应会原样返回，交由上层 _request 处理鉴权重试。
+        其余 4xx（含 401）等非 5xx/非 429 响应会原样返回，交由上层 _request 处理鉴权重试。
         """
         last_err: Optional[Exception] = None
         for attempt in range(MAX_NETWORK_RETRIES + 1):
@@ -214,6 +215,22 @@ class MubuClient:
                 raise MubuError(
                     f"网络连接失败，请检查网络（已重试 {MAX_NETWORK_RETRIES} 次）: {e}",
                     status_code=None,
+                )
+
+            # 429 限流 → 按 Retry-After 退避后重试（不重登）
+            if response.status_code == 429:
+                last_err = None
+                if attempt < MAX_NETWORK_RETRIES:
+                    retry_after = response.headers.get("Retry-After")
+                    if retry_after and str(retry_after).isdigit():
+                        time.sleep(min(int(retry_after), 30))
+                    else:
+                        time.sleep(NETWORK_BACKOFF[min(attempt, len(NETWORK_BACKOFF) - 1)])
+                    continue
+                raise MubuError(
+                    f"请求过于频繁（HTTP 429），请稍后重试（已重试 {MAX_NETWORK_RETRIES} 次）",
+                    status_code=429,
+                    body=response.text,
                 )
 
             # 5xx 服务端错误 → 退避重试（不重登）
@@ -391,7 +408,10 @@ class MubuClient:
             "isFromDocDir": True,
         })
         # 真实响应：data.definition 是 JSON 字符串，需二次解析为 {"nodes":[...]}
-        definition = json.loads(data["definition"])
+        try:
+            definition = json.loads(data["definition"])
+        except (KeyError, TypeError, ValueError) as e:
+            raise MubuError(f"解析文档定义失败（doc_id={doc_id}）：{e}") from e
         return {"name": data.get("name"), "nodes": definition.get("nodes", [])}
 
     def build_update_event(self, doc_definition: Dict, doc_id: str) -> Dict:
@@ -682,11 +702,17 @@ class MubuClient:
                max_depth: int = MAX_SEARCH_DEPTH,
                limit: int = MAX_SEARCH_LIMIT,
                max_requests: int = MAX_SEARCH_REQUESTS,
-               include_trashed: bool = False) -> Dict[str, Any]:
+               include_trashed: bool = False,
+               include_content: bool = False) -> Dict[str, Any]:
         """本地递归搜索：名称包含关键字的文档与文件夹（T6，M4 T2 增强）。
 
         mubu 无公开 /search 端点，从根文件夹开始递归遍历所有子文件夹，
         收集 name 包含 keyword（大小写不敏感）的条目。
+
+        当 ``include_content=True`` 时，对名称未命中的文档额外拉取其正文
+        （get_doc）并递归搜索节点 text/note 是否包含 keyword；命中内容的条目
+        带 ``matched_in: "content"`` 字段，名称命中的为 ``matched_in: "name"``。
+        该选项会额外发起 get_doc 请求，默认关闭以保留性能。
 
         为保护调用方，到达以下任一上限即停止遍历并标记 truncated=True
         （不再静默丢失信息，调用方据此知晓结果可能不完整）：
@@ -745,11 +771,26 @@ class MubuClient:
                 if not include_trashed and doc_id in trash:
                     continue
                 name = d.get("name") or ""
-                if keyword_lower and keyword_lower in name.lower():
-                    results.append({"id": doc_id, "name": name, "type": "doc", "path": path})
+                name_matched = bool(keyword_lower and keyword_lower in name.lower())
+                if name_matched:
+                    results.append({"id": doc_id, "name": name, "type": "doc",
+                                    "path": path, "matched_in": "name"})
                     if len(results) >= limit:
                         truncated = True
                         return
+                    continue
+                # include_content：名称未命中时，拉取正文递归搜索节点 text/note
+                if include_content and keyword_lower:
+                    try:
+                        doc = self.get_doc(doc_id)
+                    except MubuError:
+                        continue
+                    if self._keyword_in_nodes(doc.get("nodes", []), keyword_lower):
+                        results.append({"id": doc_id, "name": name, "type": "doc",
+                                        "path": path, "matched_in": "content"})
+                        if len(results) >= limit:
+                            truncated = True
+                            return
             for f in folders:
                 fid = f.get("id")
                 # 软删除项：除非显式 include_trashed，否则跳过
@@ -771,3 +812,19 @@ class MubuClient:
             "limit": limit,
             "max_depth": max_depth,
         }
+
+    def _keyword_in_nodes(self, nodes: Any, keyword_lower: str) -> bool:
+        """递归检查节点 text/note 是否包含关键字（大小写不敏感）。
+
+        用于 search(include_content=True) 对文档正文做内容级匹配。
+        """
+        for node in nodes or []:
+            if not isinstance(node, dict):
+                continue
+            text = (node.get("text") or "")
+            note = (node.get("note") or "")
+            if keyword_lower in (text + " " + note).lower():
+                return True
+            if self._keyword_in_nodes(node.get("children", []), keyword_lower):
+                return True
+        return False

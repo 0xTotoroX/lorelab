@@ -20,7 +20,7 @@ cd mubu-integration
 # 安装依赖（运行时 + 测试；开发依赖在 requirements-dev.txt）
 pip install -r requirements.txt -r requirements-dev.txt
 
-# 运行全部测试（共 84 个 pytest 用例）
+# 运行全部测试（共 115 个 pytest 用例）
 PYTHONPATH=scripts python -m pytest -v
 
 # 脚本运行入口

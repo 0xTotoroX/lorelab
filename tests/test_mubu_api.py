@@ -810,6 +810,59 @@ class TestSearch:
         # 达到 limit 上限 → truncated 标记为真（结果可能不完整）
         assert search_result["truncated"] is True
 
+    @responses.activate
+    def test_search_include_content_matches_node_text(self, isolated_client, monkeypatch):
+        # 根目录仅一个文档，名称不含关键字，但正文节点 text 含关键字
+        responses.add(
+            responses.POST, f"{BASE_URL}/list/get",
+            json={"code": 0, "data": {
+                "folders": [],
+                "docs": [{"id": "d1", "name": "Plain Title"}],
+            }}, status=200,
+            match=[matchers.json_params_matcher({"folderId": "0"})],
+        )
+
+        def fake_get_doc(doc_id):
+            return {"name": "Plain Title", "nodes": [
+                {"id": "n1", "text": "hidden keyword inside node", "note": "", "children": []}
+            ]}
+
+        monkeypatch.setattr(isolated_client, "get_doc", fake_get_doc)
+
+        # 默认（include_content=False）：仅按名称匹配，不应命中
+        assert isolated_client.search("keyword")["results"] == []
+        # include_content=True：节点文本命中，标记 matched_in=content
+        res = isolated_client.search("keyword", include_content=True)
+        assert len(res["results"]) == 1
+        r = res["results"][0]
+        assert r["id"] == "d1"
+        assert r["matched_in"] == "content"
+
+    @responses.activate
+    def test_search_include_content_name_match_still_name(self, isolated_client, monkeypatch):
+        # 名称命中时 matched_in 应为 name，且不额外发起 get_doc
+        responses.add(
+            responses.POST, f"{BASE_URL}/list/get",
+            json={"code": 0, "data": {
+                "folders": [],
+                "docs": [{"id": "d2", "name": "keyword in name"}],
+            }}, status=200,
+            match=[matchers.json_params_matcher({"folderId": "0"})],
+        )
+        calls = {"n": 0}
+
+        def fake_get_doc(doc_id):
+            calls["n"] += 1
+            return {"name": "x", "nodes": []}
+
+        monkeypatch.setattr(isolated_client, "get_doc", fake_get_doc)
+
+        res = isolated_client.search("keyword", include_content=True)
+        assert len(res["results"]) == 1
+        assert res["results"][0]["matched_in"] == "name"
+        # 名称已命中，不应再拉取正文
+        assert calls["n"] == 0
+
 
 # --------------------------------------------------------------------------- #
 # 13. M2 T5 — format_list 读取 documents 字段（真机返回），兼容旧 docs 兜底

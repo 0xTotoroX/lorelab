@@ -18,7 +18,7 @@ Manage your Mubu (幕布) outlines from the command line — **and as an AI Agen
 ## ✨ Try it in 3 commands (magic moment)
 
 ```bash
-python3 scripts/mubu_api.py create --md weekly.md                    # Markdown outline → Mubu
+python3 scripts/mubu_api.py create "周会" --md examples/weekly.md    # Markdown outline → Mubu
 python3 scripts/mubu_api.py get <doc-id> --export markdown > out.md  # Mubu → Markdown
 diff weekly.md out.md                                              # no output = byte-for-byte identical
 ```
@@ -123,8 +123,8 @@ Dev/test dependencies live in `requirements-dev.txt` (`pip install -r requiremen
 mubu-integration talks to the **same HTTPS endpoints the Mubu web app uses** — no scraping, no browser automation.
 
 - ✅ **Verified against the live service** — last real-device check on **2026-08-05** against mubu.com's production environment. `move`, `save_doc`, `rename`, OPML, FreeMind and `export-tree` are all confirmed working.
-- ✅ **84 tests × 4 Python versions, always green** — the GitHub Actions matrix runs Python 3.9 / 3.10 / 3.11 / 3.12 on every push and PR.
-- ✅ **Zero-touch auth** — expired tokens re-login automatically using your cached credentials; no manual intervention.
+- ✅ **115 tests × 4 Python versions, always green** — the GitHub Actions matrix runs Python 3.9 / 3.10 / 3.11 / 3.12 on every push and PR.
+- ✅ **Auto-refresh auth** — expired tokens re-login automatically using your cached credentials (env vars / `~/.workbuddy/.env.mubu`); no manual re-entry needed after initial setup.
 - ✅ **Pinned supply chain** — `requirements.txt` locks exact versions; Dependabot keeps them current automatically.
 - ✅ **Your data stays yours** — the tool only ever accesses the account you log into, with your own credentials. Credentials are stored locally at `~/.mubu_token` with `0o600` permissions (readable only by you).
 
@@ -256,15 +256,26 @@ When these keywords appear in a conversation, the Skill can be triggered automat
 
 ## 🧪 Tests & CI
 
-Run the full suite locally (**84** pytest cases):
+Run the full suite locally (**115** pytest cases):
 
 ```bash
 PYTHONPATH=scripts python -m pytest -v
 ```
 
-Continuous integration: on every push to `main` and on every Pull Request, GitHub Actions runs the **84** cases across the **Python 3.9 / 3.10 / 3.11 / 3.12** matrix — all executed for real, not faked green.
+Continuous integration: on every push to `main` and on every Pull Request, GitHub Actions runs the **115** cases across the **Python 3.9 / 3.10 / 3.11 / 3.12** matrix — all executed for real, not faked green.
 
 ---
+
+## 🔧 Troubleshooting
+
+| 现象 / 错误码 | 可能原因 | 解决 |
+|------|------|------|
+| `save` 返回 `code 17` / `illegal request`，msg 提到 `memberId` | `MUBU_MEMBER_ID` 未设置 | 设置环境变量 `MUBU_MEMBER_ID`（见上方 Credentials 章节）。**该值为服务端限制，任何 API 都不返回，无法自动获取**；缺失时 `save` 会明确报错，不影响 `get`/`create`/`list`/`search`/`export-tree`。 |
+| `code 5` / 参数错误 | 请求参数不正确 | 检查参数，例如 `rename_folder` 的 `folderId` 必须填文件夹**自身** id，不能填根目录魔法值 `"0"`。 |
+| `code 403` / 权限不足 | 账号缺少该操作权限 | 确认账号权限；部分写操作需特定权限。 |
+| 登录失败 / `401` | 凭据错误 | 核对 `MUBU_PHONE` / `MUBU_PASSWORD`，或重新设置环境变量 / `.env.mubu`。 |
+
+> 非官方逆向集成：幕布服务端可能调整接口或限流策略，若某端点突然失效，请以抓包结果为准并反馈 Issue。
 
 ## ❓ FAQ
 

@@ -148,7 +148,7 @@ def main() -> None:
     rename_parser.add_argument("id", help="文档或文件夹ID")
     rename_parser.add_argument("--name", required=True, help="新名称")
     rename_parser.add_argument("--type", choices=["doc", "folder"], default="doc",
-                               help="对象类型：doc=走 save_doc name（⚠️ 真机受限）；"
+                               help="对象类型：doc=走已验证端点 /list/rename_doc（内容保真）；"
                                     "folder=走已验证端点 /list/rename_folder（folderId 填自身 id）")
 
     # OPML / FreeMind 导出（Roadmap: 兼容其它大纲工具）

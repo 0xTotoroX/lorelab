@@ -2,6 +2,28 @@
 
 记录 mubu-integration Skill 的里程碑演化。
 
+## v1.3.15（P0+P1 改进，2026-08-28）
+
+本轮落实产品评审诊断（deliverables/gstack/product-review-improve-2026-08-28.md）的 P0（信任修复）+ P1（质量/CI/文档）共 12 项，零新功能、无破坏性变更。
+
+### P0 信任修复（零风险、确定性）
+- **doc(README/zh-CN/CONTRIBUTING): 修正落地页首行坏命令** —— "Try it in 3 commands" 的 `create --md weekly.md` 缺必填位置参数 `name`，实测直接报 `error: the following arguments are required: name`；改为 `create "周会" --md examples/weekly.md`（cli.py:71 已证实 name 必填）。
+- **doc: 测试数 84 → 113 对齐** —— README(×3)/README.zh-CN(×3)/CONTRIBUTING 全量修正为真实的 113（CI 实测 113 passed）。
+
+### P1 质量 / CI / 文档
+- **fix(client._http_request): 429 限流退避** —— 新增 HTTP 429 分支，按 `Retry-After` 头（封顶 30s）或 NETWORK_BACKOFF 退避重试，重试用尽抛清晰 MubuError；对齐 5xx 重试逻辑（不重登）。
+- **fix(client.get_doc): 解析保护** —— `json.loads(data["definition"])` 包裹为 try/except(KeyError/TypeError/ValueError) → MubuError，不再裸抛。
+- **ci: 新增 ruff 静态门禁** —— `.github/workflows/test.yml` 加 `lint` job（安装 ruff 跑 `ruff check scripts`，规则集 E/F/W/I）；新增 `ruff.toml`。沙箱本地因 SOCKS 代理无法安装 ruff 验证，故该 job 当前 `continue-on-error`，待真实环境跑通后改为必过。
+- **doc(cli.rename help): 修正矛盾** —— `rename --type doc` 帮助由"走 save_doc name（⚠️ 真机受限）"改为"走已验证端点 /list/rename_doc（内容保真）"，与实现一致。
+- **doc(README): Auto-refresh auth 措辞** —— "Zero-touch auth" 改为 "Auto-refresh auth"，明确重登依赖缓存凭据（env/.env.mubu），不声称免密码；zh-CN 同步。
+- **doc(README): 新增 Troubleshooting** —— 错误码表（memberId/code 17·5·403/登录失败），含服务端限制说明。
+- **feat(client.search): include_content** —— 新增可选参数，对名称未命中的文档额外拉取正文递归搜索节点 text/note，命中带 `matched_in: "content"`（名称命中为 `"name"`）；默认关闭保性能。新增 2 例回归测试。
+- **doc(docs/): 分发与定位素材** —— 新增 `docs/positioning.md`（项目定位纠偏）、`docs/hellogithub-pitch.md`（HelloGitHub 投递文案）、`docs/xiaoshuopai-tutorial.md`（小虱派教程）、`docs/v2ex-post.md`（V2EX 帖），支撑 awesome 榜单之外的多渠道分发（均未发布，待人工投递）。
+
+### 已知限制（重申）
+- `memberId` 仍无法经任何 API 自动获取，`save` 写回必须手动设置 `MUBU_MEMBER_ID`；本次仅补文档与错误码表，不改变该前置条件。
+- test: **115 passed（0 失败，较 v1.3.14 的 113 新增 2 例 search include_content 测试，无回归）**。
+
 ## v1.3.14（本期发布版本 · hypothesis 2 归一化加固，2026-08-25）
 
 本期闭环 hypothesis 2：changeset 节点未做网页端 `tr()` 归一化（缺 note/collapsed/
