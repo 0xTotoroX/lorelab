@@ -25,56 +25,58 @@ argparse / requests / Path / ...），使 ``mubu_api.os``、``mubu_api.getpass``
 """
 
 # 标准库（作为模块级属性重新导出，保持向后兼容）
-import os
-import sys
-import json
-import time
-import re
-import logging
-import getpass
 import argparse
-import requests
 import fcntl
-from pathlib import Path
+import getpass
+import json
+import logging
+import os
+import re
+import sys
+import time
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import urlparse
-from typing import Optional, Dict, List, Any, Tuple, Iterator
+
+import requests
+
+from mubu.cli import _configure_logging, main
+from mubu.client import MubuClient
 
 # 包内模块符号
 from mubu.config import (
-    logger,
-    DEFAULT_BASE_URL,
     ALLOWED_BASE_HOSTS,
-    _resolve_base_url,
     BASE_URL,
-    TOKEN_FILE,
-    ENV_FILE,
+    BODY_TRUNCATE,
+    DEFAULT_BASE_URL,
     DEFAULT_HEADERS,
     ENDPOINTS,
-    REQUEST_TIMEOUT,
+    ENV_FILE,
     MAX_NETWORK_RETRIES,
-    NETWORK_BACKOFF,
-    TOKEN_FILE_MODE,
-    BODY_TRUNCATE,
     MAX_SEARCH_DEPTH,
     MAX_SEARCH_LIMIT,
     MAX_SEARCH_REQUESTS,
-    _token_file_lock,
+    NETWORK_BACKOFF,
+    REQUEST_TIMEOUT,
+    TOKEN_FILE,
+    TOKEN_FILE_MODE,
     MubuError,
+    _resolve_base_url,
     _safe_local_path,
+    _token_file_lock,
+    logger,
 )
 from mubu.convert import (
-    doc_to_markdown,
-    export_markdown,
     _safe_filename,
-    doc_to_opml,
     doc_to_freeplane,
-    markdown_to_doc,
+    doc_to_markdown,
+    doc_to_opml,
+    export_markdown,
     format_list,
     format_search,
+    markdown_to_doc,
 )
-from mubu.client import MubuClient
-from mubu.cli import main, _configure_logging
 
 __all__ = [
     # 标准库（兼容旧引用）

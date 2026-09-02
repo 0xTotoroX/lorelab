@@ -12,7 +12,7 @@ Roadmap 阶段新增能力：
 
 import re
 import time
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from mubu.config import MubuError
 

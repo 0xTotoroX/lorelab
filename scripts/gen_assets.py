@@ -1,4 +1,5 @@
 import os
+
 from PIL import Image, ImageDraw, ImageFont
 
 OUT = "/Users/liubo/WorkBuddy/2026-07-14-06-18-40/mubu-integration/assets"

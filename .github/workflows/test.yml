@@ -52,12 +52,11 @@ jobs:
       - name: Run tests
         run: PYTHONPATH=scripts python -m pytest -v
 
-  # P1 #4 — ruff 静态门禁（起步：E/F/W/I）。GitHub Actions 网络正常，可安装 ruff。
-  # 沙箱本地因 SOCKS 代理无法安装 ruff 验证，故当前 continue-on-error；
-  # 待真实环境 `ruff check scripts` 跑通后，移除 continue-on-error 改为必过。
+  # P1 #4 — ruff 静态门禁（E/F/W/I）。GitHub Actions 网络正常，可安装 ruff。
+  # v1.3.16 已确认 `ruff check scripts` 通过（修复 18 处导入问题），
+  # 故移除 continue-on-error，改为必过门禁，拦截未来导入类回归。
   lint:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

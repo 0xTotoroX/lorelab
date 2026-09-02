@@ -1,26 +1,25 @@
 """mubu 包 — 命令行入口（argparse 子命令 + 日志配置）。"""
 
-import sys
+import argparse
+import getpass
 import json
 import logging
-import getpass
-import argparse
-from typing import Dict, List, Any
+import sys
 
+from mubu.client import MubuClient
 from mubu.config import (
-    logger,
     MAX_SEARCH_DEPTH,
     MAX_SEARCH_LIMIT,
     _safe_local_path,
+    logger,
 )
-from mubu.client import MubuClient
 from mubu.convert import (
-    markdown_to_doc,
-    doc_to_opml,
     doc_to_freeplane,
+    doc_to_opml,
     export_markdown,
     format_list,
     format_search,
+    markdown_to_doc,
 )
 
 
@@ -50,7 +49,7 @@ def main() -> None:
 
     # 登录（凭据取自环境变量 / ~/.workbuddy/.env.mubu；缺失时交互式输入，
     # 不再提供 --phone/--password 明文参数，避免出现在 ps / shell 历史中）
-    login_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "login", help="登录幕布（凭据取自环境变量 / .env.mubu，缺失时交互式输入）"
     )
 
@@ -112,7 +111,7 @@ def main() -> None:
                               help="确认执行不可逆彻底删除（必须显式传参）")
 
     # 列出本地回收站（v1.3.5）
-    trash_parser = subparsers.add_parser(
+    subparsers.add_parser(
         "trash", help="列出本地回收站中已软删除的项"
     )
 

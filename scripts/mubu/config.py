@@ -1,13 +1,11 @@
 """mubu 包 — 配置、常量、日志、异常与路径安全基础设施。"""
+import logging
 import os
 import sys
-import json
-import time
-import logging
-from pathlib import Path
 from contextlib import contextmanager
+from pathlib import Path
+from typing import Any, Iterator, Optional
 from urllib.parse import urlparse
-from typing import Optional, Dict, List, Any, Tuple, Iterator
 
 try:
     import fcntl
