@@ -43,8 +43,6 @@ import requests
 
 from mubu.cli import _configure_logging, main
 from mubu.client import MubuClient
-
-# 包内模块符号
 from mubu.config import (
     ALLOWED_BASE_HOSTS,
     BASE_URL,

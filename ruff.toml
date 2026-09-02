@@ -7,3 +7,8 @@ target-version = "py39"
 # CI 中的 lint job 当前 continue-on-error，待真实环境跑通后改为必过。
 select = ["E", "F", "W", "I"]
 ignore = ["E501"]
+
+[lint.isort]
+# mubu 是本地包（scripts/mubu/），显式声明为首方导入，
+# 使 `import requests`（第三方）与 `from mubu.*`（首方）分属不同段、各段内部紧凑。
+known-first-party = ["mubu"]

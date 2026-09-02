@@ -2,21 +2,23 @@
 
 记录 mubu-integration Skill 的里程碑演化。
 
-## v1.3.16（CI 门禁闭环 · ruff 18 处导入修复，2026-09-02）
+## v1.3.16（CI 门禁闭环 · ruff 导入合规修复，2026-09-02）
 
 本轮无新功能、无破坏性变更，仅修复 v1.3.15 引入的 `lint` job 在 CI 中实际失败却被 `continue-on-error` 掩盖的问题，使 CI 真实通过。
 
 ### CI 修复
 - **ci: `lint` job 改为必过门禁** —— 移除 `.github/workflows/test.yml` 中 `lint` job 的 `continue-on-error: true`。原 v1.3.15 因沙箱无法本地装 ruff 验证而放宽，现确认 `ruff check scripts` 通过，故升级为硬性门禁，拦截未来导入类回归。
-- **fix(ruff): 修复 18 处静态检查违规（覆盖 6 个文件）** —— 全部为导入类问题，零逻辑改动：
-  - **I001 导入排序（isort，6 处）**：`scripts/gen_assets.py`、`scripts/mubu/cli.py`、`scripts/mubu/client.py`、`scripts/mubu/config.py`、`scripts/mubu/convert.py`、`scripts/mubu_api.py` 的标准库 / 第三方 / 本地导入按字母序与分段规则重排（第三方 `requests` 与本地 `mubu.*` 间留 1 空行）。
-  - **F401 未使用导入（9 处）**：`cli.py` 删 `from typing import Dict, List, Any`；`client.py` 删 `import logging`、`Iterator`；`config.py` 删 `json`、`time`、`Dict`、`List`、`Tuple`、`Iterator`（经 grep 确认仅字符串字面量引用，无真实符号使用）。
-  - **F841 未使用局部变量（2 处）**：`cli.py` 的 `login_parser =`、`trash_parser =` 改为直接 `subparsers.add_parser(...)`（变量赋值后从未引用）。
+- **fix(ruff): 导入类违规修复（覆盖 6 个文件，零逻辑改动）** —— 分两轮闭环：
+  - **第一轮（18 处，已提交 c1a7500）**：I001 导入排序 ×6、F401 未使用导入 ×9、F841 未使用局部变量 ×2，覆盖 `gen_assets.py`、`cli.py`、`client.py`、`config.py`、`convert.py`、`mubu_api.py`。
+  - **第二轮（follow-up，2 处 I001）**：首轮手工复刻 CI diff 时对 isort 规则理解有误（`from` 导入须排在同段 `import` 之后；首方导入块不可被注释+空行拆分），CI 硬门禁重跑后精准定位并修复：
+    - `client.py`：`from pathlib import Path` 由 `import os` 之后移至 `import uuid` 之后（straight import 段内）。
+    - `mubu_api.py`：删除 `# 包内模块符号` 注释及其前的空行，使 `from mubu.cli/client/config/convert` 首方导入块紧凑连续。
+  - **ruff.toml**：新增 `[lint.isort] known-first-party = ["mubu"]`，显式声明本地包，消除首方/第三方归类歧义（与 ruff 默认 `detect-first-party` 行为一致，纯声明性加固）。
 
 ### 验证
-- `python -m py_compile` 全部通过；`import mubu_api / mubu.cli / mubu.client / mubu.config / mubu.convert` 无 `NameError`（移除的导入确为冗余）。
+- `python -m py_compile` 全部通过；`import mubu_api / mubu.cli / mubu.client / mubu.config / mubu.convert` 无 `NameError`（移除的导入经 grep 确认仅为字符串字面量引用，确为冗余）。
 - 测试矩阵：**115 passed（0 失败，较 v1.3.15 无回归）**。
-- 沙箱本地因环境限制无法运行 ruff 二进制，最终以 GitHub Actions CI 重跑 `ruff check scripts` 作为真实验证（见 commit 后 CI 状态）。
+- 沙箱本地因环境限制无法运行 ruff 二进制（harness 杀进程），以 GitHub Actions CI 重跑 `ruff check scripts` 作为真实验证（见 commit 后 CI 状态，lint job 须为绿色）。
 
 ## v1.3.15（P0+P1 改进，2026-08-28）
 
