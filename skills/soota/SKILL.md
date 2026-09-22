@@ -98,3 +98,7 @@ Evidence IDs must exist in `transcript.md`.
 | exit 7 | Repair the local storage/output problem, then resume the catalog job |
 | exit 8 | Provider contract drift; stop and show the endpoint |
 | `transcript_missing` | Metadata was saved; decide captions-only vs ASR with cost |
+
+## OpenCLI 与费用路由
+
+使用前阅读项目 `docs/terminal-tutorial.md` 和 `docs/providers.md`。`inspect` 默认优先 OpenCLI、零预算；视频字幕摄取仍需 TikHub 和明确预算。`catalog https://x.com/USER --max-items 50 --max-cost 0` 是完整性未知的最近快照，不能宣称全量或使用 jobs resume。付费元数据兜底必须显式 `--fallback tikhub --max-cost 正数`。`runtime update --version 完整版本号` 只更新受管运行时，不覆盖全局安装；daemon 版本冲突时停止，不打断现有采集。

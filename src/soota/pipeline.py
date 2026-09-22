@@ -13,12 +13,16 @@ from soota.models import (
     AnalysisStatus,
     CommandResult,
     ContentBundleManifest,
+    MediaItem,
     ProcessingManifest,
     TranscriptDocument,
     TranscriptManifest,
     TranscriptMode,
     TranscriptStatus,
 )
+from soota.providers.opencli import capabilities_for as opencli_capabilities
+from soota.providers.opencli_runtime import OpenCLIRuntime
+from soota.providers.router import RequestBudget, inspect_item, validate_policy
 from soota.providers.tikhub.capability import capabilities_for
 from soota.providers.tikhub.client import TikHubProvider
 from soota.render.analysis import load_analysis
@@ -38,6 +42,7 @@ def _provider(
     settings: SootaSettings,
     cache: CacheStore,
     requester: Callable[..., Any] | None = None,
+    max_cost: float | None = None,
 ) -> TikHubProvider:
     return TikHubProvider(
         cache=cache,
@@ -46,6 +51,8 @@ def _provider(
         timeout=settings.tikhub.timeout_seconds,
         requester=requester,
         preferred_language=settings.default_language,
+        before_request=RequestBudget(max_cost).reserve if max_cost is not None else None,
+        max_retries=0,
     )
 
 
@@ -65,6 +72,7 @@ def doctor(settings: SootaSettings) -> CommandResult:
     asr_engine = resolve_engine(settings.asr)
     data = {
         "soota_version": __version__,
+        "opencli": OpenCLIRuntime(settings).status(),
         "tikhub_sdk_required": TIKHUB_SDK_VERSION,
         "tikhub_sdk_installed": tikhub_ver,
         "tikhub_import_ok": tikhub_ok,
@@ -80,7 +88,7 @@ def doctor(settings: SootaSettings) -> CommandResult:
     }
     warnings: list[str] = []
     if not data["api_key_present"]:
-        warnings.append("未检测到 TikHub API Key；inspect 仍可识别 URL，ingest 需要密钥。")
+        warnings.append("未检测到 TikHub API Key；OpenCLI 能力独立可用，TikHub 路径需要密钥。")
     if not data["ffmpeg"]:
         warnings.append("未找到 ffmpeg，无字幕音频抽取可能失败。")
     if not data["whisper_cli"] and asr_engine.name == "whisper-cli":
@@ -97,59 +105,36 @@ def doctor(settings: SootaSettings) -> CommandResult:
 
 
 def inspect(
-    settings: SootaSettings, url: str, *, fetch: bool = True, requester: Callable[..., Any] | None = None
+    settings: SootaSettings,
+    url: str,
+    *,
+    fetch: bool = True,
+    requester: Callable[..., Any] | None = None,
+    provider: str = "auto",
+    fallback: str | None = None,
+    max_cost: float = 0,
 ) -> CommandResult:
+    validate_policy(provider, fallback, max_cost)
     source = recognize(url)
-    caps = capabilities_for(source)
-    data: dict[str, Any] = {
-        "source": source.model_dump(),
-        "capabilities": caps.model_dump(),
-        "metadata": None,
+    capabilities = {
+        "opencli": opencli_capabilities(source).model_dump(),
+        "tikhub": capabilities_for(source).model_dump(),
     }
-    warnings: list[str] = []
-    if source.kind not in INGESTABLE_KINDS:
-        warnings.append("目录来源请使用 catalog；先加 --dry-run 预估。" if caps.catalog else "该来源暂不支持采集。")
-    if not fetch or not caps.inspect:
-        return CommandResult(
-            ok=True,
-            status="success",
-            code="ok",
-            exit_code=0,
-            message="已识别来源。",
-            data=data,
-            warnings=warnings,
-        )
-    if not api_key_present() and requester is None:
-        warnings.append("没有 API Key，只返回 URL 识别结果。")
-        return CommandResult(
-            ok=True,
-            status="success",
-            code="ok",
-            exit_code=0,
-            message="已识别来源。",
-            data=data,
-            warnings=warnings,
-        )
-    cache = CacheStore(settings.cache_dir)
-    provider = _provider(settings, cache, requester=requester)
-    item = provider.inspect(source)
-    data["source"] = item.source.model_dump()
-    data["metadata"] = {
-        "title": item.title,
-        "creator": item.creator,
-        "published_at": item.published_at.isoformat() if item.published_at else None,
-        "duration_seconds": item.duration_seconds,
-        "extras": item.extras,
-    }
-    data["requests"] = [r.model_dump() for r in provider.records]
+    data: dict[str, Any] = {"source": source.model_dump(), "capabilities": capabilities, "metadata": None}
+    if not fetch or source.kind not in INGESTABLE_KINDS:
+        return CommandResult(ok=True, status="success", code="ok", exit_code=0, message="已识别来源。", data=data)
+    item, records, warnings = inspect_item(
+        settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
+    )
+    data.update(
+        source=item.source.model_dump(),
+        metadata=item.model_dump(mode="json", exclude={"source"}),
+        provider=item.provenance.get("provider"),
+        requests=[r.model_dump() for r in records],
+    )
+    CostLedger(settings.ledger_path).append(item.source.id, records)
     return CommandResult(
-        ok=True,
-        status="success",
-        code="ok",
-        exit_code=0,
-        message="inspect 完成。",
-        data=data,
-        warnings=warnings,
+        ok=True, status="success", code="ok", exit_code=0, message="inspect 完成。", data=data, warnings=warnings
     )
 
 
@@ -158,6 +143,7 @@ def estimate(
     url: str,
     *,
     mode: str = "ingest",
+    provider: str = "auto",
     transcript: TranscriptMode = TranscriptMode.AUTO,
     max_items: int = 100,
     max_pages: int = 10,
@@ -166,18 +152,36 @@ def estimate(
     if mode == "catalog":
         from soota.catalog import estimate_catalog
 
-        return estimate_catalog(settings, url, max_items=max_items, max_pages=max_pages)
+        return estimate_catalog(settings, url, max_items=max_items, max_pages=max_pages, provider=provider)
     if mode != "ingest":
         raise InputError("--mode 只支持 ingest 或 catalog。")
     source = recognize(url)
+    validate_policy(provider, None, None)
+    if provider != "tikhub" and transcript == TranscriptMode.NONE and opencli_capabilities(source).inspect:
+        return CommandResult(
+            ok=True,
+            status="success",
+            code="ok",
+            exit_code=0,
+            message="元数据预估完成；未联网。",
+            data={
+                "provider": "opencli",
+                "estimated_cost_usd": 0,
+                "request_count": 1,
+                "source": source.model_dump(),
+                "endpoints": [f"opencli:{source.platform}/video"],
+            },
+        )
+    if provider == "opencli":
+        raise SourceError("OpenCLI 当前只接入元数据和 X 最近快照；视频字幕/音频请使用 TikHub。")
     cache = CacheStore(settings.cache_dir)
-    provider = _provider(settings, cache, requester=requester)
+    client = _provider(settings, cache, requester=requester)
     need_captions = transcript in {TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY}
     need_audio = transcript in {TranscriptMode.AUTO, TranscriptMode.ASR}
     if cache.has(source, "transcript"):
         endpoints: list[str] = []
     else:
-        endpoints = provider.estimate_requests(source, need_captions=need_captions, need_audio=need_audio)
+        endpoints = client.estimate_requests(source, need_captions=need_captions, need_audio=need_audio)
         if cache.has(source, "inspect"):
             endpoints = [
                 e
@@ -193,16 +197,16 @@ def estimate(
             endpoints = [e for e in endpoints if "caption" not in e and "subtitle" not in e]
         if cache.has(source, "audio") or cache.audio_path(source).is_file():
             endpoints = [e for e in endpoints if "stream" not in e and "playurl" not in e]
-    cost, basis = provider.estimate_cost(endpoints)
+    cost, basis = client.estimate_cost(endpoints)
     warnings: list[str] = []
     wallet_view: dict[str, Any] | None = None
     try:
-        wallet = provider.get_wallet()
+        wallet = client.get_wallet()
     except Exception:
         warnings.append("无法读取 TikHub 余额，估价未与钱包核对。")
         wallet = None
     if wallet is not None:
-        wallet_view = provider.assess_wallet(endpoints, wallet)
+        wallet_view = client.assess_wallet(endpoints, wallet)
         if wallet_view.get("sufficient") is False:
             paid_need = wallet_view.get("paid_required_usd")
             warnings.append(
@@ -237,6 +241,8 @@ def ingest(
     url: str,
     *,
     transcript: TranscriptMode = TranscriptMode.AUTO,
+    provider: str = "auto",
+    fallback: str | None = None,
     output: Path | None = None,
     max_cost: float | None = None,
     dry_run: bool = False,
@@ -244,6 +250,22 @@ def ingest(
     requester: Callable[..., Any] | None = None,
     asr: AsrEngine | None = None,
 ) -> CommandResult:
+    validate_policy(provider, fallback, max_cost)
+    if transcript == TranscriptMode.NONE and provider != "tikhub":
+        if dry_run:
+            return estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
+        return ingest_metadata(
+            settings,
+            url,
+            provider=provider,
+            fallback=fallback,
+            max_cost=max_cost or 0,
+            output=output,
+            force=force,
+            requester=requester,
+        )
+    if provider == "opencli" and fallback != "tikhub":
+        raise SourceError("OpenCLI 当前不提供视频字幕或音频；可用 --transcript none 只保存元数据。")
     ensure_dirs(settings)
     source = recognize(url)
     if source.kind not in INGESTABLE_KINDS:
@@ -251,7 +273,7 @@ def ingest(
     caps = capabilities_for(source)
     if not caps.inspect:
         raise SourceError("该来源不支持摄取。")
-    guessed = estimate(settings, url, mode="ingest", transcript=transcript, requester=requester)
+    guessed = estimate(settings, url, mode="ingest", transcript=transcript, provider="tikhub", requester=requester)
     estimated = guessed.data.get("estimated_cost_usd")
     if max_cost is not None:
         over = estimated is None or float(estimated) > max_cost
@@ -276,16 +298,16 @@ def ingest(
 
     output_root = (output or settings.output_dir).expanduser()
     cache = CacheStore(settings.cache_dir)
-    provider = _provider(settings, cache, requester=requester)
-    resolver = TranscriptResolver(provider, cache, settings, asr=asr)
+    client = _provider(settings, cache, requester=requester, max_cost=max_cost)
+    resolver = TranscriptResolver(client, cache, settings, asr=asr)
     try:
-        item = provider.inspect(source)
+        item = client.inspect(source)
         document = resolver.resolve(item, transcript)
     except Exception:
-        if provider.records:
-            CostLedger(settings.ledger_path).append(source.id, provider.records)
+        if client.records:
+            CostLedger(settings.ledger_path).append(source.id, client.records)
         raise
-    billed = [r for r in provider.records if r.billed and not r.cache_hit]
+    billed = [r for r in client.records if r.billed and not r.cache_hit]
     cost = sum(r.estimated_cost_usd or 0.0 for r in billed)
     manifest = ContentBundleManifest(
         source=item.source,
@@ -298,17 +320,17 @@ def ingest(
         analysis=AnalysisManifest(status=AnalysisStatus.PENDING, path="content.md"),
         processing=ProcessingManifest(
             provider="tikhub",
-            cache_hit=all(r.cache_hit or not r.billed for r in provider.records) and bool(provider.records),
+            cache_hit=all(r.cache_hit or not r.billed for r in client.records) and bool(client.records),
             estimated_cost_usd=cost,
-            actual_cost_usd=cost,
+            actual_cost_usd=None,
             request_count=len(billed),
-            price_basis=f"snapshot:{provider.snapshot.get('as_of')}",
-            requests=provider.records,
+            price_basis=f"snapshot:{client.snapshot.get('as_of')}",
+            requests=client.records,
         ),
     )
     manifest.metadata_from_item(item)
     folder = write_bundle(output_root, item, document, manifest, None, force=force)
-    CostLedger(settings.ledger_path).append(item.source.id, provider.records)
+    CostLedger(settings.ledger_path).append(item.source.id, client.records)
     JobStore(settings.jobs_dir).create(
         {
             "status": "completed" if document.status is TranscriptStatus.READY else "partial",
@@ -336,7 +358,67 @@ def ingest(
             "cache_hit": manifest.processing.cache_hit,
             "request_count": manifest.processing.request_count,
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,
-            "requests": [r.model_dump() for r in provider.records],
+            "requests": [r.model_dump() for r in client.records],
+        },
+    )
+
+
+def ingest_metadata(
+    settings: SootaSettings,
+    url: str,
+    *,
+    provider: str,
+    fallback: str | None,
+    max_cost: float,
+    output: Path | None,
+    force: bool,
+    requester: Callable[..., Any] | None,
+) -> CommandResult:
+    source = recognize(url)
+    item, records, warnings = inspect_item(
+        settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
+    )
+    document = TranscriptDocument(status=TranscriptStatus.MISSING)
+    manifest = ContentBundleManifest(
+        source=item.source,
+        transcript=TranscriptManifest(status=document.status),
+        processing=ProcessingManifest(
+            provider=str(item.provenance["provider"]),
+            requests=records,
+            cache_hit=bool(records) and all(r.cache_hit for r in records),
+            estimated_cost_usd=sum(r.estimated_cost_usd or 0 for r in records),
+            actual_cost_usd=None,
+            request_count=len([r for r in records if r.billed]),
+            warnings=warnings,
+        ),
+    )
+    manifest.metadata_from_item(item)
+    manifest.metadata["provenance"] = item.provenance
+    folder = write_bundle((output or settings.output_dir).expanduser(), item, document, manifest, None, force=force)
+    CostLedger(settings.ledger_path).append(item.source.id, records)
+    JobStore(settings.jobs_dir).create(
+        {
+            "status": "completed",
+            "source": item.source.model_dump(),
+            "output": str(folder),
+            "provider": item.provenance["provider"],
+            "transcript_status": "not_requested",
+        }
+    )
+    return CommandResult(
+        ok=True,
+        status="success",
+        code="ok",
+        exit_code=0,
+        message="元数据内容包已保存；本次未请求字幕。",
+        warnings=warnings,
+        data={
+            "output": str(folder),
+            "manifest": str(folder / "manifest.json"),
+            "content": str(folder / "content.md"),
+            "provider": item.provenance["provider"],
+            "estimated_cost_usd": manifest.processing.estimated_cost_usd,
+            "requests": [r.model_dump() for r in records],
         },
     )
 
@@ -361,7 +443,6 @@ def render(
             existing_content.write_bytes(previous)
         raise
     manifest = ContentBundleManifest.model_validate(json.loads(manifest_path.read_text(encoding="utf-8")))
-    from soota.models import MediaItem
     from soota.render.bundle import write_bundle_to
 
     meta = manifest.metadata or {}

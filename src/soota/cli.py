@@ -19,6 +19,7 @@ from soota.pipeline import ingest as ingest_cmd
 from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
+from soota.runtime_cli import app as runtime_app
 
 app = typer.Typer(
     add_completion=False,
@@ -28,6 +29,7 @@ app = typer.Typer(
 jobs_app = typer.Typer(help="查看任务与续跑目录采集")
 app.add_typer(jobs_app, name="jobs")
 app.add_typer(api_app, name="api")
+app.add_typer(runtime_app, name="runtime")
 
 
 @app.command()
@@ -47,15 +49,28 @@ def doctor(
 @app.command()
 def inspect(
     url: Annotated[str, typer.Argument(help="YouTube 或 Bilibili URL")],
+    provider: Annotated[str, typer.Option("--provider", help="auto/opencli/tikhub")] = "auto",
+    fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
+    max_cost: Annotated[float, typer.Option("--max-cost", help="USD；默认禁止付费请求")] = 0,
     offline: Annotated[bool, typer.Option("--offline", help="只识别 URL，不调用 Provider")] = False,
 ) -> None:
-    _run(json_output, inspect_cmd, load_settings(), url, fetch=not offline)
+    _run(
+        json_output,
+        inspect_cmd,
+        load_settings(),
+        url,
+        fetch=not offline,
+        provider=provider,
+        fallback=fallback,
+        max_cost=max_cost,
+    )
 
 
 @app.command()
 def estimate(
     url: Annotated[str, typer.Argument()],
+    provider: Annotated[str, typer.Option("--provider")] = "auto",
     mode: Annotated[str, typer.Option("--mode")] = "ingest",
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     max_items: Annotated[int, typer.Option("--max-items", help="目录任务的条数上限")] = 100,
@@ -68,6 +83,7 @@ def estimate(
         load_settings(),
         url,
         mode=mode,
+        provider=provider,
         transcript=transcript,
         max_items=max_items,
         max_pages=max_pages,
@@ -76,7 +92,9 @@ def estimate(
 
 @app.command()
 def catalog(
-    url: Annotated[str, typer.Argument(help="YouTube 频道或 Bilibili UP 主主页")],
+    url: Annotated[str, typer.Argument(help="X、YouTube 频道或 Bilibili UP 主主页")],
+    provider: Annotated[str, typer.Option("--provider", help="auto/opencli/tikhub")] = "auto",
+    fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="本任务累计收录的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="本任务累计读取的页数上限")] = DEFAULT_MAX_PAGES,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="任务累计费用上限，单位 USD；执行时必填")] = None,
@@ -90,6 +108,8 @@ def catalog(
         catalog_cmd,
         load_settings(),
         url,
+        provider=provider,
+        fallback=fallback,
         max_items=max_items,
         max_pages=max_pages,
         max_cost=max_cost,
@@ -102,6 +122,8 @@ def catalog(
 @app.command()
 def ingest(
     url: Annotated[str, typer.Argument()],
+    provider: Annotated[str, typer.Option("--provider", help="auto/opencli/tikhub")] = "auto",
+    fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     output: Annotated[Path | None, typer.Option("--output")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
@@ -117,6 +139,8 @@ def ingest(
         ingest_cmd,
         load_settings(),
         url,
+        provider=provider,
+        fallback=fallback,
         transcript=transcript,
         output=output,
         max_cost=max_cost,

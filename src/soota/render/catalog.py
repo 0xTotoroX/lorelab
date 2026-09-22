@@ -40,7 +40,10 @@ def write_catalog(job: CatalogJob, reserved_cost: float) -> Path:
         "pages_fetched": job.pages_fetched,
         "items": [item.model_dump(mode="json") for item in job.items],
         "processing": {
-            "provider": "tikhub",
+            "provider": job.provider,
+            "profile": job.profile,
+            "completeness": job.completeness,
+            "warnings": job.warnings,
             "reserved_cost_usd": reserved_cost,
             "actual_cost_usd": None,
             "requests": [record.model_dump(mode="json") for record in job.requests],
@@ -49,22 +52,32 @@ def write_catalog(job: CatalogJob, reserved_cost: float) -> Path:
     }
     title = _text(job.title or job.source.id)
     lines = [
-        f"# {title} · 视频目录",
+        f"# {title} · 内容目录",
         "",
         f"来源：{job.source.canonical_url}",
         f"任务：`{job.id}` · 状态：`{job.status}` · 条目：{len(job.items)} · 已读取页面：{job.pages_fetched}",
         "",
-        "本目录仅保存视频链接与已有元数据，不包含字幕、转写或摘要。",
+        "本目录保存链接、已有元数据及帖子正文，不包含视频字幕、转写或摘要。",
     ]
     if job.incremental:
         lines.extend(["", "这是增量目录，只列出此前目录任务中尚未收录的条目。"])
-    if job.status != "completed":
+    if job.completeness == "unknown":
+        lines.extend(["", "最近帖子快照：完整性未知，不代表全部历史或已追平；没有可续跑游标。"])
+    if job.status != "completed" and job.provider != "opencli":
         lines.extend(
             ["", f"当前目录尚未完成（{job.stop_reason}），进度已保存。", f"续跑：`soota jobs resume {job.id}`"]
         )
-    lines.extend(["", "| # | 视频 | 作者 | 发布时间 | 时长 |", "| --- | --- | --- | --- | --- |"])
+    lines.extend(["", "| # | 内容 | 作者 | 发布时间 | 时长 |", "| --- | --- | --- | --- | --- |"])
     lines.extend(_row(index, item) for index, item in enumerate(job.items, 1))
-    lines.extend(["", f"请求预算已预留 {reserved_cost:g} USD；实际扣费以 TikHub 账单为准。", ""])
+    for item in job.items:
+        if item.text:
+            lines.extend(["", f"### {item.source.id}", "", _text(item.text), ""])
+    cost_note = (
+        "本次 OpenCLI 快照没有 API 费用。"
+        if job.provider == "opencli"
+        else f"请求预算已预留 {reserved_cost:g} USD；实际扣费以 TikHub 账单为准。"
+    )
+    lines.extend(["", cost_note, ""])
     atomic_write(folder / "catalog.json", json.dumps(redact_any(payload), ensure_ascii=False, indent=2) + "\n")
     atomic_write(folder / "catalog.md", "\n".join(lines))
     return folder

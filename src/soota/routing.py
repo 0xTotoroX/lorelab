@@ -60,9 +60,21 @@ def recognize(url: str) -> SourceRef:
         return _youtube(cleaned, parsed, host, path)
     if host in _BL_HOSTS or host.endswith(".bilibili.com"):
         return _bilibili(cleaned, parsed, host, path)
+    if host in {"x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"}:
+        parts = [part for part in path.split("/") if part]
+        reserved = {"home", "explore", "search", "i", "settings", "messages", "notifications", "intent", "login"}
+        if parts and parts[0].lower() not in reserved and re.fullmatch(r"[A-Za-z0-9_]{1,15}", parts[0]):
+            handle = parts[0].lower()
+            if len(parts) == 1:
+                canonical = f"https://x.com/{handle}"
+                return SourceRef(platform="twitter", kind="user", id=handle, url=cleaned, canonical_url=canonical)
+            if len(parts) == 3 and parts[1] == "status" and re.fullmatch(r"[0-9]+", parts[2]):
+                canonical = f"https://x.com/{handle}/status/{parts[2]}"
+                return SourceRef(platform="twitter", kind="post", id=parts[2], url=cleaned, canonical_url=canonical)
+        raise SourceError("请提供 X 用户主页或帖子链接。")
     raise SourceError(
         f"暂不支持该平台: {host}",
-        hint="MVP 只识别 YouTube 和 Bilibili。其他平台属于后续能力扩展。",
+        hint="当前识别 YouTube、Bilibili 和 X；其他平台可查看 api list。",
         details={"host": host},
     )
 

@@ -61,6 +61,8 @@ class MediaItem(BaseModel):
     published_at: datetime | None = None
     duration_seconds: int | None = None
     language: str | None = None
+    text: str | None = None
+    provenance: dict[str, Any] = Field(default_factory=dict)
     extras: dict[str, str] = Field(default_factory=dict)
 
 
@@ -189,6 +191,8 @@ class CatalogPage(BaseModel):
     next_cursor: str | None = None
     title: str | None = None
     total_items: int | None = None
+    completeness: Literal["unknown", "paginated"] = "paginated"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class CatalogJob(BaseModel):
@@ -199,12 +203,17 @@ class CatalogJob(BaseModel):
     updated_at: str | None = None
     status: Literal["running", "paused", "completed", "failed"] = "running"
     source: SourceRef
+    # Defaults preserve persisted v1 TikHub jobs and their cursor semantics.
+    provider: Literal["tikhub", "opencli"] = "tikhub"
+    profile: str | None = None
+    completeness: Literal["unknown", "paginated"] = "paginated"
+    warnings: list[str] = Field(default_factory=list)
     resolved: bool = False
     output_root: Path
     max_items: int = Field(ge=1)
     max_pages: int = Field(ge=1)
     max_cost: FiniteFloat = Field(ge=0)
-    page_size: int = Field(ge=1, le=100)
+    page_size: int = Field(ge=1, le=200)
     incremental: bool = False
     baseline_loaded: bool = False
     known_ids: list[str] = Field(default_factory=list)

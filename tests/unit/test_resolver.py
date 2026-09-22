@@ -51,6 +51,7 @@ def test_captions_preferred_and_no_asr(settings, tmp_path) -> None:
     result = ingest(
         settings,
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        provider="tikhub",
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
@@ -88,6 +89,7 @@ def test_missing_captions_runs_asr(settings, monkeypatch) -> None:
     result = ingest(
         settings,
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        provider="tikhub",
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
@@ -98,10 +100,12 @@ def test_missing_captions_runs_asr(settings, monkeypatch) -> None:
 
 def test_second_run_is_cache_hit(settings) -> None:
     requester = _youtube_requester()
-    ingest(settings, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", requester=requester, asr=FakeAsr())
+    ingest(settings, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", requester=requester, asr=FakeAsr(), max_cost=0.1)
     first = list(requester.calls)
     requester.calls.clear()
-    result = ingest(settings, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", requester=requester, asr=FakeAsr())
+    result = ingest(
+        settings, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", requester=requester, asr=FakeAsr(), max_cost=0.1
+    )
     assert result.data["cache_hit"] is True
     assert requester.calls == []
     assert first
@@ -164,6 +168,7 @@ def test_bili_inspect_tracks_skip_paid_subtitle(settings, monkeypatch) -> None:
     result = ingest(
         settings,
         "https://www.bilibili.com/video/BV1M1421t7hT",
+        provider="tikhub",
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
@@ -200,6 +205,7 @@ def test_bili_empty_inspect_still_probes_subtitle(settings, monkeypatch) -> None
     result = ingest(
         settings,
         "https://www.bilibili.com/video/BV1M1421t7hT",
+        provider="tikhub",
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
@@ -224,6 +230,7 @@ def test_audio_falls_back_to_ytdlp(settings, monkeypatch) -> None:
     result = ingest(
         settings,
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        provider="tikhub",
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),

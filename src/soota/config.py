@@ -24,6 +24,14 @@ class TikHubConfig(BaseModel):
     timeout_seconds: float = 60.0
 
 
+class OpenCLIConfig(BaseModel):
+    binary: str | None = None
+    profile: str | None = None
+    timeout_seconds: float = Field(default=90, gt=0)
+    max_output_bytes: int = Field(default=8_388_608, ge=1024)
+    metadata_cache_seconds: int = Field(default=300, ge=0)
+
+
 class SootaSettings(BaseModel):
     output_dir: Path = Field(default_factory=lambda: Path.home() / "Documents" / "Soota")
     default_language: str = "zh"
@@ -31,6 +39,7 @@ class SootaSettings(BaseModel):
     cache_dir: Path
     data_dir: Path
     tikhub: TikHubConfig = Field(default_factory=TikHubConfig)
+    opencli: OpenCLIConfig = Field(default_factory=OpenCLIConfig)
     asr: AsrConfig = Field(default_factory=AsrConfig)
 
     @property
@@ -76,6 +85,13 @@ def load_settings() -> SootaSettings:
         tikhub=TikHubConfig(
             base_url=str((data.get("tikhub") or {}).get("base_url", "https://api.tikhub.io")),
             timeout_seconds=float((data.get("tikhub") or {}).get("timeout_seconds", 60.0)),
+        ),
+        opencli=OpenCLIConfig.model_validate(
+            {
+                **(data.get("opencli") or {}),
+                **({"binary": os.environ["SOOTA_OPENCLI_BINARY"]} if os.environ.get("SOOTA_OPENCLI_BINARY") else {}),
+                **({"profile": os.environ["OPENCLI_PROFILE"]} if os.environ.get("OPENCLI_PROFILE") else {}),
+            }
         ),
         asr=AsrConfig(
             engine=str((data.get("asr") or {}).get("engine", "auto")),

@@ -11,7 +11,9 @@ def test_render_writes_evidence_links(settings) -> None:
     result = ingest(
         settings,
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        provider="tikhub",
         transcript=TranscriptMode.AUTO,
+        max_cost=0.1,
         requester=_youtube_requester(),
         asr=FakeAsr(),
     )
@@ -38,6 +40,7 @@ def test_invalid_analysis_does_not_clobber(settings) -> None:
     result = ingest(
         settings,
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        max_cost=0.1,
         requester=_youtube_requester(),
         asr=FakeAsr(),
     )

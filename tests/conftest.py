@@ -12,6 +12,16 @@ from soota.config import AsrConfig, SootaSettings, TikHubConfig
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
+@pytest.fixture(autouse=True)
+def block_browser_commands(monkeypatch):
+    def blocked(*args, **kwargs):
+        raise AssertionError("Tests must stub OpenCLI; never use the user's browser.")
+
+    monkeypatch.setattr("soota.providers.opencli.OpenCLIProvider._run", blocked)
+    monkeypatch.setenv("OPENCLI_PROFILE", "test-context")
+    monkeypatch.setattr("soota.providers.opencli_context.profile_config", lambda: {})
+
+
 def load_fixture(name: str) -> dict:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 

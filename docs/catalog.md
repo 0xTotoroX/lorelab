@@ -1,5 +1,7 @@
 # 目录采集与续跑
 
+X 用户主页现已支持 OpenCLI 最近快照，最多 200 条；与下文 TikHub 分页语义不同。`--max-cost 0 --incremental` 可保存并去重，`completeness=unknown`，不能 resume 或证明历史全量。详见 [终端教程](terminal-tutorial.md) 与 [Provider 边界](providers.md)。
+
 目录快照用于收集 YouTube 频道或 Bilibili UP 主的视频链接与已有元数据。目录命令不执行分类或批量字幕/ASR，也不支持 YouTube 播放列表。
 
 ## 命令与范围

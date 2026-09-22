@@ -227,7 +227,7 @@ def test_normalized_bilibili_inspect_always_uses_v3(sdk_transport, url) -> None:
         return httpx.Response(200, json=load_fixture("bilibili_info.json"))
 
     sdk_transport(respond)
-    result = runner.invoke(app, ["inspect", url, "--json"])
+    result = runner.invoke(app, ["inspect", url, "--provider", "tikhub", "--max-cost", "0.01", "--json"])
     assert result.exit_code == 0
     assert json.loads(result.stdout)["data"]["metadata"]["title"]
     assert len(requests) == 1

@@ -2,9 +2,9 @@
 
 给 Soota 一个链接：搜集内容、清理噪声、补全字幕，留下可追溯的 Markdown。
 
-Soota 是本地优先的内容摄取 CLI：通过统一入口查询 TikHub 各平台内容，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 负责把自然语言变成确定的 `soota` 命令；Soota 不实现 Obsidian 知识管理，也不把 TikHub 按平台拆成多个 MCP。
+Soota 是本地优先的内容摄取 CLI：通过独立 Provider 优先使用 OpenCLI 的已验证免费能力，并查询 TikHub 各平台内容，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 负责把自然语言变成确定的 `soota` 命令；Soota 不实现 Obsidian 知识管理，也不把 TikHub 按平台拆成多个 MCP。
 
-同功能存在多个版本时使用最高的未废弃版本，不因旧版本便宜而降级。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 OpenCLI 的 X 最近快照与视频元数据，提供零预算控制、显式元数据兜底及独立运行时升级/回滚。详见 [终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。同功能存在多个版本时使用最高的未废弃版本，不因旧版本便宜而降级。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -26,6 +26,8 @@ security add-generic-password -s soota.tikhub -a api_key -w
 
 ## 命令
 
+零费用快照示例：`uv run soota catalog "https://x.com/USERNAME" --max-items 50 --max-cost 0 --json`。完整性未知，不代表全部历史。
+
 ```bash
 uv run soota doctor --json
 uv run soota platforms --json
@@ -34,7 +36,7 @@ uv run soota api show bilibili.web.fetch_one_video --json
 uv run soota inspect "URL" --json
 uv run soota estimate "URL" --mode ingest --json
 uv run soota catalog "频道或 UP 主 URL" --dry-run --json
-uv run soota ingest "URL" --transcript auto --output PATH --json
+uv run soota ingest "URL" --transcript auto --max-cost 0.05 --output PATH --json
 uv run soota render --bundle PATH/manifest.json --analysis analysis.json
 uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json

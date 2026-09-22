@@ -11,6 +11,9 @@ from pydantic import ValidationError
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, InputError, SootaError, SourceError, StorageError
 from soota.models import CatalogJob, CommandResult, RequestRecord
+from soota.providers.opencli import OpenCLIProvider
+from soota.providers.opencli_context import resolve_profile
+from soota.providers.router import catalog_provider, validate_policy
 from soota.providers.tikhub.catalog import YOUTUBE_CHANNEL_ID, catalog_endpoint, is_channel_id
 from soota.providers.tikhub.client import TikHubProvider, load_price_snapshot
 from soota.render.catalog import write_catalog
@@ -53,9 +56,39 @@ def estimate_catalog(
     max_pages: int = DEFAULT_MAX_PAGES,
     max_cost: float | None = None,
     incremental: bool = False,
+    provider: str = "auto",
+    fallback: str | None = None,
 ) -> CommandResult:
     _validate_limits(max_items, max_pages, max_cost)
     source = recognize(url)
+    validate_policy(provider, fallback, max_cost)
+    selected = catalog_provider(source, provider)
+    if fallback:
+        raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
+    if selected == "opencli":
+        if max_items > 200:
+            raise InputError("OpenCLI 最近快照上限为 200 条；更多历史需要独立搜索审计。")
+        return CommandResult(
+            ok=True,
+            status="success",
+            code="ok",
+            exit_code=0,
+            message="最近帖子快照预估完成；未联网、未创建任务。",
+            data={
+                "mode": "catalog",
+                "source": source.model_dump(),
+                "provider": selected,
+                "max_items": max_items,
+                "max_cost": max_cost,
+                "incremental": incremental,
+                "max_pages": 1,
+                "request_limit": 1,
+                "estimated_cost_usd": 0,
+                "completeness": "unknown",
+                "resumable": False,
+            },
+            warnings=["上限只约束最近快照，不保证获得指定条数或覆盖全部历史。"],
+        )
     endpoint = catalog_endpoint(source)
     snapshot = load_price_snapshot()
     counts = {endpoint: max_pages}
@@ -74,6 +107,7 @@ def estimate_catalog(
         message="目录预估完成；未联网、未创建任务。",
         data={
             "mode": "catalog",
+            "provider": selected,
             "source": source.model_dump(),
             "max_items": max_items,
             "max_pages": max_pages,
@@ -98,14 +132,28 @@ def catalog(
     output: Path | None = None,
     dry_run: bool = False,
     incremental: bool = False,
+    provider: str = "auto",
+    fallback: str | None = None,
     requester: Callable[..., Any] | None = None,
 ) -> CommandResult:
     _validate_limits(max_items, max_pages, max_cost)
     source = recognize(url)
-    catalog_endpoint(source)
+    validate_policy(provider, fallback, max_cost)
+    selected = catalog_provider(source, provider)
+    if fallback:
+        raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
+    if selected == "opencli" and max_items > 200:
+        raise InputError("OpenCLI 最近快照上限为 200 条。")
     if dry_run:
         return estimate_catalog(
-            settings, url, max_items=max_items, max_pages=max_pages, max_cost=max_cost, incremental=incremental
+            settings,
+            url,
+            max_items=max_items,
+            max_pages=max_pages,
+            max_cost=max_cost,
+            incremental=incremental,
+            provider=provider,
+            fallback=fallback,
         )
     if max_cost is None:
         raise InputError("目录采集需要显式提供 --max-cost。", hint="先用 catalog URL --dry-run 查看范围和费用。")
@@ -115,13 +163,16 @@ def catalog(
     record = store.create(
         {
             "kind": "catalog",
+            "provider": selected,
+            "profile": resolve_profile(settings.opencli.profile) if selected == "opencli" else None,
+            "completeness": "unknown" if selected == "opencli" else "paginated",
             "status": "running",
             "source": source.model_dump(mode="json"),
             "output_root": str((output or settings.output_dir).expanduser().resolve()),
             "max_items": max_items,
             "max_pages": max_pages,
             "max_cost": max_cost,
-            "page_size": min(100, max_items),
+            "page_size": min(200 if selected == "opencli" else 100, max_items),
             "incremental": incremental,
         }
     )
@@ -147,6 +198,10 @@ def resume_catalog(
             job = CatalogJob.model_validate(record)
         except ValidationError as exc:
             raise StorageError("目录任务记录不符合当前格式。") from exc
+        if job.provider == "opencli":
+            raise InputError(
+                "最近帖子快照没有分页游标，不能续跑。", hint="重新 catalog --incremental 创建独立快照并去重。"
+            )
         items_limit = job.max_items if max_items is None else max_items
         pages_limit = job.max_pages if max_pages is None else max_pages
         cost_limit = job.max_cost if max_cost is None else max_cost
@@ -170,19 +225,28 @@ def _known_ids(job: CatalogJob, store: JobStore) -> list[str]:
             previous = CatalogJob.model_validate(record)
         except ValidationError:
             continue
-        if previous.resolved and previous.source.cache_identity == job.source.cache_identity:
+        if (
+            previous.resolved
+            and previous.source.cache_identity == job.source.cache_identity
+            and previous.provider == job.provider
+            and previous.profile == job.profile
+        ):
             known.update(item.source.cache_identity for item in previous.items)
     return sorted(known)
 
 
 def _provider(
     settings: SootaSettings, job: CatalogJob, store: JobStore, requester: Callable[..., Any] | None
-) -> TikHubProvider:
+) -> TikHubProvider | OpenCLIProvider:
+    if job.provider == "opencli":
+        bound = settings.model_copy(update={"opencli": settings.opencli.model_copy(update={"profile": job.profile})})
+        return OpenCLIProvider(bound)
+
     def reserve(record: RequestRecord) -> None:
         if not record.billed or record.cache_hit:
             return
         price = record.estimated_cost_usd
-        if price is None or not math.isfinite(price) or price < 0:
+        if job.max_cost == 0 or price is None or not math.isfinite(price) or price < 0:
             raise AuthBudgetError("目录接口价格未知，已在请求前停止。", hint="更新受控价格快照后再续跑。")
         if _reserved_cost(job) + Decimal(str(price)) > Decimal(str(job.max_cost)):
             raise AuthBudgetError(
@@ -223,7 +287,11 @@ def _execute(
             job.known_ids = _known_ids(job, store)
             job.baseline_loaded = True
             _save(job, store)
-        _collect(job, store, provider)
+        try:
+            _collect(job, store, provider)
+        finally:
+            if isinstance(provider, OpenCLIProvider):
+                job.requests.extend(provider.records)
     except KeyboardInterrupt:
         job.status, job.stop_reason = "paused", "interrupted"
     except SootaError as exc:
@@ -251,7 +319,7 @@ def _execute(
     return _result(job, folder, previous_requests, previous_items)
 
 
-def _collect(job: CatalogJob, store: JobStore, provider: TikHubProvider) -> None:
+def _collect(job: CatalogJob, store: JobStore, provider: TikHubProvider | OpenCLIProvider) -> None:
     known = set(job.known_ids)
     collected = {item.source.cache_identity for item in job.items}
     while not job.exhausted:
@@ -267,13 +335,20 @@ def _collect(job: CatalogJob, store: JobStore, provider: TikHubProvider) -> None
                     "目录分页游标重复，已停止循环请求。", hint="检查接口后重新 catalog，创建新目录任务。"
                 )
             page = provider.list_items(job.source, job.cursor, page_size=job.page_size)
+            job.completeness = page.completeness
+            job.warnings = list(dict.fromkeys([*job.warnings, *page.warnings]))
             job.pending_page = page
             job.pages_fetched += 1
             job.visited_cursors.append(job.cursor)
             job.title = page.title or job.title
             # Save the entire page before applying item limits. Resume consumes its remainder for free.
             _save(job, store)
-            if job.incremental and page.items and all(item.source.cache_identity in known for item in page.items):
+            if (
+                job.completeness != "unknown"
+                and job.incremental
+                and page.items
+                and all(item.source.cache_identity in known for item in page.items)
+            ):
                 job.pending_page = None
                 job.exhausted = True
                 job.stop_reason = "caught_up"
@@ -300,7 +375,7 @@ def _collect(job: CatalogJob, store: JobStore, provider: TikHubProvider) -> None
             )
     job.status = "completed"
     if job.stop_reason != "caught_up":
-        job.stop_reason = "end"
+        job.stop_reason = "bounded_snapshot" if job.completeness == "unknown" else "end"
 
 
 def _result(job: CatalogJob, folder: Path | None, previous_requests: int, previous_items: int) -> CommandResult:
@@ -313,6 +388,10 @@ def _result(job: CatalogJob, folder: Path | None, previous_requests: int, previo
     exit_code = 0 if completed else (2 if partial or not error else int(error.get("exit_code", 5)))
     data: dict[str, Any] = {
         "job_id": job.id,
+        "provider": job.provider,
+        "profile": job.profile,
+        "completeness": job.completeness,
+        "resumable": job.provider != "opencli",
         "source": job.source.model_dump(),
         "job_status": job.status,
         "stop_reason": job.stop_reason,
@@ -336,11 +415,18 @@ def _result(job: CatalogJob, folder: Path | None, previous_requests: int, previo
         status=status,
         code="ok" if completed else str(error.get("code", "catalog_paused")),
         exit_code=exit_code,
-        message=f"目录采集完成，共 {len(job.items)} 条。"
+        message=f"已保存 {len(job.items)} 条最近快照；完整性未知。"
+        if completed and job.completeness == "unknown"
+        else f"目录采集完成，共 {len(job.items)} 条。"
         if completed
         else f"目录任务已停止，保留 {len(job.items)} 条。",
         hint=None
         if completed
-        else str(error.get("hint") or f"soota jobs resume {job.id}；可提高条数、页数或总费用上限。"),
+        else (
+            "重新 catalog --incremental 创建独立快照。"
+            if job.provider == "opencli"
+            else str(error.get("hint") or f"soota jobs resume {job.id}；可提高条数、页数或总费用上限。")
+        ),
         data=data,
+        warnings=job.warnings,
     )

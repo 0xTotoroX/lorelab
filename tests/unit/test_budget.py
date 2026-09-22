@@ -11,6 +11,7 @@ def test_max_cost_is_hard_limit(settings) -> None:
         ingest(
             settings,
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            provider="tikhub",
             transcript=TranscriptMode.AUTO,
             max_cost=0.0001,
             requester=requester,
@@ -59,6 +60,7 @@ def test_ingest_stops_before_paid_call_when_wallet_short(settings, monkeypatch) 
         ingest(
             settings,
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            provider="tikhub",
             transcript=TranscriptMode.AUTO,
             requester=requester,
         )
@@ -77,6 +79,7 @@ def test_bilibili_info_can_use_free_credit(settings, monkeypatch) -> None:
     result = estimate(
         settings,
         "https://www.bilibili.com/video/BV1M1421t7hT",
+        provider="tikhub",
         transcript=TranscriptMode.NONE,
     )
     wallet = result.data["wallet"]
