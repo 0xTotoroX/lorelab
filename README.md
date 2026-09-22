@@ -101,3 +101,7 @@ uv run pytest
 ```
 
 测试默认不访问真实 TikHub。目录契约测试使用官方 OpenAPI 形状构造的样例；API 与 CLI 集成测试使用真实 SDK 和模拟 HTTP 传输，不能代替真实接口验收。接口注册表随软件打包，更新方式及实现职责见 [TikHub 接口说明](docs/tikhub-api.md)。
+
+## 许可证
+
+Copyright 2026 Soota contributors. Soota 自有代码采用 [Apache-2.0](LICENSE)。第三方组件保留各自许可与版权，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；TikHub 2.1.2 的元数据与许可证正文存在尚未澄清的冲突。

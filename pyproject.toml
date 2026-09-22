@@ -7,7 +7,8 @@ name = "soota"
 version = "0.1.0"
 description = "Give Soota a link: collect content, recover the transcript, and leave traceable Markdown."
 readme = "README.md"
-license = "MIT"
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "LICENSES/*"]
 requires-python = ">=3.12"
 authors = [{ name = "Soota" }]
 keywords = ["transcript", "youtube", "bilibili", "tikhub", "markdown"]
