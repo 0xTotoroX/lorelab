@@ -1,65 +1,40 @@
 from __future__ import annotations
 
-import json
-from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 
+from soota.api import platforms as platforms_cmd
+from soota.api_cli import app as api_app
+from soota.catalog import DEFAULT_MAX_PAGES
+from soota.catalog import catalog as catalog_cmd
+from soota.catalog import resume_catalog as resume_catalog_cmd
+from soota.cli_output import run as _run
 from soota.config import load_settings
-from soota.errors import SootaError
-from soota.models import CommandResult, TranscriptMode
+from soota.models import TranscriptMode
 from soota.pipeline import doctor as doctor_cmd
 from soota.pipeline import estimate as estimate_cmd
 from soota.pipeline import ingest as ingest_cmd
 from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
-from soota.secrets import redact_any
 
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
     help="Soota：给一个链接，搜集内容、补全字幕，留下可追溯 Markdown。",
 )
-jobs_app = typer.Typer(help="任务列表")
+jobs_app = typer.Typer(help="查看任务与续跑目录采集")
 app.add_typer(jobs_app, name="jobs")
+app.add_typer(api_app, name="api")
 
 
-def _emit(result: CommandResult, json_output: bool) -> None:
-    payload = redact_any(result.model_dump())
-    if json_output:
-        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-    else:
-        typer.echo(result.message)
-        if result.hint:
-            typer.echo(f"hint: {result.hint}", err=True)
-        for warning in result.warnings:
-            typer.echo(f"warning: {warning}", err=True)
-        if result.data.get("output"):
-            typer.echo(f"output: {result.data['output']}")
-    raise typer.Exit(result.exit_code)
-
-
-def _fail(exc: SootaError, json_output: bool) -> None:
-    payload = redact_any(exc.to_dict())
-    if json_output:
-        typer.echo(json.dumps(payload, ensure_ascii=False, indent=2, default=str))
-    else:
-        typer.echo(exc.message, err=True)
-        if exc.hint:
-            typer.echo(f"hint: {exc.hint}", err=True)
-    raise typer.Exit(exc.exit_code)
-
-
-def _run(json_output: bool, fn: Callable[..., CommandResult], *args: Any, **kwargs: Any) -> None:
-    try:
-        result = fn(*args, **kwargs)
-    except SootaError as exc:
-        _fail(exc, json_output)
-        return
-    _emit(result, json_output)
+@app.command()
+def platforms(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    _run(json_output, platforms_cmd)
 
 
 @app.command()
@@ -83,9 +58,45 @@ def estimate(
     url: Annotated[str, typer.Argument()],
     mode: Annotated[str, typer.Option("--mode")] = "ingest",
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
+    max_items: Annotated[int, typer.Option("--max-items", help="目录任务的条数上限")] = 100,
+    max_pages: Annotated[int, typer.Option("--max-pages", help="目录任务的分页上限")] = DEFAULT_MAX_PAGES,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    _run(json_output, estimate_cmd, load_settings(), url, mode=mode, transcript=transcript)
+    _run(
+        json_output,
+        estimate_cmd,
+        load_settings(),
+        url,
+        mode=mode,
+        transcript=transcript,
+        max_items=max_items,
+        max_pages=max_pages,
+    )
+
+
+@app.command()
+def catalog(
+    url: Annotated[str, typer.Argument(help="YouTube 频道或 Bilibili UP 主主页")],
+    max_items: Annotated[int, typer.Option("--max-items", help="本任务累计收录的条数上限")] = 100,
+    max_pages: Annotated[int, typer.Option("--max-pages", help="本任务累计读取的页数上限")] = DEFAULT_MAX_PAGES,
+    max_cost: Annotated[float | None, typer.Option("--max-cost", help="任务累计费用上限，单位 USD；执行时必填")] = None,
+    output: Annotated[Path | None, typer.Option("--output")] = None,
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="离线预估，不联网或创建任务")] = False,
+    incremental: Annotated[bool, typer.Option("--incremental", help="跳过已收录条目，整页无新增时停止")] = False,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    _run(
+        json_output,
+        catalog_cmd,
+        load_settings(),
+        url,
+        max_items=max_items,
+        max_pages=max_pages,
+        max_cost=max_cost,
+        output=output,
+        dry_run=dry_run,
+        incremental=incremental,
+    )
 
 
 @app.command()
@@ -129,6 +140,25 @@ def jobs_list(
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     _run(json_output, list_jobs_cmd, load_settings())
+
+
+@jobs_app.command("resume")
+def jobs_resume(
+    job_id: Annotated[str, typer.Argument()],
+    max_items: Annotated[int | None, typer.Option("--max-items", help="新的累计条数上限")] = None,
+    max_pages: Annotated[int | None, typer.Option("--max-pages", help="新的累计页数上限")] = None,
+    max_cost: Annotated[float | None, typer.Option("--max-cost", help="新的总费用上限，已有预留不会清零")] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    _run(
+        json_output,
+        resume_catalog_cmd,
+        load_settings(),
+        job_id,
+        max_items=max_items,
+        max_pages=max_pages,
+        max_cost=max_cost,
+    )
 
 
 def main() -> None:

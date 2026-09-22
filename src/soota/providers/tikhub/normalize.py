@@ -106,7 +106,7 @@ def youtube_media(source: SourceRef, payload: Any) -> MediaItem:
     if not title:
         raise ContractError(
             "YouTube 详情缺少 title。",
-            hint="可改试 get_video_info_v2；若仍无字段则视为契约漂移。",
+            hint="检查当前 get_video_info 的最新接口响应；不要在失败后自动降级版本。",
         )
     extras: dict[str, str] = {}
     channel_id = data.get("channel_id")

@@ -1,0 +1,25 @@
+{
+  "code": 200,
+  "data": {
+    "channel": {
+      "id": "UCAAAAAAAAAAAAAAAAAAAAAA",
+      "name": "Fixture Channel"
+    },
+    "videos": [
+      {
+        "video_id": "dQw4w9WgXcQ",
+        "title": "First fixture video",
+        "duration": "16:57",
+        "published_time": "18 hours ago",
+        "playback_url": "https://media.example/audio?token=fixture-secret"
+      },
+      {
+        "video_id": "Example0001",
+        "title": "Second fixture video",
+        "duration": "1:02:03",
+        "published_time": "2 days ago"
+      }
+    ],
+    "continuation_token": "fixture-page-2"
+  }
+}

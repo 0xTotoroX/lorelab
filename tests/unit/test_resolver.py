@@ -125,7 +125,8 @@ def _bili_requester(*, empty_subtitles: bool = False):
 
     def requester(method: str, path: str, params: dict):
         calls.append(path)
-        if path.endswith("fetch_one_video"):
+        if path.endswith("fetch_one_video_v3"):
+            assert "url" in params and "bv_id" not in params
             return info
         if path.endswith("fetch_video_subtitle"):
             return {"code": 200, "data": {"subtitles": []}}

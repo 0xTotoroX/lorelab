@@ -153,7 +153,7 @@ def _bilibili(url: str, parsed: object, host: str, path: str) -> SourceRef:
         )
 
     if host.startswith("space.bilibili.com") or (parts and parts[0] == "space"):
-        uid = parts[-1] if host.startswith("space.") else (parts[1] if len(parts) > 1 else None)
+        uid = (parts[0] if parts else None) if host.startswith("space.") else (parts[1] if len(parts) > 1 else None)
         if uid and uid.isdigit():
             return SourceRef(
                 platform="bilibili",

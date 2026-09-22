@@ -108,8 +108,8 @@ def inspect(
     }
     warnings: list[str] = []
     if source.kind not in INGESTABLE_KINDS:
-        warnings.append("该来源属于目录/频道，MVP 只做单条视频。catalog 是 M5。")
-    if not fetch:
+        warnings.append("目录来源请使用 catalog；先加 --dry-run 预估。" if caps.catalog else "该来源暂不支持采集。")
+    if not fetch or not caps.inspect:
         return CommandResult(
             ok=True,
             status="success",
@@ -132,8 +132,6 @@ def inspect(
         )
     cache = CacheStore(settings.cache_dir)
     provider = _provider(settings, cache, requester=requester)
-    if not caps.inspect:
-        raise SourceError("该来源不支持 inspect。", hint="频道/播放列表属于 M5。")
     item = provider.inspect(source)
     data["source"] = item.source.model_dump()
     data["metadata"] = {
@@ -161,8 +159,16 @@ def estimate(
     *,
     mode: str = "ingest",
     transcript: TranscriptMode = TranscriptMode.AUTO,
+    max_items: int = 100,
+    max_pages: int = 10,
     requester: Callable[..., Any] | None = None,
 ) -> CommandResult:
+    if mode == "catalog":
+        from soota.catalog import estimate_catalog
+
+        return estimate_catalog(settings, url, max_items=max_items, max_pages=max_pages)
+    if mode != "ingest":
+        raise InputError("--mode 只支持 ingest 或 catalog。")
     source = recognize(url)
     cache = CacheStore(settings.cache_dir)
     provider = _provider(settings, cache, requester=requester)
@@ -241,7 +247,7 @@ def ingest(
     ensure_dirs(settings)
     source = recognize(url)
     if source.kind not in INGESTABLE_KINDS:
-        raise SourceError("MVP 只摄取单条视频。", hint="频道目录属于 M5。")
+        raise SourceError("ingest 只摄取单条视频。", hint="频道目录请使用 catalog URL --dry-run。")
     caps = capabilities_for(source)
     if not caps.inspect:
         raise SourceError("该来源不支持摄取。")
@@ -448,6 +454,20 @@ def _parse_heading_time(value: str) -> tuple[int, int]:
 
 def list_jobs(settings: SootaSettings) -> CommandResult:
     jobs = JobStore(settings.jobs_dir).list_jobs()
+    jobs = [
+        {
+            **{
+                key: job[key]
+                for key in ("id", "kind", "status", "source", "created_at", "updated_at", "stop_reason")
+                if key in job
+            },
+            "item_count": len(job.get("items", [])),
+            "pages_fetched": job.get("pages_fetched", 0),
+        }
+        if job.get("kind") == "catalog"
+        else job
+        for job in jobs
+    ]
     return CommandResult(
         ok=True,
         status="success",

@@ -12,6 +12,9 @@ _SIGNED_QUERY_RE = re.compile(
 )
 _LONG_TOKEN_RE = re.compile(r"\b(?:sk-|th_|tikhub_)[A-Za-z0-9_\-]{12,}\b")
 REDACTED = "[redacted]"
+CREDENTIAL_FIELDS = frozenset(
+    {"authorization", "api_key", "apikey", "cookie", "auth", "password", "session_token", "xsec_token"}
+)
 KEYCHAIN_SERVICE = "soota.tikhub"
 KEYCHAIN_ACCOUNT = "api_key"
 
@@ -45,7 +48,7 @@ def redact_any(value: Any) -> Any:
         out: dict[str, Any] = {}
         for key, item in value.items():
             key_l = str(key).lower()
-            if key_l in {"authorization", "api_key", "apikey", "cookie"}:
+            if key_l in CREDENTIAL_FIELDS:
                 out[key] = REDACTED if isinstance(item, str) else redact_any(item)
             elif key_l in {"url", "play_url", "subtitle_url"} and isinstance(item, str) and _looks_signed(item):
                 out[key] = redact_url(item)

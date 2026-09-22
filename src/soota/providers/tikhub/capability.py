@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from soota.models import CapabilitySet, SourceRef
 
-# MVP: YouTube and Bilibili single-item inspect/captions/audio.
-# Catalog/pagination stay false until M5.
+# Catalogs cover YouTube channels and Bilibili creators; playlists remain unsupported.
 PLATFORM_CAPABILITIES: dict[str, dict[str, CapabilitySet]] = {
     "youtube": {
         "video": CapabilitySet(inspect=True, captions=True, audio=True),
         "channel": CapabilitySet(inspect=False, catalog=True, pagination=True),
-        "playlist": CapabilitySet(inspect=False, catalog=True, pagination=True),
+        "playlist": CapabilitySet(),
     },
     "bilibili": {
         "video": CapabilitySet(inspect=True, captions=True, audio=True),

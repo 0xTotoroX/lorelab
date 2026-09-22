@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, FiniteFloat
 
 
 class TranscriptMode(StrEnum):
@@ -182,3 +182,39 @@ class CommandResult(BaseModel):
     hint: str | None = None
     data: dict[str, Any] = Field(default_factory=dict)
     warnings: list[str] = Field(default_factory=list)
+
+
+class CatalogPage(BaseModel):
+    items: list[MediaItem]
+    next_cursor: str | None = None
+    title: str | None = None
+    total_items: int | None = None
+
+
+class CatalogJob(BaseModel):
+    schema_version: Literal[1] = 1
+    kind: Literal["catalog"] = "catalog"
+    id: str
+    created_at: str
+    updated_at: str | None = None
+    status: Literal["running", "paused", "completed", "failed"] = "running"
+    source: SourceRef
+    resolved: bool = False
+    output_root: Path
+    max_items: int = Field(ge=1)
+    max_pages: int = Field(ge=1)
+    max_cost: FiniteFloat = Field(ge=0)
+    page_size: int = Field(ge=1, le=100)
+    incremental: bool = False
+    baseline_loaded: bool = False
+    known_ids: list[str] = Field(default_factory=list)
+    items: list[MediaItem] = Field(default_factory=list)
+    title: str | None = None
+    cursor: str | None = None
+    visited_cursors: list[str | None] = Field(default_factory=list)
+    pending_page: CatalogPage | None = None
+    exhausted: bool = False
+    pages_fetched: int = 0
+    requests: list[RequestRecord] = Field(default_factory=list)
+    stop_reason: str | None = None
+    error: dict[str, Any] | None = None

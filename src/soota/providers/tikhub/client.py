@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+import hashlib
 import json
-import shutil
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +16,7 @@ from soota.models import (
     CapabilitySet,
     CaptionResult,
     CaptionTrack,
+    CatalogPage,
     MediaItem,
     RequestRecord,
     SourceRef,
@@ -23,6 +24,13 @@ from soota.models import (
     TranscriptStatus,
 )
 from soota.providers.tikhub.capability import capabilities_for
+from soota.providers.tikhub.catalog import (
+    YOUTUBE_CHANNEL_ID,
+    catalog_endpoint,
+    catalog_params,
+    is_channel_id,
+    parse_catalog_page,
+)
 from soota.providers.tikhub.normalize import (
     bilibili_caption_tracks,
     bilibili_media,
@@ -34,19 +42,20 @@ from soota.providers.tikhub.normalize import (
     youtube_caption_tracks,
     youtube_media,
 )
+from soota.providers.tikhub.registry import ApiEndpoint, load_registry
 from soota.secrets import load_tikhub_api_key, redact_url
 from soota.storage.cache import CacheStore
 from soota.transcripts.captions import parse_bilibili_body
 from soota.transcripts.download import fetch_audio_ytdlp
 
-YOUTUBE_INFO = "/api/v1/youtube/web_v2/get_video_info_v2"
-YOUTUBE_CAPTIONS = "/api/v1/youtube/web_v2/get_video_captions"
-YOUTUBE_CAPTIONS_RESULT = "/api/v1/youtube/web_v2/get_video_captions_result"
-YOUTUBE_STREAMS = "/api/v1/youtube/web_v2/get_video_streams_v2"
-BILI_ONE = "/api/v1/bilibili/web/fetch_one_video"
-BILI_ONE_V3 = "/api/v1/bilibili/web/fetch_one_video_v3"
-BILI_SUBTITLE = "/api/v1/bilibili/web/fetch_video_subtitle"
-BILI_PLAYURL = "/api/v1/bilibili/web/fetch_video_playurl"
+YOUTUBE_INFO = load_registry().resolve("youtube.web.get_video_info").path
+YOUTUBE_CAPTIONS = load_registry().resolve("youtube.web.get_video_captions").path
+YOUTUBE_CAPTIONS_RESULT = load_registry().resolve("youtube.web.get_video_captions_result").path
+YOUTUBE_STREAMS = load_registry().resolve("youtube.web.get_video_streams").path
+BILI_ONE_V3 = load_registry().resolve("bilibili.web.fetch_one_video").path
+BILI_SUBTITLE = load_registry().resolve("bilibili.web.fetch_video_subtitle").path
+BILI_PLAYURL = load_registry().resolve("bilibili.web.fetch_video_playurl").path
+ENDPOINT_INFO = "/api/v1/tikhub/user/get_endpoint_info"
 
 SNAPSHOT_PATH = Path(__file__).with_name("price_snapshot.json")
 
@@ -72,6 +81,8 @@ class TikHubProvider:
         http_get: Callable[[str], httpx.Response] | None = None,
         preferred_language: str = "zh",
         sleep: Callable[[float], None] = time.sleep,
+        before_request: Callable[[RequestRecord], None] | None = None,
+        max_retries: int = 2,
     ) -> None:
         self.cache = cache
         self.api_key = api_key if api_key is not None else load_tikhub_api_key()
@@ -82,6 +93,8 @@ class TikHubProvider:
         self._http_get = http_get
         self._client: Any = None
         self._sleep = sleep
+        self.before_request = before_request
+        self.max_retries = max_retries
         self.records: list[RequestRecord] = []
         self.snapshot = load_price_snapshot()
 
@@ -99,21 +112,67 @@ class TikHubProvider:
     def capabilities(self, source: SourceRef) -> CapabilitySet:
         return capabilities_for(source)
 
+    def resolve_catalog_source(self, source: SourceRef) -> SourceRef:
+        catalog_endpoint(source)
+        if source.platform != "youtube" or is_channel_id(source.id):
+            return source
+        # Handles and legacy /c/name aliases can contain slashes; keep them out of cache paths.
+        ref = source.model_copy(update={"id": "ref-" + hashlib.sha256(source.id.encode()).hexdigest()[:20]})
+        cached = self.cache.get_json(ref, "catalog_source")
+        if cached:
+            self.records.append(RequestRecord(endpoint="cache:catalog_source", billed=False, cache_hit=True))
+            return SourceRef.model_validate(cached)
+        payload = self._call(YOUTUBE_CHANNEL_ID, {"channel_url": source.canonical_url}, billed=True)
+        data = unwrap(payload)
+        channel_id = data.get("channel_id")
+        if not isinstance(channel_id, str) or not is_channel_id(channel_id):
+            raise ContractError("YouTube 频道解析结果缺少有效 channel_id。")
+        url = f"https://www.youtube.com/channel/{channel_id}"
+        resolved = source.model_copy(update={"id": channel_id, "url": url, "canonical_url": url})
+        self.cache.put_json(ref, "catalog_source", resolved.model_dump(mode="json"))
+        return resolved
+
+    def list_items(self, source: SourceRef, cursor: str | None = None, *, page_size: int = 100) -> CatalogPage:
+        path = catalog_endpoint(source)
+        params = catalog_params(source, cursor, page_size, self.preferred_language)
+        payload = self._call(path, params, billed=True)
+        return parse_catalog_page(source, payload, cursor, page_size)
+
+    def endpoint_price(self, endpoint: ApiEndpoint) -> float:
+        payload = self._call(ENDPOINT_INFO, {"endpoint": endpoint.path}, billed=False)
+        data = unwrap(payload)
+        if data.get("endpoint_uri") != endpoint.path:
+            raise ContractError("TikHub 返回了不同接口的价格信息。")
+        price = data.get("endpoint_cost")
+        if isinstance(price, bool) or not isinstance(price, (int, float)):
+            raise AuthBudgetError("该接口价格未知。")
+        self.snapshot.setdefault("endpoints", {})[endpoint.path] = price
+        return float(price)
+
+    def query(self, endpoint: ApiEndpoint, params: dict[str, Any], body: Any = None) -> Any:
+        if not endpoint.callable:
+            raise SourceError("该接口不属于 Soota 的内容查询能力。")
+        payload = self._call(endpoint.path, params, billed=True, method=endpoint.method, json_body=body)
+        if isinstance(payload, dict) and payload.get("code", 200) not in {200, 0, "200", None}:
+            if payload.get("code") in {401, 402, 403, "401", "402", "403"}:
+                raise AuthBudgetError("TikHub 返回了认证或余额错误。")
+            raise ContractError("TikHub 返回了业务错误。", details={"code": str(payload.get("code"))})
+        return payload
+
     def estimate_requests(self, source: SourceRef, *, need_captions: bool, need_audio: bool) -> list[str]:
         caps = self.capabilities(source)
         endpoints: list[str] = []
-        local_audio = shutil.which("yt-dlp") is not None
         if source.platform == "youtube" and source.kind == "video":
             endpoints.append(YOUTUBE_INFO)
             if need_captions and caps.captions:
                 endpoints.extend([YOUTUBE_CAPTIONS, YOUTUBE_CAPTIONS])
-            if need_audio and caps.audio and not local_audio:
+            if need_audio and caps.audio:
                 endpoints.append(YOUTUBE_STREAMS)
         elif source.platform == "bilibili" and source.kind in {"video", "shortlink"}:
-            endpoints.append(BILI_ONE if source.kind == "video" and source.id.startswith("BV") else BILI_ONE_V3)
+            endpoints.append(BILI_ONE_V3)
             if need_captions and caps.captions:
                 endpoints.append(BILI_SUBTITLE)
-            if need_audio and caps.audio and not local_audio:
+            if need_audio and caps.audio:
                 endpoints.append(BILI_PLAYURL)
         return endpoints
 
@@ -212,14 +271,6 @@ class TikHubProvider:
         if dest.is_file() and dest.stat().st_size > 0:
             self.records.append(RequestRecord(endpoint="cache:audio", billed=False, cache_hit=True))
             return AudioAsset(path=dest)
-        if self._requester is None and shutil.which("yt-dlp"):
-            try:
-                fetch_audio_ytdlp(item.source.canonical_url, dest)
-                if dest.is_file() and dest.stat().st_size > 0:
-                    self.records.append(RequestRecord(endpoint="local:yt-dlp", billed=False, note="local-audio-first"))
-                    return AudioAsset(path=dest)
-            except Exception:
-                pass
         try:
             cached = self.cache.get_json(item.source, "streams")
             if cached:
@@ -249,9 +300,7 @@ class TikHubProvider:
     def _inspect_payload(self, source: SourceRef) -> Any:
         if source.platform == "youtube":
             return self._call(YOUTUBE_INFO, {"video_id": source.id, "need_format": True}, billed=True)
-        if source.kind == "shortlink" or source.id.startswith("av"):
-            return self._call(BILI_ONE_V3, {"url": source.canonical_url or source.url}, billed=True)
-        return self._call(BILI_ONE, {"bv_id": source.id}, billed=True)
+        return self._call(BILI_ONE_V3, {"url": source.canonical_url or source.url}, billed=True)
 
     def _youtube_captions(self, item: MediaItem) -> CaptionResult:
         listed = self._call(
@@ -345,22 +394,27 @@ class TikHubProvider:
             raise TranscriptError("Bilibili 音频缺少 cid。", hint="先 inspect 成功后再拉音频。")
         return self._call(BILI_PLAYURL, {"bv_id": item.source.id, "cid": cid}, billed=True)
 
-    def _call(self, path: str, params: dict[str, Any], *, billed: bool) -> Any:
+    def _call(
+        self, path: str, params: dict[str, Any], *, billed: bool, method: str = "GET", json_body: Any = None
+    ) -> Any:
+        client: Any = self._sdk() if self._requester is None else None
         prices = self.snapshot.get("endpoints", {})
         cost = prices.get(path)
-        self.records.append(
-            RequestRecord(
-                endpoint=path,
-                billed=billed,
-                cache_hit=False,
-                estimated_cost_usd=float(cost) if cost is not None else None,
-            )
+        record = RequestRecord(
+            endpoint=path,
+            billed=billed,
+            cache_hit=False,
+            estimated_cost_usd=float(cost) if cost is not None else None,
         )
+        if self.before_request is not None:
+            self.before_request(record)
+        self.records.append(record)
         if self._requester is not None:
-            return self._requester("GET", path, params)
-        client = self._sdk()
+            if method == "GET":
+                return self._requester(method, path, params)
+            return self._requester(method, path, params, json=json_body)
         try:
-            return client._request("GET", path, params=params)
+            return client._request(method, path, params=params, json=json_body)
         except Exception as exc:
             raise _map_tikhub_error(exc) from exc
 
@@ -374,7 +428,9 @@ class TikHubProvider:
             )
         from tikhub import TikHub
 
-        self._client = TikHub(api_key=self.api_key, base_url=self.base_url, timeout=self.timeout, max_retries=2)
+        self._client = TikHub(
+            api_key=self.api_key, base_url=self.base_url, timeout=self.timeout, max_retries=self.max_retries
+        )
         if getattr(self._client, "__version__", None) not in {None, TIKHUB_SDK_VERSION}:
             pass
         return self._client

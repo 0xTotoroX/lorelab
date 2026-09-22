@@ -10,7 +10,11 @@
     "/api/v1/bilibili/web/fetch_one_video": 0.001,
     "/api/v1/bilibili/web/fetch_one_video_v3": 0.001,
     "/api/v1/bilibili/web/fetch_video_subtitle": 0.001,
-    "/api/v1/bilibili/web/fetch_video_playurl": 0.001
+    "/api/v1/bilibili/web/fetch_video_playurl": 0.001,
+    "/api/v1/youtube/web_v2/get_channel_id": 0.001,
+    "/api/v1/youtube/web_v2/get_channel_videos": 0.001,
+    "/api/v1/bilibili/web/fetch_user_post_videos_v2": 0.001,
+    "/api/v1/tikhub/user/get_endpoint_info": 0.0
   },
   "allow_free_credit": {
     "/api/v1/youtube/web_v2/get_video_info_v2": false,
@@ -20,6 +24,17 @@
     "/api/v1/bilibili/web/fetch_one_video": true,
     "/api/v1/bilibili/web/fetch_one_video_v3": true,
     "/api/v1/bilibili/web/fetch_video_subtitle": false,
-    "/api/v1/bilibili/web/fetch_video_playurl": true
+    "/api/v1/bilibili/web/fetch_video_playurl": true,
+    "/api/v1/youtube/web_v2/get_channel_id": true,
+    "/api/v1/youtube/web_v2/get_channel_videos": false,
+    "/api/v1/bilibili/web/fetch_user_post_videos_v2": false,
+    "/api/v1/tikhub/user/get_endpoint_info": true
+  },
+  "endpoint_as_of": {
+    "/api/v1/youtube/web_v2/get_channel_id": "2026-09-12",
+    "/api/v1/youtube/web_v2/get_channel_videos": "2026-09-12",
+    "/api/v1/bilibili/web/fetch_user_post_videos_v2": "2026-09-12",
+    "/api/v1/bilibili/web/fetch_one_video_v3": "2026-09-12",
+    "/api/v1/tikhub/user/get_endpoint_info": "2026-09-12"
   }
 }

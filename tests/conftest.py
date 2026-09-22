@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import httpx
 import pytest
+import tikhub
 
 from soota.config import AsrConfig, SootaSettings, TikHubConfig
 
@@ -25,3 +27,22 @@ def settings(tmp_path: Path) -> SootaSettings:
         tikhub=TikHubConfig(),
         asr=AsrConfig(engine="whisper-cli", model="base"),
     )
+
+
+@pytest.fixture
+def sdk_transport(monkeypatch):
+    """Keep the real SDK's serialization, errors and retries; replace only its HTTP transport."""
+    original = tikhub.TikHub
+    clients = []
+
+    def install(handler):
+        def create(**kwargs):
+            client = original(**kwargs, transport=httpx.MockTransport(handler))
+            clients.append(client)
+            return client
+
+        monkeypatch.setattr(tikhub, "TikHub", create)
+
+    yield install
+    for client in clients:
+        client.close()

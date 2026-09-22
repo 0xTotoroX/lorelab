@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from soota.models import AudioAsset, CapabilitySet, CaptionResult, MediaItem, SourceRef
+from soota.models import AudioAsset, CapabilitySet, CaptionResult, CatalogPage, MediaItem, SourceRef
 
 
 class Provider(Protocol):
@@ -13,6 +13,8 @@ class Provider(Protocol):
     def capabilities(self, source: SourceRef) -> CapabilitySet: ...
 
     def inspect(self, source: SourceRef) -> MediaItem: ...
+
+    def list_items(self, source: SourceRef, cursor: str | None = None, *, page_size: int = 100) -> CatalogPage: ...
 
     def get_captions(self, item: MediaItem) -> CaptionResult: ...
 
