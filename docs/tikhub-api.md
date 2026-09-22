@@ -1,6 +1,6 @@
 # TikHub 接口与 CLI 能力
 
-2026-09-12 已接入统一接口注册表与 `platforms`、`api list/show/call`。通用查询使用已登记的参数契约，并保留缓存与预算控制。
+2026-09-12 已接入统一接口注册表与 `platforms`、`api list/show/call`。现已增加 [双运行时功能入口与费用策略](features.md)，OpenCLI 默认优先，TikHub 作为独立来源。
 
 注册表来自当天的 [TikHub 公开 OpenAPI](https://api.tikhub.io/openapi.json)，服务文档版本为 `V5.3.2`。共登记 1,063 个 GET/POST 接口；同功能去除旧版本后有 964 个首选操作，其中 901 个属于可调用的内容查询，覆盖 21 个平台/产品入口。微信拆为视频号、公众号、搜一搜，因此按通常平台名称合并为 19 个平台。
 
@@ -54,7 +54,7 @@
 | YouTube | `youtube` | 27 | `web`, `web_v2` |
 | 知乎 | `zhihu` | 41 | `web` |
 
-`soota platforms --json` 可查看数量、接口族、任务类型、需要登录态的操作数和标准化能力。部分创作者或分析接口要求额外 Cookie 等参数；以 `api show` 的必填字段为准。通用层不会替用户登录，也不执行设备注册、签名生成、账户或支付管理等辅助接口。这些定义仍可被发现，但 `callable` 为 `false`。
+`soota platforms --json` 可查看数量、接口族、任务类型、需要登录态的操作数和标准化能力。部分创作者或分析接口要求额外 Cookie 等参数；以 `api show` 的必填字段为准。通用层不会替用户登录，也不执行设备注册、签名生成、账户或支付管理等辅助接口。这些定义在 api 视图中 `callable=false`；完整功能并集的 `features call tikhub.KEY --allow-write` 可显式调用非废弃辅助接口，仍经过参数和费用检查。
 
 ## CLI 可以完成的任务
 
@@ -117,7 +117,7 @@ soota api call wechat_mp.fetch_article_detail_h5 --body request.json --dry-run -
 
 ## 费用与结果
 
-执行 API 查询必须提供 `--max-cost`（USD）。CLI 先请求免费的 `/api/v1/tikhub/user/get_endpoint_info` 定价元数据，校验它对应当前所选接口，再检查费用并写入账本预留，最后发送目标请求。未知、负数、无效或超过预算的单价会阻止目标请求；SDK 自动重试关闭。
+执行 API 查询默认逐次询问付费，也可明确配置自动付费；`--max-cost`（USD）为可选附加上限。CLI 先请求免费的 `/api/v1/tikhub/user/get_endpoint_info` 定价元数据，校验它对应当前所选接口，再检查费用、确认付款或自动模式下检查余额，写入账本预留，最后发送目标请求。未知、负数、无效或超过预算的单价会阻止目标请求；SDK 自动重试关闭。
 
 `reserved_cost_usd` 是按查询时单价计算的预留，`actual_cost_usd` 为 `null`，不能当作已核实账单。失败后也保留已发送请求的预留。该本地检查不是服务端扣费上限；实际费用以 TikHub 账单为准。
 

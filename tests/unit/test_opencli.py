@@ -98,7 +98,7 @@ def test_authorized_fallback_only_for_unavailable_runtime(settings, monkeypatch)
         return load_fixture("bilibili_info.json")
 
     with pytest.raises(RuntimeUnavailable):
-        inspect_item(settings, recognize(BILI), requester=fail)
+        inspect_item(settings, recognize(BILI), provider="opencli", requester=fail)
     item, records, warnings = inspect_item(
         settings, recognize(BILI), fallback="tikhub", max_cost=0.01, requester=requester
     )

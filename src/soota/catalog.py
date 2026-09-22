@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from pydantic import ValidationError
 
+from soota.billing import PaymentGate, selected_provider
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, InputError, SootaError, SourceError, StorageError
 from soota.models import CatalogJob, CommandResult, RequestRecord
@@ -56,11 +57,12 @@ def estimate_catalog(
     max_pages: int = DEFAULT_MAX_PAGES,
     max_cost: float | None = None,
     incremental: bool = False,
-    provider: str = "auto",
+    provider: str | None = None,
     fallback: str | None = None,
 ) -> CommandResult:
     _validate_limits(max_items, max_pages, max_cost)
     source = recognize(url)
+    provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
     selected = catalog_provider(source, provider)
     if fallback:
@@ -132,12 +134,13 @@ def catalog(
     output: Path | None = None,
     dry_run: bool = False,
     incremental: bool = False,
-    provider: str = "auto",
+    provider: str | None = None,
     fallback: str | None = None,
     requester: Callable[..., Any] | None = None,
 ) -> CommandResult:
     _validate_limits(max_items, max_pages, max_cost)
     source = recognize(url)
+    provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
     selected = catalog_provider(source, provider)
     if fallback:
@@ -155,8 +158,6 @@ def catalog(
             provider=provider,
             fallback=fallback,
         )
-    if max_cost is None:
-        raise InputError("目录采集需要显式提供 --max-cost。", hint="先用 catalog URL --dry-run 查看范围和费用。")
     # Keep only the canonical public URL, not incidental query parameters or credentials.
     source.url = source.canonical_url
     store = JobStore(settings.jobs_dir)
@@ -209,7 +210,7 @@ def resume_catalog(
         if (
             items_limit < len(job.items)
             or pages_limit < job.pages_fetched
-            or Decimal(str(cost_limit)) < _reserved_cost(job)
+            or (cost_limit is not None and Decimal(str(cost_limit)) < _reserved_cost(job))
         ):
             raise InputError("续跑上限不能低于已保存的条目、页面或累计预算预留。")
         job.max_items, job.max_pages, job.max_cost = items_limit, pages_limit, cost_limit
@@ -248,7 +249,7 @@ def _provider(
         price = record.estimated_cost_usd
         if job.max_cost == 0 or price is None or not math.isfinite(price) or price < 0:
             raise AuthBudgetError("目录接口价格未知，已在请求前停止。", hint="更新受控价格快照后再续跑。")
-        if _reserved_cost(job) + Decimal(str(price)) > Decimal(str(job.max_cost)):
+        if job.max_cost is not None and _reserved_cost(job) + Decimal(str(price)) > Decimal(str(job.max_cost)):
             raise AuthBudgetError(
                 "下一次请求将超过该目录任务的累计费用上限。",
                 hint=f"用 soota jobs resume {job.id} --max-cost 新的总上限 续跑；已有预留不会清零。",
@@ -268,6 +269,9 @@ def _provider(
         requester=requester,
         before_request=reserve,
         max_retries=0,
+        payment_gate=PaymentGate(
+            settings, float(Decimal(str(job.max_cost)) - _reserved_cost(job)) if job.max_cost is not None else None
+        ),
     )
     return provider
 

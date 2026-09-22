@@ -213,7 +213,7 @@ class CatalogJob(BaseModel):
     output_root: Path
     max_items: int = Field(ge=1)
     max_pages: int = Field(ge=1)
-    max_cost: FiniteFloat = Field(ge=0)
+    max_cost: FiniteFloat | None = Field(default=None, ge=0)
     page_size: int = Field(ge=1, le=200)
     incremental: bool = False
     baseline_loaded: bool = False

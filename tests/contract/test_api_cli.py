@@ -16,6 +16,8 @@ BILI_URL = "https://www.bilibili.com/video/BV1M1421t7hT"
 
 @pytest.fixture(autouse=True)
 def isolated_cli(settings, monkeypatch):
+    settings.config_dir.mkdir(parents=True)
+    (settings.config_dir / "payment-policy.json").write_text(settings.payment.model_dump_json())
     monkeypatch.setenv("SOOTA_CONFIG_DIR", str(settings.config_dir))
     monkeypatch.setenv("SOOTA_CACHE_DIR", str(settings.cache_dir))
     monkeypatch.setenv("SOOTA_DATA_DIR", str(settings.data_dir))
@@ -282,12 +284,8 @@ def test_export_redacts_echoed_credentials_and_preserves_old_output(settings, sd
     assert output.read_bytes() == preserved
 
 
-def test_missing_budget_and_unsupported_helpers_never_construct_sdk(monkeypatch) -> None:
+def test_unsupported_helpers_never_construct_sdk(monkeypatch) -> None:
     forbid_sdk(monkeypatch)
-    missing = runner.invoke(
-        app, ["api", "call", "bilibili.web.fetch_one_video", "--param", f"url={BILI_URL}", "--json"]
-    )
-    assert missing.exit_code == 3
     helper = runner.invoke(app, ["api", "call", "/api/v1/tiktok/web/device_register", "--dry-run", "--json"])
     assert helper.exit_code == 5
     external = runner.invoke(app, ["api", "call", "https://example.com/collect", "--dry-run", "--json"])

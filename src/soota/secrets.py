@@ -13,7 +13,18 @@ _SIGNED_QUERY_RE = re.compile(
 _LONG_TOKEN_RE = re.compile(r"\b(?:sk-|th_|tikhub_)[A-Za-z0-9_\-]{12,}\b")
 REDACTED = "[redacted]"
 CREDENTIAL_FIELDS = frozenset(
-    {"authorization", "api_key", "apikey", "cookie", "auth", "password", "session_token", "xsec_token"}
+    {
+        "authorization",
+        "api_key",
+        "apikey",
+        "cookie",
+        "auth",
+        "password",
+        "session_token",
+        "xsec_token",
+        "passcode",
+        "stoken",
+    }
 )
 KEYCHAIN_SERVICE = "soota.tikhub"
 KEYCHAIN_ACCOUNT = "api_key"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any, cast
 import httpx
 
 from soota import TIKHUB_SDK_VERSION
+from soota.billing import PaymentGate
 from soota.errors import AuthBudgetError, ContractError, SourceError, TranscriptError
 from soota.models import (
     AudioAsset,
@@ -83,6 +85,7 @@ class TikHubProvider:
         sleep: Callable[[float], None] = time.sleep,
         before_request: Callable[[RequestRecord], None] | None = None,
         max_retries: int = 2,
+        payment_gate: PaymentGate | None = None,
     ) -> None:
         self.cache = cache
         self.api_key = api_key if api_key is not None else load_tikhub_api_key()
@@ -94,7 +97,8 @@ class TikHubProvider:
         self._client: Any = None
         self._sleep = sleep
         self.before_request = before_request
-        self.max_retries = max_retries
+        self.payment_gate = payment_gate
+        self.max_retries = 0 if payment_gate is not None else max_retries
         self.records: list[RequestRecord] = []
         self.snapshot = load_price_snapshot()
 
@@ -149,8 +153,10 @@ class TikHubProvider:
         self.snapshot.setdefault("endpoints", {})[endpoint.path] = price
         return float(price)
 
-    def query(self, endpoint: ApiEndpoint, params: dict[str, Any], body: Any = None) -> Any:
-        if not endpoint.callable:
+    def query(
+        self, endpoint: ApiEndpoint, params: dict[str, Any], body: Any = None, *, allow_auxiliary: bool = False
+    ) -> Any:
+        if not endpoint.callable and not allow_auxiliary:
             raise SourceError("该接口不属于 Soota 的内容查询能力。")
         payload = self._call(endpoint.path, params, billed=True, method=endpoint.method, json_body=body)
         if isinstance(payload, dict) and payload.get("code", 200) not in {200, 0, "200", None}:
@@ -192,18 +198,25 @@ class TikHubProvider:
         return (total if known else None, basis)
 
     def get_wallet(self) -> dict[str, float] | None:
-        if not self.api_key:
+        if not self.api_key and self._requester is None:
             return None
-        if self._requester is not None:
-            return None
-        payload = self._sdk().tikhub_user.get_user_info()
+        payload = self._call("/api/v1/tikhub/user/get_user_info", {}, billed=False)
         user = payload.get("user_data") if isinstance(payload, dict) else None
         if not isinstance(user, dict):
             raise ContractError("TikHub 用户信息缺少 user_data。")
-        return {
-            "balance": float(user.get("balance") or 0),
-            "free_credit": float(user.get("free_credit") or 0),
-        }
+        wallet: dict[str, float] = {}
+        for name in ("balance", "free_credit"):
+            value = user.get(name)
+            if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+                raise ContractError(f"TikHub 用户信息缺少有效 {name}。")
+            try:
+                number = float(value)
+            except ValueError as exc:
+                raise ContractError(f"TikHub {name} 无效。") from exc
+            if not math.isfinite(number) or number < 0:
+                raise ContractError(f"TikHub {name} 无效。")
+            wallet[name] = number
+        return wallet
 
     def assess_wallet(self, endpoints: list[str], wallet: dict[str, float]) -> dict[str, Any]:
         prices = self.snapshot.get("endpoints", {})
@@ -406,17 +419,25 @@ class TikHubProvider:
             cache_hit=False,
             estimated_cost_usd=float(cost) if cost is not None else None,
         )
+        if self.payment_gate is not None:
+            self.payment_gate.authorize(record, self.get_wallet)
         if self.before_request is not None:
             self.before_request(record)
         self.records.append(record)
-        if self._requester is not None:
-            if method == "GET":
-                return self._requester(method, path, params)
-            return self._requester(method, path, params, json=json_body)
-        try:
-            return client._request(method, path, params=params, json=json_body)
-        except Exception as exc:
-            raise _map_tikhub_error(exc) from exc
+
+        def dispatch() -> Any:
+            if self._requester is not None:
+                if method == "GET":
+                    return self._requester(method, path, params)
+                return self._requester(method, path, params, json=json_body)
+            try:
+                return client._request(method, path, params=params, json=json_body)
+            except Exception as exc:
+                raise _map_tikhub_error(exc) from exc
+
+        if self.payment_gate is not None and path in {ENDPOINT_INFO, "/api/v1/tikhub/user/get_user_info"}:
+            return self.payment_gate.pace_metadata(path, dispatch)
+        return dispatch()
 
     def _sdk(self) -> Any:
         if self._client is not None:

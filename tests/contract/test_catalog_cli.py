@@ -18,6 +18,8 @@ CHANNEL = f"https://www.youtube.com/channel/{CHANNEL_ID}"
 
 @pytest.fixture(autouse=True)
 def isolated_cli(settings, monkeypatch):
+    settings.config_dir.mkdir(parents=True)
+    (settings.config_dir / "payment-policy.json").write_text(settings.payment.model_dump_json())
     monkeypatch.setenv("SOOTA_CONFIG_DIR", str(settings.config_dir))
     monkeypatch.setenv("SOOTA_CACHE_DIR", str(settings.cache_dir))
     monkeypatch.setenv("SOOTA_DATA_DIR", str(settings.data_dir))
@@ -36,9 +38,6 @@ def test_catalog_dry_run_and_input_errors_never_construct_sdk(settings, monkeypa
     estimate = runner.invoke(app, ["estimate", CHANNEL, "--mode", "catalog", "--max-pages", "2", "--json"])
     assert estimate.exit_code == 0
     assert json.loads(estimate.stdout)["data"]["estimated_cost_usd"] == 0.002
-    missing = runner.invoke(app, ["catalog", CHANNEL, "--json"])
-    assert missing.exit_code == 3
-    assert json.loads(missing.stdout)["code"] == "input"
     unsupported = runner.invoke(
         app, ["catalog", "https://www.youtube.com/playlist?list=PLexample", "--dry-run", "--json"]
     )

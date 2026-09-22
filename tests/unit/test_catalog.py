@@ -57,10 +57,10 @@ def test_invalid_limits_rejected_before_job_creation(settings, kwargs) -> None:
     assert not settings.data_dir.exists()
 
 
-def test_cost_cap_is_required(settings) -> None:
-    with pytest.raises(InputError):
-        catalog(settings, CHANNEL, requester=fail_request)
-    assert not settings.data_dir.exists()
+def test_cost_cap_is_optional_with_explicit_auto_policy(settings) -> None:
+    result = catalog(settings, CHANNEL, requester=lambda *args: page(IDS[:1]))
+    assert result.ok
+    assert result.data["max_cost"] is None
 
 
 def test_unsupported_playlist_has_no_fake_zero_cost_estimate(settings) -> None:

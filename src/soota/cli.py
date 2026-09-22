@@ -11,7 +11,8 @@ from soota.catalog import DEFAULT_MAX_PAGES
 from soota.catalog import catalog as catalog_cmd
 from soota.catalog import resume_catalog as resume_catalog_cmd
 from soota.cli_output import run as _run
-from soota.config import load_settings
+from soota.cli_output import run_settings
+from soota.features_cli import app as features_app
 from soota.models import TranscriptMode
 from soota.pipeline import doctor as doctor_cmd
 from soota.pipeline import estimate as estimate_cmd
@@ -19,6 +20,7 @@ from soota.pipeline import ingest as ingest_cmd
 from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
+from soota.policy_cli import app as policy_app
 from soota.runtime_cli import app as runtime_app
 
 app = typer.Typer(
@@ -30,6 +32,8 @@ jobs_app = typer.Typer(help="查看任务与续跑目录采集")
 app.add_typer(jobs_app, name="jobs")
 app.add_typer(api_app, name="api")
 app.add_typer(runtime_app, name="runtime")
+app.add_typer(policy_app, name="policy")
+app.add_typer(features_app, name="features")
 
 
 @app.command()
@@ -43,22 +47,24 @@ def platforms(
 def doctor(
     json_output: Annotated[bool, typer.Option("--json", help="stdout 只输出一个 JSON 文档")] = False,
 ) -> None:
-    _run(json_output, doctor_cmd, load_settings())
+    run_settings(
+        json_output,
+        doctor_cmd,
+    )
 
 
 @app.command()
 def inspect(
     url: Annotated[str, typer.Argument(help="YouTube 或 Bilibili URL")],
-    provider: Annotated[str, typer.Option("--provider", help="auto/opencli/tikhub")] = "auto",
+    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli/tikhub")] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
-    max_cost: Annotated[float, typer.Option("--max-cost", help="USD；默认禁止付费请求")] = 0,
+    max_cost: Annotated[float | None, typer.Option("--max-cost", help="可选 USD 费用上限；0 禁止计费请求")] = None,
     offline: Annotated[bool, typer.Option("--offline", help="只识别 URL，不调用 Provider")] = False,
 ) -> None:
-    _run(
+    run_settings(
         json_output,
         inspect_cmd,
-        load_settings(),
         url,
         fetch=not offline,
         provider=provider,
@@ -70,17 +76,16 @@ def inspect(
 @app.command()
 def estimate(
     url: Annotated[str, typer.Argument()],
-    provider: Annotated[str, typer.Option("--provider")] = "auto",
+    provider: Annotated[str | None, typer.Option("--provider")] = None,
     mode: Annotated[str, typer.Option("--mode")] = "ingest",
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     max_items: Annotated[int, typer.Option("--max-items", help="目录任务的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="目录任务的分页上限")] = DEFAULT_MAX_PAGES,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    _run(
+    run_settings(
         json_output,
         estimate_cmd,
-        load_settings(),
         url,
         mode=mode,
         provider=provider,
@@ -93,20 +98,21 @@ def estimate(
 @app.command()
 def catalog(
     url: Annotated[str, typer.Argument(help="X、YouTube 频道或 Bilibili UP 主主页")],
-    provider: Annotated[str, typer.Option("--provider", help="auto/opencli/tikhub")] = "auto",
+    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli/tikhub")] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="本任务累计收录的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="本任务累计读取的页数上限")] = DEFAULT_MAX_PAGES,
-    max_cost: Annotated[float | None, typer.Option("--max-cost", help="任务累计费用上限，单位 USD；执行时必填")] = None,
+    max_cost: Annotated[
+        float | None, typer.Option("--max-cost", help="任务累计费用上限，单位 USD；可选附加上限")
+    ] = None,
     output: Annotated[Path | None, typer.Option("--output")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="离线预估，不联网或创建任务")] = False,
     incremental: Annotated[bool, typer.Option("--incremental", help="跳过已收录条目，整页无新增时停止")] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    _run(
+    run_settings(
         json_output,
         catalog_cmd,
-        load_settings(),
         url,
         provider=provider,
         fallback=fallback,
@@ -122,7 +128,7 @@ def catalog(
 @app.command()
 def ingest(
     url: Annotated[str, typer.Argument()],
-    provider: Annotated[str, typer.Option("--provider", help="auto/opencli/tikhub")] = "auto",
+    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli/tikhub")] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     output: Annotated[Path | None, typer.Option("--output")] = None,
@@ -134,10 +140,9 @@ def ingest(
 ) -> None:
     if max_items is not None and max_items < 1:
         raise typer.Exit(3)
-    _run(
+    run_settings(
         json_output,
         ingest_cmd,
-        load_settings(),
         url,
         provider=provider,
         fallback=fallback,
@@ -156,14 +161,17 @@ def render(
     json_output: Annotated[bool, typer.Option("--json")] = False,
     force: Annotated[bool, typer.Option("--force")] = False,
 ) -> None:
-    _run(json_output, render_cmd, load_settings(), bundle=bundle, analysis=analysis, force=force)
+    run_settings(json_output, render_cmd, bundle=bundle, analysis=analysis, force=force)
 
 
 @jobs_app.command("list")
 def jobs_list(
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    _run(json_output, list_jobs_cmd, load_settings())
+    run_settings(
+        json_output,
+        list_jobs_cmd,
+    )
 
 
 @jobs_app.command("resume")
@@ -174,10 +182,9 @@ def jobs_resume(
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="新的总费用上限，已有预留不会清零")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    _run(
+    run_settings(
         json_output,
         resume_catalog_cmd,
-        load_settings(),
         job_id,
         max_items=max_items,
         max_pages=max_pages,

@@ -7,7 +7,7 @@ import httpx
 import pytest
 import tikhub
 
-from soota.config import AsrConfig, SootaSettings, TikHubConfig
+from soota.config import AsrConfig, PaymentConfig, SootaSettings, TikHubConfig
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -35,6 +35,7 @@ def settings(tmp_path: Path) -> SootaSettings:
         cache_dir=tmp_path / "cache",
         data_dir=tmp_path / "data",
         tikhub=TikHubConfig(),
+        payment=PaymentConfig(mode="auto"),
         asr=AsrConfig(engine="whisper-cli", model="base"),
     )
 

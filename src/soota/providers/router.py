@@ -5,6 +5,7 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import Any, Literal
 
+from soota.billing import PaymentGate
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, InputError, SourceError
 from soota.models import MediaItem, RequestRecord, SourceRef
@@ -25,8 +26,8 @@ def validate_policy(provider: str, fallback: str | None, max_cost: float | None)
         raise InputError("TikHub 已是指定来源，无需再指定同名 fallback。")
     if max_cost is not None and (not math.isfinite(max_cost) or max_cost < 0):
         raise InputError("--max-cost 必须是有限的非负数。")
-    if fallback and (max_cost is None or max_cost <= 0):
-        raise InputError("付费兜底需要同时提供 --fallback tikhub 和正数 --max-cost。")
+    if fallback and max_cost == 0:
+        raise InputError("--max-cost 0 禁止 TikHub 付费兜底。")
 
 
 def catalog_provider(source: SourceRef, provider: str) -> Literal["opencli", "tikhub"]:
@@ -60,10 +61,12 @@ def inspect_item(
     *,
     provider: str = "auto",
     fallback: str | None = None,
-    max_cost: float = 0,
+    max_cost: float | None = None,
     requester: Callable[..., Any] | None = None,
 ) -> tuple[MediaItem, list[RequestRecord], list[str]]:
     validate_policy(provider, fallback, max_cost)
+    if provider == "auto" and fallback is None and max_cost != 0:
+        fallback = "tikhub"
     warnings: list[str] = []
     records: list[RequestRecord] = []
     if provider != "tikhub" and opencli_capabilities(source).inspect:
@@ -84,15 +87,15 @@ def inspect_item(
         raise SourceError("没有匹配的免费元数据来源。", hint="可显式选择 --provider tikhub 并提供 --max-cost。")
     if not tikhub_capabilities(source).inspect:
         raise SourceError("TikHub 尚未接入该来源的统一元数据解析。")
-    budget = RequestBudget(max_cost)
     paid = TikHubProvider(
         cache=CacheStore(settings.cache_dir),
         base_url=settings.tikhub.base_url,
         timeout=settings.tikhub.timeout_seconds,
         preferred_language=settings.default_language,
         requester=requester,
-        before_request=budget.reserve,
+        before_request=RequestBudget(max_cost).reserve if max_cost is not None else None,
         max_retries=0,
+        payment_gate=PaymentGate(settings, max_cost),
     )
     item = paid.inspect(source)
     item.provenance = {"provider": "tikhub", "cache_hit": any(r.cache_hit for r in paid.records)}

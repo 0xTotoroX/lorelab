@@ -6,6 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
+from soota.billing import PaymentGate, selected_provider
 from soota.config import SootaSettings, ensure_dirs
 from soota.errors import AuthBudgetError, InputError, SourceError
 from soota.models import (
@@ -55,6 +56,7 @@ def _provider(
         preferred_language=settings.default_language,
         before_request=RequestBudget(max_cost).reserve if max_cost is not None else None,
         max_retries=0,
+        payment_gate=PaymentGate(settings, max_cost),
     )
 
 
@@ -112,10 +114,11 @@ def inspect(
     *,
     fetch: bool = True,
     requester: Callable[..., Any] | None = None,
-    provider: str = "auto",
+    provider: str | None = None,
     fallback: str | None = None,
-    max_cost: float = 0,
+    max_cost: float | None = None,
 ) -> CommandResult:
+    provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
     source = recognize(url)
     capabilities = {
@@ -145,12 +148,13 @@ def estimate(
     url: str,
     *,
     mode: str = "ingest",
-    provider: str = "auto",
+    provider: str | None = None,
     transcript: TranscriptMode = TranscriptMode.AUTO,
     max_items: int = 100,
     max_pages: int = 10,
     requester: Callable[..., Any] | None = None,
 ) -> CommandResult:
+    provider = selected_provider(settings, provider)
     if mode == "catalog":
         from soota.catalog import estimate_catalog
 
@@ -210,7 +214,7 @@ def estimate(
     warnings: list[str] = []
     wallet_view: dict[str, Any] | None = None
     try:
-        wallet = client.get_wallet()
+        wallet = client.get_wallet() if endpoints else None
     except Exception:
         warnings.append("无法读取 TikHub 余额，估价未与钱包核对。")
         wallet = None
@@ -250,7 +254,7 @@ def ingest(
     url: str,
     *,
     transcript: TranscriptMode = TranscriptMode.AUTO,
-    provider: str = "auto",
+    provider: str | None = None,
     fallback: str | None = None,
     output: Path | None = None,
     max_cost: float | None = None,
@@ -259,7 +263,10 @@ def ingest(
     requester: Callable[..., Any] | None = None,
     asr: AsrEngine | None = None,
 ) -> CommandResult:
+    provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
+    if provider == "auto" and fallback is None and max_cost != 0:
+        fallback = "tikhub"
     if transcript != TranscriptMode.ASR and provider != "tikhub":
         if dry_run:
             return estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
@@ -268,7 +275,7 @@ def ingest(
             url,
             provider=provider,
             fallback=fallback,
-            max_cost=max_cost or 0,
+            max_cost=max_cost,
             output=output,
             force=force,
             requester=requester,
@@ -380,7 +387,7 @@ def ingest_opencli(
     *,
     provider: str,
     fallback: str | None,
-    max_cost: float,
+    max_cost: float | None,
     output: Path | None,
     force: bool,
     requester: Callable[..., Any] | None,

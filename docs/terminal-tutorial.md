@@ -67,7 +67,7 @@ TikHub 需要自己的 API Key。登录、验证码、限流和契约错误会�
 uv run soota ingest "视频 URL" --max-cost 0 --json
 ```
 
-字幕不存在时保留元数据；若明确允许 TikHub 兜底，可用 `--fallback tikhub --max-cost 0.05`。如需直接选择 TikHub：
+以上零预算示例在字幕不存在时保留元数据。省略零预算时，默认 auto 会按付费策略处理 TikHub 兜底；也可显式 `--fallback tikhub --max-cost 0.05`。如需直接选择 TikHub：
 
 ```bash
 uv run soota estimate "视频 URL" --provider tikhub --json
@@ -91,3 +91,18 @@ uv run soota runtime rollback --json
 更新安装在 Soota 自己的数据目录，不覆盖你现有全局 OpenCLI 或其中的本地补丁。若新程序与正在运行的 daemon 版本不同，Soota 会停止采集；先等已有采集结束，再手动切换 daemon，或直接 rollback。升级检查通过只证明 CLI 契约兼容，还应执行一次零预算 `inspect` 检查网站与扩展。
 
 完整边界和配置见 [Provider 与运行时](providers.md)，可续跑的 TikHub 视频目录见 [目录说明](catalog.md)。
+
+## 查询全部功能与设置付款方式
+
+```bash
+uv run soota features list --site bilibili --json
+uv run soota features show twitter.profile --json
+uv run soota features call twitter.profile --param username=jack --json
+uv run soota policy show --json
+uv run soota policy set --mode ask
+# 下面两个是可选设置，不要一起执行：
+uv run soota policy set --mode auto --min-balance 5
+uv run soota policy set --mode auto --no-balance-limit
+```
+
+ask 是初始默认值：OpenCLI 优先，每次 TikHub 收费前在终端询问 y/N。auto 会将省略 provider 时的默认来源改为 TikHub；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。完整能力范围、11 个重叠映射及原生功能操作见 [双运行时功能映射与费用策略](features.md)。

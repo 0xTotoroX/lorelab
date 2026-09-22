@@ -11,6 +11,7 @@ from urllib.parse import quote, quote_plus
 
 from jsonschema import Draft202012Validator
 
+from soota.billing import PaymentGate
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, InputError, SootaError, SourceError
 from soota.models import CommandResult, RequestRecord
@@ -221,9 +222,10 @@ def call_endpoint(
     max_cost: float | None = None,
     output: Path | None = None,
     requester: Callable[..., Any] | None = None,
+    allow_auxiliary: bool = False,
 ) -> CommandResult:
     endpoint = load_registry().resolve(selector)
-    if not endpoint.callable or endpoint.deprecated:
+    if (not endpoint.callable and not allow_auxiliary) or endpoint.deprecated:
         raise SourceError("该接口不属于当前可用的内容查询接口。", hint="用 api list 查看 callable 字段。")
     query, body = prepare_request(endpoint, params or [], params_file, body_file)
     credentials = _credential_values(query) + _credential_values(body, endpoint.body_sensitive)
@@ -246,17 +248,15 @@ def call_endpoint(
             },
             ["未缓存的接口单价显示为 null；执行前会查询免费的定价元数据。"],
         )
-    if max_cost is None:
-        raise InputError("执行 API 查询需要 --max-cost。", hint="可先使用 --dry-run 校验参数与查看选定版本。")
     reserved: list[RequestRecord] = []
 
     def reserve(record: RequestRecord) -> None:
-        if record.endpoint != endpoint.path:
+        if not record.billed or record.cache_hit or record.endpoint != endpoint.path:
             return
         price = record.estimated_cost_usd
         if price is None or not math.isfinite(price) or price < 0:
             raise AuthBudgetError("该接口价格未知或无效，未发送查询请求。")
-        if Decimal(str(price)) > Decimal(str(max_cost)):
+        if max_cost is not None and Decimal(str(price)) > Decimal(str(max_cost)):
             raise AuthBudgetError(f"接口费用 {price:g} USD 超过本次 --max-cost {max_cost}。")
         record.note = f"reserved-before-request;live-price:{datetime.now(UTC).isoformat()}"
         CostLedger(settings.ledger_path).append(endpoint.key, [record], {"kind": "api", "reservation": True})
@@ -269,12 +269,13 @@ def call_endpoint(
         requester=requester,
         before_request=reserve,
         max_retries=0,
+        payment_gate=PaymentGate(settings, max_cost),
     )
     if provider.api_key:
         credentials.append(provider.api_key)
     try:
         price = provider.endpoint_price(endpoint)
-        response = provider.query(endpoint, query, body)
+        response = provider.query(endpoint, query, body, allow_auxiliary=allow_auxiliary)
     except SootaError as exc:
         return CommandResult(
             ok=False,
@@ -285,6 +286,7 @@ def call_endpoint(
             hint=_protect(exc.hint, credentials),
             data={
                 "endpoint": endpoint.path,
+                "details": _protect(exc.details, credentials),
                 "reserved_cost_usd": sum(record.estimated_cost_usd or 0 for record in reserved),
                 "requests": [record.model_dump() for record in provider.records],
             },

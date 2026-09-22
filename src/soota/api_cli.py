@@ -4,8 +4,7 @@ from typing import Annotated
 import typer
 
 from soota.api import call_endpoint, list_endpoints, show_endpoint
-from soota.cli_output import run
-from soota.config import load_settings
+from soota.cli_output import run, run_settings
 
 app = typer.Typer(help="查询 TikHub 各平台内容接口；同功能优先当前最高版本", no_args_is_help=True)
 
@@ -49,14 +48,13 @@ def api_call(
         Path | None, typer.Option("--body", help="POST JSON 请求体文件；按契约提供对象、数组或字符串")
     ] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run", help="离线选版本、校验请求，不调用接口")] = False,
-    max_cost: Annotated[float | None, typer.Option("--max-cost", help="本次查询费用上限 USD，执行时必填")] = None,
+    max_cost: Annotated[float | None, typer.Option("--max-cost", help="本次查询费用上限 USD，可选附加上限")] = None,
     output: Annotated[Path | None, typer.Option("--output", help="保存脱敏 JSON 到新文件")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
-    run(
+    run_settings(
         json_output,
         call_endpoint,
-        load_settings(),
         endpoint,
         params=param,
         params_file=params_file,

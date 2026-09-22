@@ -22,6 +22,11 @@ def emit(result: CommandResult, json_output: bool) -> None:
         for warning in payload["warnings"]:
             typer.echo(f"warning: {warning}", err=True)
         data = payload["data"]
+        for key in ("policy", "feature", "plan"):
+            if key in data:
+                typer.echo(json.dumps(data[key], ensure_ascii=False, indent=2, default=str))
+        for feature in data.get("features", []):
+            typer.echo(f"{feature['id']}  {feature['description']}")
         if data.get("output"):
             typer.echo(f"output: {data['output']}")
         if data.get("job_id"):
@@ -68,3 +73,9 @@ def run(json_output: bool, fn: Callable[..., CommandResult], *args: Any, **kwarg
         fail(StorageError("无法读写本地文件。", hint="检查配置、任务和输出目录是否可写。"), json_output)
         return
     emit(result, json_output)
+
+
+def run_settings(json_output: bool, fn: Callable[..., CommandResult], *args: Any, **kwargs: Any) -> None:
+    from soota.config import load_settings
+
+    run(json_output, lambda: fn(load_settings(), *args, **kwargs))

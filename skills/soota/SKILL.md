@@ -44,7 +44,7 @@ uv run --project /path/to/soota soota render \
 2. Discover a query with `soota api list --platform PLATFORM --task detail|profile|catalog|search|comments|media|trends|live|analytics|commerce|utility --json`. Use one task value per command. Check `callable`; helpers and non-content services can be listed but cannot be executed. Follow `next_offset` with `--offset` when needed.
 3. Run `soota api show KEY --json`. Use the returned path and request schema. Same-function versions resolve to the highest nondeprecated version in the reviewed registry; old parameter names are not silently translated. Do not downgrade for price.
 4. Run `soota api call KEY --param name=value --dry-run --json`. Use `--params-file query.json` for complex query values and `--body body.json` for a POST JSON object, array, or string as specified by the schema. Discovery and dry runs are offline, create no jobs, and need no key. Keep cookies and credentials in local files, not chat or command text.
-5. Execute within the user's authorized scope with `soota api call KEY ... --max-cost USD --output NEW_FILE.json --json`. The CLI looks up free pricing metadata, reserves the quoted price before the query, and disables automatic retries. Unknown or excessive prices stop the query. Reuse existing authorization; do not ask again for the same approved call and cap.
+5. Execute within the user's authorized scope with `soota api call KEY ... --max-cost USD --output NEW_FILE.json --json`. The CLI looks up free pricing metadata, reserves the quoted price before the query, and disables automatic retries. Unknown or excessive prices stop the query. Do not bypass the CLI payment gate: ask mode confirms each paid request; non-TTY pauses with payment_required. Do not enable auto mode without the user selecting that policy.
 6. Read the saved JSON or `data.response`. Credentials are redacted; other platform fields remain platform-specific. This command performs one query and does not provide automatic pagination, job resume, caching, ASR, or Markdown rendering. A platform API entry is not evidence that `ingest` supports that platform. Report the selected endpoint, result path, reserved cost and any error; billing remains unknown (`actual_cost_usd: null`).
 
 See `docs/tikhub-api.md` in the project for the platform matrix and version-update workflow. This phase prioritizes breadth and compatibility; retain existing caches and budget controls without choosing older endpoints to reduce cost.
@@ -52,7 +52,7 @@ See `docs/tikhub-api.md` in the project for the platform matrix and version-upda
 ## Catalog workflow
 
 1. Run `soota catalog "URL" --max-items N --max-pages P --dry-run --json`. This is offline and creates no job. `soota estimate "URL" --mode catalog --json` is equivalent with default limits.
-2. Use the user's authorized scope and USD cap. Run `soota catalog "URL" --max-items N --max-pages P --max-cost USD --json`. Execution requires an explicit cap; do not treat permission to list a creator's videos as permission for bulk transcripts or ASR.
+2. Use the user's authorized scope and USD cap. Run `soota catalog "URL" --max-items N --max-pages P --max-cost USD --json`. Execution uses the saved payment policy (ask by default); an explicit cap is optional; do not treat permission to list a creator's videos as permission for bulk transcripts or ASR.
 3. Read `data.catalog` (`catalog.json`) or `data.content` (`catalog.md`). Catalogs contain links and metadata only. Classification and bulk deep processing remain unimplemented.
 4. For a paused task, use `soota jobs resume JOB_ID --max-items N --max-pages P --max-cost USD --json`. All three values are new cumulative limits; prior requests retain their cost reservations. Reuse an existing authorized cap without asking again; obtain authorization before increasing it.
 5. For a fresh update, use `soota catalog "URL" --incremental --max-cost USD --json`. It skips IDs from prior local catalogs and stops at a whole page of known items. It does not refresh old metadata or guarantee discovery across a reordered historical feed.
@@ -63,7 +63,7 @@ Only catalog jobs support `jobs resume`; old single-video jobs remain viewable t
 ## Hard rules
 
 - One CLI: `soota`. No per-platform MCP.
-- API execution requires an explicit per-query `--max-cost`. Failed calls retain their reservation. `--output` must name a new file.
+- API execution uses the saved payment policy; `--max-cost` is an optional additional cap. Failed calls retain their reservation. `--output` must name a new file.
 - `--json` stdout is one JSON document. Read `data.transcript` as a path.
 - Catalog `--max-items`, `--max-pages`, and the price-snapshot reservation cap `--max-cost` apply across resumes. Unknown prices stop before dispatch. Failed or interrupted calls retain their reservations; do not claim reserved cost is confirmed billing.
 - Captions beat ASR. Danmaku/comments/descriptions are not captions.
@@ -101,4 +101,4 @@ Evidence IDs must exist in `transcript.md`.
 
 ## OpenCLI 与费用路由
 
-使用前阅读项目 `docs/terminal-tutorial.md` 和 `docs/providers.md`。`inspect` 默认优先 OpenCLI、零预算；默认 auto/captions-only 字幕摄取同样优先 OpenCLI；显式 --provider tikhub 才跳过它，付费兜底需要明确预算。`catalog https://x.com/USER --max-items 50 --max-cost 0` 是完整性未知的最近快照，不能宣称全量或使用 jobs resume。付费兜底必须显式 `--fallback tikhub --max-cost 正数`。`runtime update --version 完整版本号` 只更新受管运行时，不覆盖全局安装；daemon 版本冲突时停止，不打断现有采集。
+使用前阅读项目 `docs/terminal-tutorial.md`、`docs/providers.md`、`docs/features.md`。通过 features list/show/call 映射 OpenCLI + TikHub 原生能力；11 个已核实重叠功能默认 OpenCLI 优先，原始输出仍按 Provider 标明。inspect/ingest 默认同样 OpenCLI 优先；省略零预算时按费用策略处理 TikHub 兜底。默认 ask 逐次确认，非终端返回 payment_required；用户明确选择后才能 policy set --mode auto --min-balance USD 或 --no-balance-limit，此时默认 TikHub。max-cost 是可选附加上限，0 禁止计费请求。catalog X 是完整性未知、最多 200 条的最近快照；不能 resume 或宣称历史全量。运行时升级仍隔离安装，不覆盖全局版本或重启不同版本的 daemon。写入命令需显式 --allow-write；不得把执行能力当作已获用户授权。

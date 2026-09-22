@@ -1,6 +1,6 @@
 # Provider 与独立运行时
 
-Soota 核心负责识别、能力选择、预算、任务和输出。OpenCLI、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配已验证能力，再优先使用免费来源。
+Soota 核心负责识别、能力选择、预算、任务和输出。OpenCLI、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按保存的来源策略选择；初始默认 OpenCLI 优先。完整原生功能和重叠映射见 [功能并集](features.md)。
 
 ## 当前接入范围
 
@@ -19,13 +19,13 @@ Soota 核心负责识别、能力选择、预算、任务和输出。OpenCLI、T
 
 ## 路由和费用
 
-`inspect` 默认 `--provider auto --max-cost 0`。只有显式的 `--fallback tikhub --max-cost 正数` 才允许从免费来源转入 TikHub。`--provider tikhub` 跳过 OpenCLI；缓存可零预算读取，网络计费请求需要正数预算。
+`inspect` 初始默认 OpenCLI 优先；免费来源不可用时可按费用策略转入 TikHub，默认逐次询问付费。`--provider opencli` 严格只用 OpenCLI，除非显式指定 fallback；`--provider tikhub` 跳过 OpenCLI。保存 auto 付费策略会把省略 provider 时的默认来源改为 TikHub。缓存可零预算读取，`--max-cost` 是附加上限。
 
 免费来源缺少能力、程序不存在或 Bridge 确认未连接时，才允许已授权的兜底；已确认没有可用字幕时也可按授权使用 TikHub。登录、验证码、权限、限流、超时、适配器加载失败、响应契约变化、profile 错误及 daemon 版本冲突都会停止，不切换来源、不在 Soota 层自动重试。上游程序本身可能有内部重试，Soota 的总超时限制其运行时间。
 
 所有受控请求在发出前检查预算。`--max-cost 0` 即使遇到标价为 0 的 billed 接口也会拒绝；未知价格也会拒绝。TikHub 单价来自现有受控快照；预算是请求费用预估，不是服务端账单限额。`actual_cost_usd` 不冒充实际账单。
 
-默认 `ingest` 的 `auto` 和 `captions-only` 都先使用 OpenCLI；有字幕就直接保存，不查询 TikHub 钱包或初始化其 SDK。只有 `--provider tikhub` 跳过免费来源。未授权兜底且没有字幕时保留元数据并返回 partial；授权方式仍是 `--fallback tikhub --max-cost 正数`。`--transcript asr` 是明确要求音频转写，目前仍走具备音频能力的 TikHub 路径；显式 OpenCLI 无音频能力时会报错。目录执行一直要求显式预算。两种目录没有互换游标的契约，所以 `catalog --fallback` 目前拒绝执行。
+默认 `ingest` 的 `auto` 和 `captions-only` 都先使用 OpenCLI；有字幕就直接保存，不查询 TikHub 钱包或初始化其 SDK。显式 `--provider tikhub` 或保存的自动付费策略可跳过免费来源。auto 模式缺少字幕时按付款策略尝试 TikHub；零预算或严格 OpenCLI 模式保留元数据并返回 partial。`--transcript asr` 是明确要求音频转写，目前仍走具备音频能力的 TikHub 路径；显式 OpenCLI 无音频能力时会报错。目录费用同样受逐次确认或已保存的 auto 策略控制，累计预算可选。两种目录没有互换游标的契约，所以 `catalog --fallback` 目前拒绝执行。
 
 ## 最近快照、缓存和账号
 
