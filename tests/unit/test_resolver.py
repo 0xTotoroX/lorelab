@@ -100,11 +100,23 @@ def test_missing_captions_runs_asr(settings, monkeypatch) -> None:
 
 def test_second_run_is_cache_hit(settings) -> None:
     requester = _youtube_requester()
-    ingest(settings, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", requester=requester, asr=FakeAsr(), max_cost=0.1)
+    ingest(
+        settings,
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        requester=requester,
+        asr=FakeAsr(),
+        max_cost=0.1,
+        provider="tikhub",
+    )
     first = list(requester.calls)
     requester.calls.clear()
     result = ingest(
-        settings, "https://www.youtube.com/watch?v=dQw4w9WgXcQ", requester=requester, asr=FakeAsr(), max_cost=0.1
+        settings,
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        requester=requester,
+        asr=FakeAsr(),
+        max_cost=0.1,
+        provider="tikhub",
     )
     assert result.data["cache_hit"] is True
     assert requester.calls == []

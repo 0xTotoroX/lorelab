@@ -22,7 +22,7 @@
       "required": ["status"],
       "properties": {
         "status": { "enum": ["ready", "missing", "pending"] },
-        "source": { "enum": ["official", "auto", "asr", null] },
+        "source": { "enum": ["official", "auto", "asr", "unknown", null] },
         "language": { "type": ["string", "null"] },
         "path": { "type": ["string", "null"] },
         "segments": { "type": "integer" }

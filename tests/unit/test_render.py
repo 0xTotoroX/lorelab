@@ -40,6 +40,7 @@ def test_invalid_analysis_does_not_clobber(settings) -> None:
     result = ingest(
         settings,
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        provider="tikhub",
         max_cost=0.1,
         requester=_youtube_requester(),
         asr=FakeAsr(),

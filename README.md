@@ -4,7 +4,7 @@
 
 Soota 是本地优先的内容摄取 CLI：通过独立 Provider 优先使用 OpenCLI 的已验证免费能力，并查询 TikHub 各平台内容，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 负责把自然语言变成确定的 `soota` 命令；Soota 不实现 Obsidian 知识管理，也不把 TikHub 按平台拆成多个 MCP。
 
-已接入 OpenCLI 的 X 最近快照与视频元数据，提供零预算控制、显式元数据兜底及独立运行时升级/回滚。详见 [终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。同功能存在多个版本时使用最高的未废弃版本，不因旧版本便宜而降级。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 OpenCLI 的 X 最近快照、视频元数据和字幕，提供零预算控制、显式付费兜底及独立运行时升级/回滚。详见 [终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。同功能存在多个版本时使用最高的未废弃版本，不因旧版本便宜而降级。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -42,7 +42,7 @@ uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
 ```
 
-字幕模式：`auto`、`captions-only`、`asr`、`none`。
+字幕模式：`auto`、`captions-only`、`asr`、`none`。默认 `auto` 优先 OpenCLI 字幕；`--provider tikhub` 才直接使用 TikHub。付费兜底需 `--fallback tikhub --max-cost 正数`；`--max-cost 0` 禁止计费请求。
 
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。
 

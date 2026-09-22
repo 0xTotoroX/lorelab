@@ -16,6 +16,7 @@ class TranscriptMode(StrEnum):
 
 
 class TranscriptSource(StrEnum):
+    UNKNOWN = "unknown"
     OFFICIAL = "official"
     AUTO = "auto"
     ASR = "asr"

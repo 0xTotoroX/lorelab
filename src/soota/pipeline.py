@@ -15,13 +15,15 @@ from soota.models import (
     ContentBundleManifest,
     MediaItem,
     ProcessingManifest,
+    RequestRecord,
     TranscriptDocument,
     TranscriptManifest,
     TranscriptMode,
     TranscriptStatus,
 )
+from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli import capabilities_for as opencli_capabilities
-from soota.providers.opencli_runtime import OpenCLIRuntime
+from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
 from soota.providers.router import RequestBudget, inspect_item, validate_policy
 from soota.providers.tikhub.capability import capabilities_for
 from soota.providers.tikhub.client import TikHubProvider
@@ -157,23 +159,30 @@ def estimate(
         raise InputError("--mode 只支持 ingest 或 catalog。")
     source = recognize(url)
     validate_policy(provider, None, None)
-    if provider != "tikhub" and transcript == TranscriptMode.NONE and opencli_capabilities(source).inspect:
+    if provider != "tikhub" and transcript != TranscriptMode.ASR and opencli_capabilities(source).inspect:
         return CommandResult(
             ok=True,
             status="success",
             code="ok",
             exit_code=0,
-            message="元数据预估完成；未联网。",
+            message="OpenCLI 摄取预估完成；未联网。",
             data={
                 "provider": "opencli",
                 "estimated_cost_usd": 0,
-                "request_count": 1,
+                "request_count": 1 if transcript == TranscriptMode.NONE else 2,
                 "source": source.model_dump(),
-                "endpoints": [f"opencli:{source.platform}/video"],
+                "endpoints": [f"opencli:{source.platform}/video"]
+                + (
+                    []
+                    if transcript == TranscriptMode.NONE
+                    else [
+                        f"opencli:{source.platform}/" + ("subtitle" if source.platform == "bilibili" else "transcript")
+                    ]
+                ),
             },
         )
     if provider == "opencli":
-        raise SourceError("OpenCLI 当前只接入元数据和 X 最近快照；视频字幕/音频请使用 TikHub。")
+        raise SourceError("OpenCLI 尚未接入该来源或音频下载；可显式选择 TikHub。")
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester)
     need_captions = transcript in {TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY}
@@ -251,10 +260,10 @@ def ingest(
     asr: AsrEngine | None = None,
 ) -> CommandResult:
     validate_policy(provider, fallback, max_cost)
-    if transcript == TranscriptMode.NONE and provider != "tikhub":
+    if transcript != TranscriptMode.ASR and provider != "tikhub":
         if dry_run:
             return estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
-        return ingest_metadata(
+        return ingest_opencli(
             settings,
             url,
             provider=provider,
@@ -263,9 +272,11 @@ def ingest(
             output=output,
             force=force,
             requester=requester,
+            transcript=transcript,
+            asr=asr,
         )
     if provider == "opencli" and fallback != "tikhub":
-        raise SourceError("OpenCLI 当前不提供视频字幕或音频；可用 --transcript none 只保存元数据。")
+        raise SourceError("OpenCLI 尚未接入音频下载，不能直接执行 ASR；auto 模式会先获取字幕。")
     ensure_dirs(settings)
     source = recognize(url)
     if source.kind not in INGESTABLE_KINDS:
@@ -363,7 +374,7 @@ def ingest(
     )
 
 
-def ingest_metadata(
+def ingest_opencli(
     settings: SootaSettings,
     url: str,
     *,
@@ -373,15 +384,70 @@ def ingest_metadata(
     output: Path | None,
     force: bool,
     requester: Callable[..., Any] | None,
+    transcript: TranscriptMode,
+    asr: AsrEngine | None,
 ) -> CommandResult:
     source = recognize(url)
-    item, records, warnings = inspect_item(
-        settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
-    )
+    records: list[RequestRecord] = []
+    warnings: list[str] = []
     document = TranscriptDocument(status=TranscriptStatus.MISSING)
+    item: MediaItem | None = None
+    missing_reason: str | None = None
+    if transcript == TranscriptMode.NONE:
+        item, records, warnings = inspect_item(
+            settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
+        )
+    elif not opencli_capabilities(source).captions:
+        missing_reason = "该来源尚未接入 OpenCLI 字幕。"
+    else:
+        client: OpenCLIProvider | None = None
+        try:
+            client = OpenCLIProvider(settings)
+            with client.runtime.lock():
+                item = client.inspect(source)
+                captions = client.get_captions(item)
+            document = TranscriptDocument(
+                status=captions.status, source=captions.source, language=captions.language, segments=captions.segments
+            )
+            if captions.status != TranscriptStatus.READY:
+                missing_reason = "OpenCLI 没有返回可用字幕。"
+            else:
+                warnings.append("OpenCLI 未标明实际字幕语言及人工/自动轨道类型，已保留为未知。")
+        except RuntimeUnavailable as exc:
+            missing_reason = exc.message
+        finally:
+            if client is not None:
+                records = client.records
+    if missing_reason:
+        if fallback == "tikhub":
+            result = ingest(
+                settings,
+                url,
+                provider="tikhub",
+                transcript=transcript,
+                output=output,
+                max_cost=max_cost,
+                force=force,
+                requester=requester,
+                asr=asr,
+            )
+            result.warnings.insert(0, missing_reason + " 已按显式设置使用 TikHub 兜底。")
+            result.data["routing"] = {
+                "attempted": ["opencli", "tikhub"],
+                "opencli_requests": [r.model_dump() for r in records],
+            }
+            CostLedger(settings.ledger_path).append(source.id, records)
+            return result
+        if item is None:
+            raise SourceError(missing_reason, hint="检查 OpenCLI，或显式选择 TikHub；不会自动产生付费请求。")
+        warnings.append(missing_reason + " 已保留元数据；未授权 TikHub 兜底。")
+    assert item is not None
+    ready = document.status == TranscriptStatus.READY or transcript == TranscriptMode.NONE
     manifest = ContentBundleManifest(
         source=item.source,
-        transcript=TranscriptManifest(status=document.status),
+        transcript=TranscriptManifest(
+            status=document.status, source=document.source, language=document.language, segments=len(document.segments)
+        ),
         processing=ProcessingManifest(
             provider=str(item.provenance["provider"]),
             requests=records,
@@ -398,26 +464,31 @@ def ingest_metadata(
     CostLedger(settings.ledger_path).append(item.source.id, records)
     JobStore(settings.jobs_dir).create(
         {
-            "status": "completed",
+            "status": "completed" if ready else "partial",
             "source": item.source.model_dump(),
             "output": str(folder),
             "provider": item.provenance["provider"],
-            "transcript_status": "not_requested",
+            "transcript_status": document.status if transcript != TranscriptMode.NONE else "not_requested",
         }
     )
     return CommandResult(
-        ok=True,
-        status="success",
-        code="ok",
-        exit_code=0,
-        message="元数据内容包已保存；本次未请求字幕。",
+        ok=ready,
+        status="success" if ready else "partial",
+        code="ok" if ready else "transcript_missing",
+        exit_code=0 if ready else 2,
+        message="内容包已保存。" if ready else "已保存元数据，字幕仍缺失。",
         warnings=warnings,
         data={
             "output": str(folder),
             "manifest": str(folder / "manifest.json"),
             "content": str(folder / "content.md"),
+            "transcript": str(folder / "transcript.md"),
             "provider": item.provenance["provider"],
+            "transcript_status": document.status,
+            "transcript_source": document.source,
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,
+            "cache_hit": manifest.processing.cache_hit,
+            "request_count": manifest.processing.request_count,
             "requests": [r.model_dump() for r in records],
         },
     )

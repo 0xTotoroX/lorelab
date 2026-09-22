@@ -5,18 +5,30 @@ import json
 import re
 import time
 from datetime import UTC, datetime
+from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from typing import Any
 
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, SourceError
-from soota.models import CapabilitySet, CatalogPage, MediaItem, RequestRecord, SourceRef
+from soota.models import (
+    CapabilitySet,
+    CaptionResult,
+    CatalogPage,
+    MediaItem,
+    RequestRecord,
+    SourceRef,
+    TranscriptSegment,
+    TranscriptSource,
+    TranscriptStatus,
+)
 from soota.providers.opencli_context import preflight, resolve_profile
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
 from soota.providers.process import run_process
 from soota.storage.cache import CacheStore
 
-ALLOWLIST = {("twitter", "tweets"), ("bilibili", "video"), ("youtube", "video")}
+CAPTION_COMMANDS = {("bilibili", "subtitle"), ("youtube", "transcript")}
+ALLOWLIST = {("twitter", "tweets"), ("bilibili", "video"), ("youtube", "video"), *CAPTION_COMMANDS}
 
 
 def capabilities_for(source: SourceRef) -> CapabilitySet:
@@ -25,7 +37,7 @@ def capabilities_for(source: SourceRef) -> CapabilitySet:
     if source.kind == "video" and (
         source.platform == "youtube" or source.platform == "bilibili" and source.id.startswith("BV")
     ):
-        return CapabilitySet(inspect=True)
+        return CapabilitySet(inspect=True, captions=True)
     return CapabilitySet()
 
 
@@ -85,6 +97,8 @@ class OpenCLIProvider:
             ):
                 raise AuthBudgetError("OpenCLI 登录、限流或访问限制，需要处理浏览器状态后再试；不会切换付费来源。")
             code = re.search(r"(?m)^\s*code:\s*['\"]?([A-Z_]+)", result.stderr)
+            if result.returncode == 66 and code and code[1] == "EMPTY_RESULT" and (site, command) in CAPTION_COMMANDS:
+                return []
             bridge_missing = any(phrase in message for phrase in ("extension not connected", "daemon not running"))
             if result.returncode == 69 and code and code[1] == "BROWSER_CONNECT" and bridge_missing:
                 raise RuntimeUnavailable(
@@ -129,6 +143,40 @@ class OpenCLIProvider:
         if not capabilities_for(source).catalog:
             raise SourceError("OpenCLI 目录只接入 X 最近帖子快照。")
         return source
+
+    def get_captions(self, item: MediaItem) -> CaptionResult:
+        source = item.source
+        if not capabilities_for(source).captions:
+            raise SourceError("该来源尚未接入 OpenCLI 字幕。")
+        language = self.settings.default_language
+        artifact = "captions-" + hashlib.sha256(language.encode()).hexdigest()[:12]
+        cached = self.cache.get_json(source, artifact)
+        if cached and 0 <= time.time() - cached.get("timestamp", 0) < self.settings.opencli.metadata_cache_seconds:
+            result = CaptionResult.model_validate(cached["result"])
+            if result.status == TranscriptStatus.READY and result.segments:
+                self.records.append(
+                    RequestRecord(endpoint="opencli:cache:captions", billed=False, cache_hit=True, estimated_cost_usd=0)
+                )
+                return result
+        command = "subtitle" if source.platform == "bilibili" else "transcript"
+        args = [source.id, "--lang", language]
+        if source.platform == "youtube":
+            args += ["--mode", "raw"]
+        rows = self._run(source.platform, command, args)
+        result = normalize_captions(source.platform, rows)
+        # Upstream omits actual track language/kind and may choose a different language.
+        if result.status == TranscriptStatus.READY:
+            self.cache.put_json(
+                source,
+                artifact,
+                {
+                    "timestamp": time.time(),
+                    "provenance": self.provenance(),
+                    "requested_language": language,
+                    "result": result.model_dump(mode="json"),
+                },
+            )
+        return result
 
     def list_items(self, source: SourceRef, cursor: str | None = None, *, page_size: int = 100) -> CatalogPage:
         self.resolve_catalog_source(source)
@@ -199,4 +247,35 @@ def normalize_video(source: SourceRef, rows: list[dict[str, Any]]) -> MediaItem:
         published_at=parse_date(fields.get("publishDate" if source.platform == "youtube" else "publish_time")),
         duration_seconds=int(duration[1]) if duration else None,
         extras={str(key): str(value) for key, value in fields.items() if value is not None},
+    )
+
+
+def normalize_captions(platform: str, rows: list[dict[str, Any]]) -> CaptionResult:
+    if not rows:
+        return CaptionResult(status=TranscriptStatus.MISSING)
+    keys = ("from", "to", "content") if platform == "bilibili" else ("start", "end", "text")
+    segments: list[TranscriptSegment] = []
+    for row in rows:
+        times = [row.get(key) for key in keys[:2]]
+        text = row.get(keys[2])
+        if any(not isinstance(value, str) or not re.fullmatch(r"\d+(?:\.\d+)?s", value) for value in times):
+            raise ContractError("OpenCLI 字幕时间戳契约不匹配。")
+        start, end = [int(Decimal(str(value)[:-1]) * 1000) for value in times]
+        if end < start or not isinstance(text, str):
+            raise ContractError("OpenCLI 字幕时间范围或正文无效。")
+        if text.strip():
+            segments.append(
+                TranscriptSegment(
+                    segment_id=f"seg-{len(segments) + 1:06d}",
+                    start_ms=start,
+                    end_ms=end,
+                    text=text.strip(),
+                    language=None,
+                    source=TranscriptSource.UNKNOWN,
+                )
+            )
+    return CaptionResult(
+        status=TranscriptStatus.READY if segments else TranscriptStatus.MISSING,
+        source=TranscriptSource.UNKNOWN if segments else None,
+        segments=segments,
     )

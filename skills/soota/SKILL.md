@@ -101,4 +101,4 @@ Evidence IDs must exist in `transcript.md`.
 
 ## OpenCLI 与费用路由
 
-使用前阅读项目 `docs/terminal-tutorial.md` 和 `docs/providers.md`。`inspect` 默认优先 OpenCLI、零预算；视频字幕摄取仍需 TikHub 和明确预算。`catalog https://x.com/USER --max-items 50 --max-cost 0` 是完整性未知的最近快照，不能宣称全量或使用 jobs resume。付费元数据兜底必须显式 `--fallback tikhub --max-cost 正数`。`runtime update --version 完整版本号` 只更新受管运行时，不覆盖全局安装；daemon 版本冲突时停止，不打断现有采集。
+使用前阅读项目 `docs/terminal-tutorial.md` 和 `docs/providers.md`。`inspect` 默认优先 OpenCLI、零预算；默认 auto/captions-only 字幕摄取同样优先 OpenCLI；显式 --provider tikhub 才跳过它，付费兜底需要明确预算。`catalog https://x.com/USER --max-items 50 --max-cost 0` 是完整性未知的最近快照，不能宣称全量或使用 jobs resume。付费兜底必须显式 `--fallback tikhub --max-cost 正数`。`runtime update --version 完整版本号` 只更新受管运行时，不覆盖全局安装；daemon 版本冲突时停止，不打断现有采集。

@@ -50,7 +50,7 @@ uv run soota ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
   --transcript none --max-cost 0 --json
 ```
 
-第一个命令返回标题、作者和已有元数据；第二个保存元数据 Markdown 内容包。本轮 OpenCLI 没有接入视频字幕或音频，`none` 不会生成字幕。
+第一个命令返回标题、作者和已有元数据；第二个保存元数据 Markdown 内容包。`none` 只保存元数据；需要字幕时使用默认 `auto`，会先通过 OpenCLI 获取字幕。
 
 确实愿意在免费元数据来源不可用时使用 TikHub，可明确给出兜底和费用上限（USD）：
 
@@ -61,7 +61,13 @@ uv run soota inspect "https://www.bilibili.com/video/BV1M1421t7hT" \
 
 TikHub 需要自己的 API Key。登录、验证码、限流和契约错误会停止，不会触发付费兜底。**这个 fallback 示例适用于已接入的元数据，暂不适用于 X 目录。**
 
-视频字幕仍用现有 TikHub 路径，先预估再按可接受上限执行：
+视频字幕默认优先 OpenCLI，零预算即可尝试：
+
+```bash
+uv run soota ingest "视频 URL" --max-cost 0 --json
+```
+
+字幕不存在时保留元数据；若明确允许 TikHub 兜底，可用 `--fallback tikhub --max-cost 0.05`。如需直接选择 TikHub：
 
 ```bash
 uv run soota estimate "视频 URL" --provider tikhub --json

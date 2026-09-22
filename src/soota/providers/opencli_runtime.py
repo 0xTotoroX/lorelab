@@ -25,6 +25,8 @@ REQUIRED_COMMANDS = {
     "twitter/tweets": {"id", "text", "url"},
     "bilibili/video": {"field", "value"},
     "youtube/video": {"field", "value"},
+    "bilibili/subtitle": {"index", "from", "to", "content"},
+    "youtube/transcript": set(),
 }
 
 
@@ -108,8 +110,14 @@ class OpenCLIRuntime:
             commands = {row["command"]: row for row in rows}
             for name, columns in REQUIRED_COMMANDS.items():
                 row = commands[name]
-                if row["access"] != "read" or not columns.issubset(row["columns"]):
+                if row["access"] != "read" or not columns.issubset(row.get("columns") or []):
                     raise ValueError(name)
+            for command, required in {
+                "bilibili/subtitle": {"bvid", "lang"},
+                "youtube/transcript": {"url", "lang", "mode"},
+            }.items():
+                if not required.issubset({arg["name"] for arg in commands[command]["args"]}):
+                    raise ValueError(command)
             args = {arg["name"] for arg in commands["twitter/tweets"]["args"]}
             if not {"username", "limit"}.issubset(args) or result.returncode:
                 raise ValueError("twitter/tweets args")

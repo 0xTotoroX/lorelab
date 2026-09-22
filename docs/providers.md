@@ -10,19 +10,22 @@ Soota 核心负责识别、能力选择、预算、任务和输出。OpenCLI、T
 | 视频元数据内容包 | `ingest --transcript none`，无需 TikHub Key | 可显式选择 |
 | X 用户最近帖子 | 最多 200 条快照，保存正文、来源与时间 | 统一目录解析尚未接入；可单独 `api call` 获取原始响应 |
 | YouTube 频道 / Bilibili UP 主目录 | 尚未接入可靠分页 | 保留分页、预算、检查点与续跑 |
-| 视频字幕、音频、本地 ASR 流程 | 本轮未接入 | 保留现有路径 |
+| Bilibili / YouTube 字幕 | 默认优先；正文与时间戳规范化，轨道类型/实际语言未知 | 显式选择或授权兜底 |
+| 音频、本地 ASR 流程 | 尚未接入音频下载 | 显式 ASR 模式或已授权的 auto 兜底 |
+
+默认优先级是缓存、OpenCLI、已授权的 TikHub。相同能力不因 TikHub 已配置或有缓存而跳过 OpenCLI。
 
 `api list/show/call` 始终是显式 TikHub 接口工具，不会转成浏览器调用。OpenCLI 自带的其他命令不等于 Soota 已接入它们。
 
 ## 路由和费用
 
-`inspect` 默认 `--provider auto --max-cost 0`。只有显式的 `--fallback tikhub --max-cost 正数` 才允许从免费元数据来源转入 TikHub。`--provider tikhub` 跳过 OpenCLI；缓存可零预算读取，网络计费请求需要正数预算。
+`inspect` 默认 `--provider auto --max-cost 0`。只有显式的 `--fallback tikhub --max-cost 正数` 才允许从免费来源转入 TikHub。`--provider tikhub` 跳过 OpenCLI；缓存可零预算读取，网络计费请求需要正数预算。
 
-免费来源缺少能力、程序不存在或 Bridge 确认未连接时，才允许已授权的元数据兜底。登录、验证码、权限、限流、超时、适配器加载失败、响应契约变化、profile 错误及 daemon 版本冲突都会停止，不切换来源、不在 Soota 层自动重试。上游程序本身可能有内部重试，Soota 的总超时限制其运行时间。
+免费来源缺少能力、程序不存在或 Bridge 确认未连接时，才允许已授权的兜底；已确认没有可用字幕时也可按授权使用 TikHub。登录、验证码、权限、限流、超时、适配器加载失败、响应契约变化、profile 错误及 daemon 版本冲突都会停止，不切换来源、不在 Soota 层自动重试。上游程序本身可能有内部重试，Soota 的总超时限制其运行时间。
 
 所有受控请求在发出前检查预算。`--max-cost 0` 即使遇到标价为 0 的 billed 接口也会拒绝；未知价格也会拒绝。TikHub 单价来自现有受控快照；预算是请求费用预估，不是服务端账单限额。`actual_cost_usd` 不冒充实际账单。
 
-字幕与音频模式当前只匹配 TikHub，保留已有 ingest 的可选预算行为；建议先 `estimate`，执行时始终给出 `--max-cost`。这条现有视频路径不是从 OpenCLI 失败后切换的兜底。目录执行一直要求显式预算。两种目录没有互换游标的契约，所以 `catalog --fallback` 目前拒绝执行。
+默认 `ingest` 的 `auto` 和 `captions-only` 都先使用 OpenCLI；有字幕就直接保存，不查询 TikHub 钱包或初始化其 SDK。只有 `--provider tikhub` 跳过免费来源。未授权兜底且没有字幕时保留元数据并返回 partial；授权方式仍是 `--fallback tikhub --max-cost 正数`。`--transcript asr` 是明确要求音频转写，目前仍走具备音频能力的 TikHub 路径；显式 OpenCLI 无音频能力时会报错。目录执行一直要求显式预算。两种目录没有互换游标的契约，所以 `catalog --fallback` 目前拒绝执行。
 
 ## 最近快照、缓存和账号
 
@@ -75,3 +78,9 @@ uv run soota runtime rollback --json
 | `runtime_cli.py` | 对外暴露运行时管理命令 |
 
 契约参考：[OpenCLI v1.8.3](https://github.com/jackwener/OpenCLI/tree/v1.8.3)、[TikHub 官方 X 接口](https://docs.tikhub.io/191321711e0)。TikHub X 官方响应样例的 `data` 为空，尚不足以实现严格分页解析器；本轮没有发送收费请求来猜测结构。
+
+## 字幕契约
+
+OpenCLI 使用 `bilibili subtitle BV_ID --lang ... -f json` 和 `youtube transcript VIDEO_ID --mode raw --lang ... -f json`。字幕片段映射为稳定 seg ID 和毫秒时间戳，缓存按实际浏览器上下文及请求语言分区；没有字幕的结果不持久化成可用字幕缓存。上游可能选用另一种语言，JSON 不包含真实轨道类型/语言，故 `source=unknown`、`language=null`，不冒充人工字幕或请求语言。Bilibili 当前使用默认分P。运行时兼容检查也包含这两个命令。
+
+字幕验收（2026-09-22）：151 项自动测试通过；本机 Bilibili 零预算实测保存 167 个片段。YouTube 接入的契约测试通过，但本机 1.8.3 上游实测报 `Caption URL returned empty response`，未误判为无字幕，也未进入付费兜底。
