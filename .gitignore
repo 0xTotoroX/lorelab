@@ -16,3 +16,4 @@ output/
 tmp/
 .env
 .env.*
+/docs/private/

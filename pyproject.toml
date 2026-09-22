@@ -38,6 +38,9 @@ soota = "soota.cli:app"
 [project.urls]
 Documentation = "https://docs.tikhub.io"
 
+[tool.hatch.build]
+exclude = ["/PLAN.md", "/PLAN.zh-CN.md", "/docs/private/**"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/soota"]
 
