@@ -3,13 +3,57 @@ from pathlib import Path
 
 import pytest
 
-from soota.errors import AuthBudgetError, ContractError
-from soota.models import TranscriptMode, TranscriptSource
+from soota.errors import AuthBudgetError, ContractError, SourceError
+from soota.models import MediaItem, TranscriptMode, TranscriptSource
 from soota.pipeline import estimate, ingest
 from soota.providers.opencli import OpenCLIProvider, normalize_captions
-from tests.unit.test_opencli import BILI, fail, video_rows
+from soota.providers.opencli_runtime import OpenCLIRuntime
+from soota.providers.process import ProcessResult
+from soota.routing import recognize
+from tests.unit.test_opencli import BILI, REAL_RUN, fail, video_rows
 
 YOUTUBE = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+YOUTUBE_DASH_ID = "https://www.youtube.com/watch?v=--Example01&t=16s"
+
+
+def test_youtube_id_starting_with_dash_uses_canonical_url_for_opencli(settings, monkeypatch):
+    source = recognize(YOUTUBE_DASH_ID)
+    calls = []
+
+    def command(self, site, name, args):
+        calls.append((site, name, args))
+        return (
+            [{"field": "videoId", "value": source.id}, {"field": "title", "value": "Example"}]
+            if name == "video"
+            else [{"start": "0.0s", "end": "1.0s", "text": "Caption text"}]
+        )
+
+    monkeypatch.setattr(OpenCLIProvider, "_run", command)
+    result = ingest(settings, YOUTUBE_DASH_ID, provider="opencli", transcript=TranscriptMode.CAPTIONS_ONLY, max_cost=0)
+
+    assert result.ok
+    assert [args[0] for _, _, args in calls] == [source.canonical_url, source.canonical_url]
+
+
+@pytest.mark.parametrize(
+    "stderr,expected",
+    [
+        ("Navigation rejected", "浏览器导航被拒绝"),
+        ("Caption URL returned empty response", "字幕地址返回空响应"),
+    ],
+)
+def test_opencli_caption_failures_report_specific_errors(settings, monkeypatch, stderr, expected):
+    monkeypatch.setattr(OpenCLIProvider, "_run", REAL_RUN)
+    monkeypatch.setattr(OpenCLIRuntime, "resolve", lambda self: ("opencli", "external"))
+    monkeypatch.setattr("soota.providers.opencli.preflight", lambda *args: None)
+
+    def process(argv, **kwargs):
+        return ProcessResult(0, "1.8.3", "") if "--version" in argv else ProcessResult(1, "", stderr)
+
+    monkeypatch.setattr("soota.providers.opencli.run_process", process)
+    item = MediaItem(source=recognize(YOUTUBE_DASH_ID), title="Example")
+    with pytest.raises(SourceError, match=expected):
+        OpenCLIProvider(settings).get_captions(item)
 
 
 @pytest.mark.parametrize("mode", [TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY])

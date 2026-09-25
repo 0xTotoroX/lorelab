@@ -104,6 +104,16 @@ class OpenCLIProvider:
                 raise RuntimeUnavailable(
                     "OpenCLI Browser Bridge 不可用。", hint="检查 Chrome 和 Browser Bridge 扩展连接。"
                 )
+            if "navigation rejected" in message:
+                raise SourceError(
+                    "OpenCLI 浏览器导航被拒绝，采集未完成。",
+                    hint="检查浏览器页面和 Bridge 状态，稍后手动重试；不会自动重试或切换付费来源。",
+                )
+            if (site, command) == ("youtube", "transcript") and "caption url returned empty response" in message:
+                raise SourceError(
+                    "OpenCLI 字幕地址返回空响应，采集未完成。",
+                    hint="可稍后手动重试，或使用本地 yt-dlp 获取字幕；不会自动切换付费来源。",
+                )
             raise SourceError("OpenCLI 采集失败，未自动重试或切换来源。", details={"exit_code": result.returncode})
         try:
             rows = json.loads(result.stdout)
@@ -133,7 +143,8 @@ class OpenCLIProvider:
                 RequestRecord(endpoint="opencli:cache:inspect", billed=False, cache_hit=True, estimated_cost_usd=0)
             )
             return item
-        rows = self._run(source.platform, "video", [source.id])
+        target = source.canonical_url if source.platform == "youtube" else source.id
+        rows = self._run(source.platform, "video", [target])
         item = normalize_video(source, rows)
         item.provenance = self.provenance()
         self.cache.put_json(source, "inspect", {"timestamp": time.time(), "item": item.model_dump(mode="json")})
@@ -159,7 +170,8 @@ class OpenCLIProvider:
                 )
                 return result
         command = "subtitle" if source.platform == "bilibili" else "transcript"
-        args = [source.id, "--lang", language]
+        target = source.canonical_url if source.platform == "youtube" else source.id
+        args = [target, "--lang", language]
         if source.platform == "youtube":
             args += ["--mode", "raw"]
         rows = self._run(source.platform, command, args)
