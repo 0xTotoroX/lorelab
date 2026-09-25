@@ -32,6 +32,14 @@ versions. They are included in Soota's wheel and source distribution.
   to the upstream executable. User-installed or Soota-managed runtimes retain
   their own license files; this reference copy does not describe every later release.
 
+## opencli-mcp 0.0.22 (external runtime)
+
+- Integration: separately installed local MCP process and Chrome extension; no upstream code or runtime is bundled in Soota's Python wheel.
+- Source: <https://github.com/jackwener/opencli-mcp/tree/v0.0.22>.
+- npm package: <https://www.npmjs.com/package/opencli-mcp/v/0.0.22>.
+- Copyright 2026 jackwener. License: Apache-2.0 as declared by its source LICENSE and npm package metadata.
+- Soota calls only an audited read-only site-command allowlist through MCP stdio; the external installation retains its own license files.
+
 ## Other dependencies
 
 The dependencies listed in `pyproject.toml` and their transitive dependencies

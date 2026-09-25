@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from soota.config import PaymentConfig
+from soota.config import PaymentConfig, RoutingConfig
 from soota.errors import InputError, SourceError
 from soota.feature_aliases import ALIASES, alias_params
 from soota.features import call_feature, list_features, show_feature
@@ -24,7 +24,7 @@ def discovery(monkeypatch):
 def test_union_and_all_native_plans(settings):
     result = list_features(settings, limit=5000)
     features = result.data["features"]
-    assert len(features) == len(ROWS) + len(load_registry().preferred()) + len(ALIASES)
+    assert len(features) == len(ROWS) + len(load_registry().preferred()) + len(ALIASES) + 3
     assert all(row["plans"] for row in features)
     assert next(row for row in features if row["id"] == "twitter.profile")["plans"][0]["provider"] == "opencli"
     unsupported = next(row for row in features if row["id"] == "tikhub.tiktok.web.device_register")
@@ -32,6 +32,14 @@ def test_union_and_all_native_plans(settings):
     filtered = list_features(settings, site="twitter", provider="opencli", limit=1)
     assert filtered.data["next_offset"] == 1
     assert filtered.data["features"][0]["site"] == "twitter"
+    mcp_only = list_features(settings, provider="opencli-mcp", limit=5000)
+    assert {row["id"] for row in mcp_only.data["features"]} == {
+        "opencli-mcp.bilibili.video",
+        "opencli-mcp.bilibili.subtitle",
+        "opencli-mcp.twitter.tweets",
+        "bilibili.video.detail",
+    }
+    assert all(row["providers"] == ["opencli-mcp"] for row in mcp_only.data["features"])
 
 
 @pytest.mark.parametrize("alias", ALIASES, ids=lambda a: a.id)
@@ -56,7 +64,9 @@ def test_all_overlap_mappings_validate_both_provider_contracts(settings, alias):
 def test_priority_explicit_override_and_unavailable_fallback(settings, monkeypatch):
     monkeypatch.setattr(opencli_commands, "execute", lambda *args, **kwargs: {"from": "browser"})
     assert call_feature(settings, "twitter.profile", params=["username=example"]).data["provider"] == "opencli"
-    settings.payment = PaymentConfig(mode="auto", default_provider="tikhub")
+    settings.payment = PaymentConfig(mode="auto")
+    assert call_feature(settings, "twitter.profile", params=["username=example"]).data["provider"] == "opencli"
+    settings.routing = RoutingConfig(default_provider="tikhub")
     result = call_feature(settings, "twitter.profile", params=["username=example"], dry_run=True)
     assert result.data["provider"] == "tikhub"
     assert (

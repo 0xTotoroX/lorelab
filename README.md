@@ -2,9 +2,9 @@
 
 给 Soota 一个链接：搜集内容、清理噪声、补全字幕，留下可追溯的 Markdown。
 
-Soota 是本地优先的内容摄取 CLI：通过独立 Provider 优先使用 OpenCLI 的已验证免费能力，并查询 TikHub 各平台内容，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 负责把自然语言变成确定的 `soota` 命令；Soota 不实现 Obsidian 知识管理，也不把 TikHub 按平台拆成多个 MCP。
+Soota 是本地优先的内容摄取 CLI：优先使用 opencli-mcp 和 OpenCLI 的已核验免费能力，再按费用策略使用 TikHub，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令；opencli-mcp 由 Soota 内部调用，无需在 Codex 中单独注册。
 
-已接入 OpenCLI 的 X 最近快照、视频元数据和字幕，并提供双运行时的功能并集、11 个统一重叠入口、逐次确认/自动付费策略，以及独立运行时升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)。详见 [终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。同功能存在多个版本时使用最高的未废弃版本，不因旧版本便宜而降级。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 opencli-mcp 的 Bilibili 视频详情与字幕、X 最近快照，以及 OpenCLI 的 X 最近快照、视频元数据和字幕；还提供三个来源的功能入口、11 个统一重叠入口、逐次确认/自动付费策略，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -15,6 +15,8 @@ cd /path/to/soota
 uv sync --extra dev
 uv run soota doctor --json
 ```
+
+使用 opencli-mcp 需 Node.js 22+、Chrome 和其[浏览器扩展](https://chromewebstore.google.com/detail/opencli-mcp/lnaoghmfcdnbhgcihkakfobckmfhllkg)。Soota 当前核验版本为 `0.0.22`；安装本地程序后运行 `opencli-mcp setup --clients none`，只注册浏览器连接；可用 `opencli-mcp doctor` 检查状态。扩展未连接时，已接入的能力可按路由尝试 OpenCLI。YouTube 目前没有已接入的 MCP 字幕适配器。
 
 TikHub API Key 只从环境变量或 macOS Keychain 读取：
 
@@ -42,7 +44,7 @@ uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
 ```
 
-字幕模式：`auto`、`captions-only`、`asr`、`none`。初始默认 `auto` 优先 OpenCLI 字幕；显式选择或保存自动付费策略可默认 TikHub。OpenCLI 不可用/无字幕时按策略确认 TikHub 兜底；`--max-cost 0` 禁止计费请求。
+字幕模式：`auto`、`captions-only`、`asr`、`none`。默认按能力依次尝试 opencli-mcp、OpenCLI、经授权的 TikHub；YouTube 直接从 OpenCLI 开始。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
 
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。
 

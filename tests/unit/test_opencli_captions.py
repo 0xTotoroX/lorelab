@@ -15,6 +15,7 @@ YOUTUBE = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 @pytest.mark.parametrize("mode", [TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY])
 @pytest.mark.parametrize("platform,url", [("bilibili", BILI), ("youtube", YOUTUBE)])
 def test_ingest_defaults_to_opencli_captions_without_tikhub(settings, monkeypatch, mode, platform, url):
+    monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: False)
     calls = []
 
     def command(self, site, name, args):
@@ -48,6 +49,7 @@ def test_ingest_defaults_to_opencli_captions_without_tikhub(settings, monkeypatc
 
 
 def test_default_estimate_is_free_offline_and_never_checks_tikhub_wallet(settings, monkeypatch):
+    monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: False)
     monkeypatch.setattr("soota.pipeline._provider", fail)
     result = estimate(settings, BILI)
     assert result.data["provider"] == "opencli" and result.data["estimated_cost_usd"] == 0

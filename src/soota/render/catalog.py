@@ -63,7 +63,7 @@ def write_catalog(job: CatalogJob, reserved_cost: float) -> Path:
         lines.extend(["", "这是增量目录，只列出此前目录任务中尚未收录的条目。"])
     if job.completeness == "unknown":
         lines.extend(["", "最近帖子快照：完整性未知，不代表全部历史或已追平；没有可续跑游标。"])
-    if job.status != "completed" and job.provider != "opencli":
+    if job.status != "completed" and job.provider not in {"opencli", "opencli-mcp"}:
         lines.extend(
             ["", f"当前目录尚未完成（{job.stop_reason}），进度已保存。", f"续跑：`soota jobs resume {job.id}`"]
         )
@@ -73,8 +73,8 @@ def write_catalog(job: CatalogJob, reserved_cost: float) -> Path:
         if item.text:
             lines.extend(["", f"### {item.source.id}", "", _text(item.text), ""])
     cost_note = (
-        "本次 OpenCLI 快照没有 API 费用。"
-        if job.provider == "opencli"
+        "本次免费来源快照没有 TikHub API 费用。"
+        if job.provider in {"opencli", "opencli-mcp"}
         else f"请求预算已预留 {reserved_cost:g} USD；实际扣费以 TikHub 账单为准。"
     )
     lines.extend(["", cost_note, ""])

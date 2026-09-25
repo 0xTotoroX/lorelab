@@ -12,8 +12,11 @@ from soota.billing import PaymentGate, selected_provider
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, InputError, SootaError, SourceError, StorageError
 from soota.models import CatalogJob, CommandResult, RequestRecord
+from soota.providers.mcp_client import StdioMCPClient
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_context import resolve_profile
+from soota.providers.opencli_mcp import OpenCLIMCPProvider
+from soota.providers.opencli_runtime import RuntimeUnavailable
 from soota.providers.router import catalog_provider, validate_policy
 from soota.providers.tikhub.catalog import YOUTUBE_CHANNEL_ID, catalog_endpoint, is_channel_id
 from soota.providers.tikhub.client import TikHubProvider, load_price_snapshot
@@ -64,12 +67,14 @@ def estimate_catalog(
     source = recognize(url)
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
-    selected = catalog_provider(source, provider)
+    selected = catalog_provider(
+        source, provider, mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp)
+    )
     if fallback:
         raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
-    if selected == "opencli":
-        if max_items > 200:
-            raise InputError("OpenCLI 最近快照上限为 200 条；更多历史需要独立搜索审计。")
+    if selected in {"opencli", "opencli-mcp"}:
+        if max_items > (100 if selected == "opencli-mcp" else 200):
+            raise InputError("免费来源最近快照超过当前条数上限；更多历史需要独立搜索审计。")
         return CommandResult(
             ok=True,
             status="success",
@@ -142,11 +147,13 @@ def catalog(
     source = recognize(url)
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
-    selected = catalog_provider(source, provider)
+    selected = catalog_provider(
+        source, provider, mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp)
+    )
     if fallback:
         raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
-    if selected == "opencli" and max_items > 200:
-        raise InputError("OpenCLI 最近快照上限为 200 条。")
+    if selected in {"opencli", "opencli-mcp"} and max_items > (100 if selected == "opencli-mcp" else 200):
+        raise InputError("免费来源最近快照超过当前条数上限。")
     if dry_run:
         return estimate_catalog(
             settings,
@@ -166,7 +173,7 @@ def catalog(
             "kind": "catalog",
             "provider": selected,
             "profile": resolve_profile(settings.opencli.profile) if selected == "opencli" else None,
-            "completeness": "unknown" if selected == "opencli" else "paginated",
+            "completeness": "unknown" if selected in {"opencli", "opencli-mcp"} else "paginated",
             "status": "running",
             "source": source.model_dump(mode="json"),
             "output_root": str((output or settings.output_dir).expanduser().resolve()),
@@ -178,7 +185,9 @@ def catalog(
         }
     )
     with store.lock(record["id"]):
-        return _execute(settings, CatalogJob.model_validate(record), store, requester)
+        return _execute(
+            settings, CatalogJob.model_validate(record), store, requester, allow_free_fallback=provider == "auto"
+        )
 
 
 def resume_catalog(
@@ -199,7 +208,7 @@ def resume_catalog(
             job = CatalogJob.model_validate(record)
         except ValidationError as exc:
             raise StorageError("目录任务记录不符合当前格式。") from exc
-        if job.provider == "opencli":
+        if job.provider in {"opencli", "opencli-mcp"}:
             raise InputError(
                 "最近帖子快照没有分页游标，不能续跑。", hint="重新 catalog --incremental 创建独立快照并去重。"
             )
@@ -238,10 +247,12 @@ def _known_ids(job: CatalogJob, store: JobStore) -> list[str]:
 
 def _provider(
     settings: SootaSettings, job: CatalogJob, store: JobStore, requester: Callable[..., Any] | None
-) -> TikHubProvider | OpenCLIProvider:
+) -> TikHubProvider | OpenCLIProvider | OpenCLIMCPProvider:
     if job.provider == "opencli":
         bound = settings.model_copy(update={"opencli": settings.opencli.model_copy(update={"profile": job.profile})})
         return OpenCLIProvider(bound)
+    if job.provider == "opencli-mcp":
+        return OpenCLIMCPProvider(settings)
 
     def reserve(record: RequestRecord) -> None:
         if not record.billed or record.cache_hit:
@@ -277,7 +288,12 @@ def _provider(
 
 
 def _execute(
-    settings: SootaSettings, job: CatalogJob, store: JobStore, requester: Callable[..., Any] | None
+    settings: SootaSettings,
+    job: CatalogJob,
+    store: JobStore,
+    requester: Callable[..., Any] | None,
+    *,
+    allow_free_fallback: bool = False,
 ) -> CommandResult:
     previous_requests, previous_items = len(job.requests), len(job.items)
     job.status, job.error = "running", None
@@ -294,10 +310,23 @@ def _execute(
         try:
             _collect(job, store, provider)
         finally:
-            if isinstance(provider, OpenCLIProvider):
+            if isinstance(provider, (OpenCLIProvider, OpenCLIMCPProvider)):
                 job.requests.extend(provider.records)
     except KeyboardInterrupt:
         job.status, job.stop_reason = "paused", "interrupted"
+    except RuntimeUnavailable as exc:
+        if allow_free_fallback and job.provider == "opencli-mcp" and job.pages_fetched == 0 and not job.items:
+            job.provider = "opencli"
+            job.profile = resolve_profile(settings.opencli.profile)
+            job.resolved = False
+            job.baseline_loaded = False
+            job.known_ids = []
+            job.page_size = min(200, job.max_items)
+            job.warnings.append(f"opencli-mcp 不可用：{exc.message}；已选择 OpenCLI 快照。")
+            _save(job, store)
+            return _execute(settings, job, store, requester)
+        job.status, job.stop_reason = "failed", "error"
+        job.error = exc.to_dict()
     except SootaError as exc:
         job.status = "paused" if isinstance(exc, AuthBudgetError) else "failed"
         job.stop_reason = "budget_or_auth" if isinstance(exc, AuthBudgetError) else "error"
@@ -323,7 +352,7 @@ def _execute(
     return _result(job, folder, previous_requests, previous_items)
 
 
-def _collect(job: CatalogJob, store: JobStore, provider: TikHubProvider | OpenCLIProvider) -> None:
+def _collect(job: CatalogJob, store: JobStore, provider: TikHubProvider | OpenCLIProvider | OpenCLIMCPProvider) -> None:
     known = set(job.known_ids)
     collected = {item.source.cache_identity for item in job.items}
     while not job.exhausted:
@@ -395,7 +424,7 @@ def _result(job: CatalogJob, folder: Path | None, previous_requests: int, previo
         "provider": job.provider,
         "profile": job.profile,
         "completeness": job.completeness,
-        "resumable": job.provider != "opencli",
+        "resumable": job.provider not in {"opencli", "opencli-mcp"},
         "source": job.source.model_dump(),
         "job_status": job.status,
         "stop_reason": job.stop_reason,
@@ -428,7 +457,7 @@ def _result(job: CatalogJob, folder: Path | None, previous_requests: int, previo
         if completed
         else (
             "重新 catalog --incremental 创建独立快照。"
-            if job.provider == "opencli"
+            if job.provider in {"opencli", "opencli-mcp"}
             else str(error.get("hint") or f"soota jobs resume {job.id}；可提高条数、页数或总费用上限。")
         ),
         data=data,

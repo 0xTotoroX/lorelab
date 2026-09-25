@@ -20,8 +20,8 @@ def policy_result(settings: SootaSettings) -> CommandResult:
         status="success",
         code="ok",
         exit_code=0,
-        message="当前费用与默认来源策略。",
-        data={"policy": settings.payment.model_dump()},
+        message="当前费用与来源策略。",
+        data={"policy": settings.payment.model_dump(), "routing": settings.routing.model_dump()},
     )
 
 
@@ -34,11 +34,7 @@ def set_policy(settings: SootaSettings, mode: str, min_balance: float | None, no
         raise InputError("--min-balance 与 --no-balance-limit 不能同时使用。")
     if mode == "auto" and min_balance is None and not no_balance_limit:
         raise InputError("启用自动付费必须明确选择 --min-balance USD 或 --no-balance-limit。")
-    policy = PaymentConfig(
-        mode="auto" if mode == "auto" else "ask",
-        min_balance_usd=min_balance,
-        default_provider="tikhub" if mode == "auto" else "auto",
-    )
+    policy = PaymentConfig(mode="auto" if mode == "auto" else "ask", min_balance_usd=min_balance)
     atomic_write(settings.config_dir / "payment-policy.json", policy.model_dump_json(indent=2) + "\n")
     return policy_result(settings.model_copy(update={"payment": policy}))
 
@@ -50,7 +46,7 @@ def show(json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
 
 @app.command("set")
 def configure(
-    mode: Annotated[str, typer.Option("--mode", help="ask：OpenCLI 优先，逐次确认付费；auto：默认 TikHub 自动付费")],
+    mode: Annotated[str, typer.Option("--mode", help="ask：轮到 TikHub 时逐次确认；auto：轮到 TikHub 时自动付费")],
     min_balance: Annotated[
         float | None, typer.Option("--min-balance", help="USD 付费余额，预估扣费后触及此值则暂停")
     ] = None,

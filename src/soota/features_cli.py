@@ -8,7 +8,7 @@ import typer
 from soota.cli_output import run_settings
 from soota.features import call_feature, list_features, show_feature
 
-app = typer.Typer(help="映射 OpenCLI + TikHub 功能并集；原生入口与已核验的重叠功能。")
+app = typer.Typer(help="映射 opencli-mcp、OpenCLI、TikHub 功能并集；原生入口与已核验的重叠功能。")
 
 
 @app.command("list")
@@ -44,8 +44,9 @@ def call(
     param: Annotated[list[str] | None, typer.Option("--param", help="name=value，可重复；ID 保持字符串")] = None,
     params_file: Annotated[Path | None, typer.Option("--params-file")] = None,
     body_file: Annotated[Path | None, typer.Option("--body")] = None,
+    output: Annotated[Path | None, typer.Option("--output", help="保存脱敏原生结果到新 JSON 文件")] = None,
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli/tikhub；省略时使用已保存策略")
+        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/tikhub；省略时使用已保存策略")
     ] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="TikHub 本次额外费用上限，USD")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
@@ -59,6 +60,7 @@ def call(
         params=param,
         params_file=params_file,
         body_file=body_file,
+        output=output,
         provider=provider,
         max_cost=max_cost,
         dry_run=dry_run,

@@ -138,6 +138,7 @@ def test_no_balance_limit_skips_wallet_and_cap_precedes_prompt(settings, monkeyp
 
 
 def test_policy_requires_explicit_auto_threshold_and_preserves_toml(settings, monkeypatch):
+    monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: True)
     settings.config_dir.mkdir(parents=True)
     settings.config_path.write_text('[soota]\ndefault_language="en"\n')
     monkeypatch.setenv("SOOTA_CONFIG_DIR", str(settings.config_dir))
@@ -149,16 +150,39 @@ def test_policy_requires_explicit_auto_threshold_and_preserves_toml(settings, mo
         set_policy(settings, "auto", 5, True)
     set_policy(settings, "auto", 5, False)
     loaded = load_settings()
-    assert loaded.payment.default_provider == "tikhub" and loaded.payment.min_balance_usd == 5
+    assert loaded.routing.default_provider == "auto" and loaded.payment.min_balance_usd == 5
     assert loaded.default_language == "en"
+    assert estimate(loaded, URL).data["provider"] == "opencli-mcp"
     assert all(
-        path.startswith("/api/") for path in estimate(loaded, URL, requester=fake_requester([])).data["endpoints"]
+        path.startswith("/api/")
+        for path in estimate(loaded, URL, provider="tikhub", requester=fake_requester([])).data["endpoints"]
     )
-    assert estimate(loaded, URL, provider="auto").data["provider"] == "opencli"
     set_policy(settings, "auto", None, True)
     assert load_settings().payment.min_balance_usd is None
     set_policy(settings, "ask", None, False)
     assert load_settings().payment == PaymentConfig()
+
+
+def test_legacy_auto_payment_does_not_override_independent_routing(settings, monkeypatch):
+    settings.config_dir.mkdir(parents=True)
+    monkeypatch.setenv("SOOTA_CONFIG_DIR", str(settings.config_dir))
+    (settings.config_dir / "payment-policy.json").write_text(
+        json.dumps({"mode": "auto", "min_balance_usd": 5, "default_provider": "tikhub"})
+    )
+    loaded = load_settings()
+    assert loaded.payment.mode == "auto" and loaded.payment.min_balance_usd == 5
+    assert loaded.routing.default_provider == "auto"
+    settings.config_path.write_text('[routing]\ndefault_provider="tikhub"\n')
+    assert load_settings().routing.default_provider == "tikhub"
+
+
+def test_bad_routing_config_returns_structured_cli_error(settings, monkeypatch):
+    settings.config_dir.mkdir(parents=True)
+    settings.config_path.write_text('[routing]\ndefault_provider="invalid"\n')
+    monkeypatch.setenv("SOOTA_CONFIG_DIR", str(settings.config_dir))
+    result = CliRunner().invoke(app, ["policy", "show", "--json"])
+    assert result.exit_code == 3
+    assert json.loads(result.stdout)["code"] == "input"
 
 
 def test_catalog_asks_each_page_and_resumes_without_double_reservation(settings, monkeypatch):
@@ -197,7 +221,7 @@ def test_cli_noninteractive_is_structured_and_policy_writes_only_isolated_config
     assert not (settings.config_dir / "payment-policy.json").exists()
     result = runner.invoke(app, ["policy", "set", "--mode", "auto", "--min-balance", "5", "--json"])
     assert result.exit_code == 0
-    assert json.loads(result.stdout)["data"]["policy"]["default_provider"] == "tikhub"
+    assert json.loads(result.stdout)["data"]["routing"]["default_provider"] == "auto"
 
 
 @pytest.mark.parametrize("content", ["{bad", '{"mode":"unexpected"}', "[]"])

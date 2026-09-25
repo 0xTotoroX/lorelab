@@ -11,17 +11,19 @@ from soota.errors import AuthBudgetError, InputError, SourceError
 from soota.models import MediaItem, RequestRecord, SourceRef
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli import capabilities_for as opencli_capabilities
+from soota.providers.opencli_mcp import OpenCLIMCPProvider
+from soota.providers.opencli_mcp import capabilities_for as mcp_capabilities
 from soota.providers.opencli_runtime import RuntimeUnavailable
 from soota.providers.tikhub.capability import capabilities_for as tikhub_capabilities
 from soota.providers.tikhub.client import TikHubProvider
 from soota.storage.cache import CacheStore
 
-ProviderName = Literal["auto", "opencli", "tikhub"]
+ProviderName = Literal["auto", "opencli-mcp", "opencli", "tikhub"]
 
 
 def validate_policy(provider: str, fallback: str | None, max_cost: float | None) -> None:
-    if provider not in {"auto", "opencli", "tikhub"} or fallback not in {None, "tikhub"}:
-        raise InputError("--provider 支持 auto/opencli/tikhub；--fallback 只支持 tikhub。")
+    if provider not in {"auto", "opencli-mcp", "opencli", "tikhub"} or fallback not in {None, "tikhub"}:
+        raise InputError("--provider 支持 auto/opencli-mcp/opencli/tikhub；--fallback 只支持 tikhub。")
     if fallback and provider == "tikhub":
         raise InputError("TikHub 已是指定来源，无需再指定同名 fallback。")
     if max_cost is not None and (not math.isfinite(max_cost) or max_cost < 0):
@@ -30,7 +32,13 @@ def validate_policy(provider: str, fallback: str | None, max_cost: float | None)
         raise InputError("--max-cost 0 禁止 TikHub 付费兜底。")
 
 
-def catalog_provider(source: SourceRef, provider: str) -> Literal["opencli", "tikhub"]:
+def catalog_provider(
+    source: SourceRef, provider: str, *, mcp_available: bool = False
+) -> Literal["opencli-mcp", "opencli", "tikhub"]:
+    if (provider == "opencli-mcp" or provider == "auto" and mcp_available) and mcp_capabilities(source).catalog:
+        return "opencli-mcp"
+    if provider == "opencli-mcp":
+        raise SourceError("opencli-mcp 尚未接入该目录能力。")
     if provider != "tikhub" and opencli_capabilities(source).catalog:
         return "opencli"
     if provider != "opencli" and tikhub_capabilities(source).catalog:
@@ -69,20 +77,27 @@ def inspect_item(
         fallback = "tikhub"
     warnings: list[str] = []
     records: list[RequestRecord] = []
-    if provider != "tikhub" and opencli_capabilities(source).inspect:
-        cheap: OpenCLIProvider | None = None
+    for name, capability, factory in (
+        ("opencli-mcp", mcp_capabilities(source).inspect, OpenCLIMCPProvider),
+        ("opencli", opencli_capabilities(source).inspect, OpenCLIProvider),
+    ):
+        if provider not in {"auto", name}:
+            continue
+        if not capability:
+            if provider == name:
+                raise SourceError(f"{name} 尚不具备该元数据能力。")
+            continue
+        cheap: OpenCLIMCPProvider | OpenCLIProvider | None = None
         try:
-            cheap = OpenCLIProvider(settings)
+            cheap = factory(settings)
             item = cheap.inspect(source)
             return item, cheap.records, warnings
         except RuntimeUnavailable as exc:
-            if fallback != "tikhub":
+            if provider != "auto" and fallback != "tikhub":
                 raise
-            warnings.append(exc.message + " 已按显式设置使用 TikHub 兜底。")
+            warnings.append(f"{name} 不可用：{exc.message}")
             if cheap is not None:
                 records.extend(cheap.records)
-    elif provider == "opencli" and fallback is None:
-        raise SourceError("OpenCLI 尚不具备该元数据能力。")
     if provider != "tikhub" and fallback != "tikhub":
         raise SourceError("没有匹配的免费元数据来源。", hint="可显式选择 --provider tikhub 并提供 --max-cost。")
     if not tikhub_capabilities(source).inspect:

@@ -35,12 +35,22 @@ class OpenCLIConfig(BaseModel):
     metadata_cache_seconds: int = Field(default=300, ge=0)
 
 
+class OpenCLIMCPConfig(BaseModel):
+    binary: str | None = None
+    timeout_seconds: float = Field(default=180, gt=0)
+    max_output_bytes: int = Field(default=8_388_608, ge=1024)
+    metadata_cache_seconds: int = Field(default=300, ge=0)
+
+
+class RoutingConfig(BaseModel):
+    default_provider: Literal["auto", "opencli-mcp", "opencli", "tikhub"] = "auto"
+
+
 class PaymentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["ask", "auto"] = "ask"
     min_balance_usd: FiniteFloat | None = Field(default=None, ge=0)
-    default_provider: Literal["auto", "opencli", "tikhub"] = "auto"
 
 
 class SootaSettings(BaseModel):
@@ -51,6 +61,8 @@ class SootaSettings(BaseModel):
     data_dir: Path
     tikhub: TikHubConfig = Field(default_factory=TikHubConfig)
     opencli: OpenCLIConfig = Field(default_factory=OpenCLIConfig)
+    opencli_mcp: OpenCLIMCPConfig = Field(default_factory=OpenCLIMCPConfig)
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
     payment: PaymentConfig = Field(default_factory=PaymentConfig)
     asr: AsrConfig = Field(default_factory=AsrConfig)
 
@@ -73,7 +85,7 @@ def _env_path(name: str) -> Path | None:
 
 
 def default_dirs() -> tuple[Path, Path, Path]:
-    # Plan pins config to ~/.config/soota; cache/jobs follow macOS app dirs.
+    # Keep configuration in ~/.config/soota; cache and jobs use platform app directories.
     config_dir = _env_path("SOOTA_CONFIG_DIR") or Path.home() / ".config" / "soota"
     cache_dir = _env_path("SOOTA_CACHE_DIR") or Path(platformdirs.user_cache_dir(APP_NAME, APP_AUTHOR))
     data_dir = _env_path("SOOTA_DATA_DIR") or Path(platformdirs.user_data_dir(APP_NAME, APP_AUTHOR))
@@ -88,7 +100,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     soota = data.get("soota", data)
     payment = dict((data.get("tikhub") or {}).get("billing") or {})
-    payment["default_provider"] = (data.get("routing") or {}).get("default_provider", "auto")
+    payment.pop("default_provider", None)
     policy_path = config_dir / "payment-policy.json"
     try:
         if ignore_payment:
@@ -97,10 +109,27 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
             saved = json.loads(policy_path.read_text(encoding="utf-8"))
             if not isinstance(saved, dict):
                 raise ValueError("expected policy object")
+            # Old policy set coupled auto billing to a TikHub-first default.
+            # Routing is now configured independently in [routing].
+            saved.pop("default_provider", None)
             payment.update(saved)
         payment_config = PaymentConfig.model_validate(payment)
     except (ValueError, TypeError, ValidationError) as exc:
         raise InputError("费用策略文件无效，未执行任何请求。", hint="使用 soota policy set --mode ask 恢复。") from exc
+    try:
+        routing_config = RoutingConfig.model_validate(data.get("routing") or {})
+        mcp_config = OpenCLIMCPConfig.model_validate(
+            {
+                **(data.get("opencli_mcp") or {}),
+                **(
+                    {"binary": os.environ["SOOTA_OPENCLI_MCP_BINARY"]}
+                    if os.environ.get("SOOTA_OPENCLI_MCP_BINARY")
+                    else {}
+                ),
+            }
+        )
+    except (TypeError, ValidationError) as exc:
+        raise InputError("来源或 opencli-mcp 配置无效，未执行任何请求。") from exc
     output = _env_path("SOOTA_OUTPUT_DIR")
     settings = SootaSettings(
         output_dir=output or Path(soota.get("output_dir", Path.home() / "Documents" / "Soota")).expanduser(),
@@ -109,6 +138,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         cache_dir=cache_dir,
         data_dir=data_dir,
         payment=payment_config,
+        routing=routing_config,
         tikhub=TikHubConfig(
             base_url=str((data.get("tikhub") or {}).get("base_url", "https://api.tikhub.io")),
             timeout_seconds=float((data.get("tikhub") or {}).get("timeout_seconds", 60.0)),
@@ -120,6 +150,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
                 **({"profile": os.environ["OPENCLI_PROFILE"]} if os.environ.get("OPENCLI_PROFILE") else {}),
             }
         ),
+        opencli_mcp=mcp_config,
         asr=AsrConfig(
             engine=str((data.get("asr") or {}).get("engine", "auto")),
             model=str((data.get("asr") or {}).get("model", "base")),

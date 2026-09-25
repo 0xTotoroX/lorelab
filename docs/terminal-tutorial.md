@@ -18,6 +18,14 @@ opencli doctor
 opencli profile list
 ```
 
+opencli-mcp 另需 Node.js 22+ 和[自己的 Chrome 扩展](https://chromewebstore.google.com/detail/opencli-mcp/lnaoghmfcdnbhgcihkakfobckmfhllkg)。安装本地程序与扩展后运行以下命令；`--clients none` 不向 Codex 注册 MCP 工具：
+
+```bash
+npm install -g opencli-mcp@0.0.22
+opencli-mcp setup --clients none
+opencli-mcp doctor
+```
+
 若有多个浏览器 profile，通过 `OPENCLI_PROFILE` 指定 `profile list` 中的别名或 context ID。Soota 不读取或导出浏览器密码。
 
 ## 2. 零 API 费用获取最近帖子
@@ -38,7 +46,7 @@ uv run soota catalog "https://x.com/USERNAME" --max-items 50 \
   --max-cost 0 --incremental --json
 ```
 
-这是最近快照，最多 200 条，完整性未知。不能据此宣称已收齐历史，也不能 `jobs resume` 翻到更早帖子。`--max-cost 0` 禁止转入任何计费请求；浏览器采集仍需要本地运行时间和网络。
+这是最近快照：opencli-mcp 最多 100 条，OpenCLI 最多 200 条，完整性未知。不能据此宣称已收齐历史，也不能 `jobs resume` 翻到更早帖子。`--max-cost 0` 禁止转入任何计费请求；浏览器采集仍需要本地运行时间和网络。
 
 ## 3. 读取或保存视频元数据
 
@@ -50,7 +58,7 @@ uv run soota ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
   --transcript none --max-cost 0 --json
 ```
 
-第一个命令返回标题、作者和已有元数据；第二个保存元数据 Markdown 内容包。`none` 只保存元数据；需要字幕时使用默认 `auto`，会先通过 OpenCLI 获取字幕。
+第一个命令返回标题、作者和已有元数据；第二个保存元数据 Markdown 内容包。`none` 只保存元数据；需要字幕时使用默认 `auto`，Bilibili 优先尝试 opencli-mcp，YouTube 从 OpenCLI 开始。
 
 确实愿意在免费元数据来源不可用时使用 TikHub，可明确给出兜底和费用上限（USD）：
 
@@ -61,7 +69,7 @@ uv run soota inspect "https://www.bilibili.com/video/BV1M1421t7hT" \
 
 TikHub 需要自己的 API Key。登录、验证码、限流和契约错误会停止，不会触发付费兜底。**这个 fallback 示例适用于已接入的元数据，暂不适用于 X 目录。**
 
-视频字幕默认优先 OpenCLI，零预算即可尝试：
+视频字幕按已接入能力选择免费来源，零预算即可尝试：
 
 ```bash
 uv run soota ingest "视频 URL" --max-cost 0 --json
@@ -105,4 +113,4 @@ uv run soota policy set --mode auto --min-balance 5
 uv run soota policy set --mode auto --no-balance-limit
 ```
 
-ask 是初始默认值：OpenCLI 优先，每次 TikHub 收费前在终端询问 y/N。auto 会将省略 provider 时的默认来源改为 TikHub；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。完整能力范围、11 个重叠映射及原生功能操作见 [双运行时功能映射与费用策略](features.md)。
+ask 是初始默认值：按能力先试 opencli-mcp、OpenCLI，轮到 TikHub 收费前在终端询问 y/N。auto 只改变 TikHub 的付费授权，不改来源顺序；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。完整能力范围、11 个重叠映射及原生功能操作见 [三来源功能映射与费用策略](features.md)。

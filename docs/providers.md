@@ -1,35 +1,35 @@
 # Provider 与独立运行时
 
-Soota 核心负责识别、能力选择、预算、任务和输出。OpenCLI、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按保存的来源策略选择；初始默认 OpenCLI 优先。完整原生功能和重叠映射见 [功能并集](features.md)。
+Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp、OpenCLI、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按来源策略选择；初始顺序为 opencli-mcp → OpenCLI → 经授权的 TikHub。完整原生功能和重叠映射见 [功能并集](features.md)。
 
 ## 当前接入范围
 
-| 能力 | OpenCLI | TikHub |
-| --- | --- | --- |
-| Bilibili BV / YouTube 单视频元数据 | 默认优先；缓存按浏览器上下文分区，默认保留 300 秒 | 显式选择或授权兜底，仍使用最新未废弃接口 |
-| 视频元数据内容包 | `ingest --transcript none`，无需 TikHub Key | 可显式选择 |
-| X 用户最近帖子 | 最多 200 条快照，保存正文、来源与时间 | 统一目录解析尚未接入；可单独 `api call` 获取原始响应 |
-| YouTube 频道 / Bilibili UP 主目录 | 尚未接入可靠分页 | 保留分页、预算、检查点与续跑 |
-| Bilibili / YouTube 字幕 | 默认优先；正文与时间戳规范化，轨道类型/实际语言未知 | 显式选择或授权兜底 |
-| 音频、本地 ASR 流程 | 尚未接入音频下载 | 显式 ASR 模式或已授权的 auto 兜底 |
+| 能力 | opencli-mcp | OpenCLI | TikHub |
+| --- | --- | --- | --- |
+| Bilibili BV 元数据、字幕 | 优先；已接入只读适配器，实际字幕语言与轨道类型未知 | MCP 不可用或无字幕时继续尝试 | 显式选择或经授权兜底 |
+| YouTube 元数据、字幕 | 当前没有已接入适配器，直接跳过 | 优先，字幕语言与轨道类型未知 | 显式选择或经授权兜底 |
+| 视频元数据内容包 | 支持 Bilibili | 支持 Bilibili、YouTube | 可显式选择 |
+| X 用户最近帖子 | 最多 100 条快照 | 最多 200 条快照 | 统一目录解析尚未接入，可用 `api call` 获取原始响应 |
+| YouTube 频道 / Bilibili UP 主目录 | 未接入可续跑分页 | 未接入可续跑分页 | 保留分页、预算、检查点与续跑 |
+| 音频、本地 ASR 流程 | 未接入音频下载 | 未接入音频下载 | 显式 ASR 模式或已授权的 auto 兜底 |
 
-默认优先级是缓存、OpenCLI、已授权的 TikHub。相同能力不因 TikHub 已配置或有缓存而跳过 OpenCLI。
+同一 Provider 内先查缓存；默认来源顺序是 opencli-mcp、OpenCLI、经授权的 TikHub。显式 `--provider` 严格选择指定来源，除非同时指定已支持的 fallback。
 
 `api list/show/call` 始终是显式 TikHub 接口工具，不会转成浏览器调用。OpenCLI 自带的其他命令不等于 Soota 已接入它们。
 
 ## 路由和费用
 
-`inspect` 初始默认 OpenCLI 优先；免费来源不可用时可按费用策略转入 TikHub，默认逐次询问付费。`--provider opencli` 严格只用 OpenCLI，除非显式指定 fallback；`--provider tikhub` 跳过 OpenCLI。保存 auto 付费策略会把省略 provider 时的默认来源改为 TikHub。缓存可零预算读取，`--max-cost` 是附加上限。
+`inspect` 按能力先用 opencli-mcp，再用 OpenCLI；免费来源不可用时可按费用策略转入 TikHub，默认逐次询问付费。`--provider opencli-mcp`、`--provider opencli` 或 `--provider tikhub` 严格选择一个来源；`--fallback tikhub` 只在支持的单视频流程中生效。`policy set --mode auto` 只改变轮到 TikHub 时的付费授权，不改来源顺序。可在 `config.toml` 的 `[routing]` 中显式设置 `default_provider`；旧付费策略文件中耦合的 `default_provider` 会在加载时忽略。缓存可零预算读取，`--max-cost` 是附加上限。
 
 免费来源缺少能力、程序不存在或 Bridge 确认未连接时，才允许已授权的兜底；已确认没有可用字幕时也可按授权使用 TikHub。登录、验证码、权限、限流、超时、适配器加载失败、响应契约变化、profile 错误及 daemon 版本冲突都会停止，不切换来源、不在 Soota 层自动重试。上游程序本身可能有内部重试，Soota 的总超时限制其运行时间。
 
 所有受控请求在发出前检查预算。`--max-cost 0` 即使遇到标价为 0 的 billed 接口也会拒绝；未知价格也会拒绝。TikHub 单价来自现有受控快照；预算是请求费用预估，不是服务端账单限额。`actual_cost_usd` 不冒充实际账单。
 
-默认 `ingest` 的 `auto` 和 `captions-only` 都先使用 OpenCLI；有字幕就直接保存，不查询 TikHub 钱包或初始化其 SDK。显式 `--provider tikhub` 或保存的自动付费策略可跳过免费来源。auto 模式缺少字幕时按付款策略尝试 TikHub；零预算或严格 OpenCLI 模式保留元数据并返回 partial。`--transcript asr` 是明确要求音频转写，目前仍走具备音频能力的 TikHub 路径；显式 OpenCLI 无音频能力时会报错。目录费用同样受逐次确认或已保存的 auto 策略控制，累计预算可选。两种目录没有互换游标的契约，所以 `catalog --fallback` 目前拒绝执行。
+默认 `ingest` 的 `auto` 和 `captions-only` 在 Bilibili 先试 opencli-mcp，再试 OpenCLI；YouTube 跳过缺失的 MCP 适配器。有字幕就直接保存，不查询 TikHub 钱包。免费来源明确没有字幕时可继续下一来源；登录、限流、契约变化、请求后断线或超时都会停止。auto 模式缺少字幕时按付款策略尝试 TikHub；零预算或严格免费来源模式保留元数据并返回 partial。`--transcript asr` 仍走具备音频能力的 TikHub 路径。目录费用受同一付费策略控制；不同来源不能互换分页游标，所以 `catalog --fallback` 拒绝执行。
 
 ## 最近快照、缓存和账号
 
-OpenCLI 的 `twitter tweets` 没有可用的分页游标，也可能退出成功却仅返回部分帖子。因此 X 的 `completeness` 永远为 `unknown`，`stop_reason=bounded_snapshot`；任务执行完成不代表历史全量完成，空结果也不代表用户没有帖子。
+OpenCLI 的 `twitter tweets` 没有可用的分页游标；opencli-mcp 虽提供游标，但当前 Soota 只按最多 100 条保存最近快照，且上游可能静默返回部分帖子。因此 X 的 `completeness` 为 `unknown`，`stop_reason=bounded_snapshot`；任务执行完成不代表历史全量完成，空结果也不代表用户没有帖子。
 
 每个新快照重新采集；`--incremental` 只按平台和帖子 ID 跳过同一来源、同一 Provider、同一浏览器上下文的已保存条目。不会因整页已存在而宣布追平，不写历史时间水位。X 不支持 `jobs resume`，重跑应创建新的快照。TikHub 老目录记录缺少 provider 字段时仍按 TikHub 解释，续跑不改变来源和页码。
 
@@ -48,7 +48,20 @@ max_output_bytes = 8388608
 metadata_cache_seconds = 300
 ```
 
-`SOOTA_OPENCLI_BINARY` 和 `OPENCLI_PROFILE` 可覆盖对应配置。OpenCLI 使用已登录 Chrome 的 Browser Bridge。首次连接用上游 `opencli doctor`；Soota 不启动、关闭或升级浏览器扩展。`soota doctor` 只检查本机依赖，不能证明登录成功。
+`SOOTA_OPENCLI_BINARY` 和 `OPENCLI_PROFILE` 可覆盖对应配置。OpenCLI 使用已登录 Chrome 的 Browser Bridge。首次连接用上游 `opencli doctor`。opencli-mcp 使用自己的 Chrome 扩展和 Native Messaging 宿主，安装 Node.js 22+ 与扩展后运行 `opencli-mcp setup --clients none`，再用 `opencli-mcp doctor` 检查连接。Soota 不把它注册到 Codex；`soota doctor` 只检查程序是否安装，不能证明浏览器已连接或网站已登录。
+
+```toml
+[opencli_mcp]
+# binary = "/absolute/path/to/opencli-mcp"
+timeout_seconds = 180
+max_output_bytes = 8388608
+metadata_cache_seconds = 300
+
+[routing]
+default_provider = "auto"  # 或 opencli-mcp / opencli / tikhub
+```
+
+`SOOTA_OPENCLI_MCP_BINARY` 可覆盖 MCP 可执行文件路径。MCP 元数据和字幕缓存独立于 OpenCLI；切换浏览器登录账号时应清除相应缓存。当前核验 opencli-mcp `0.0.22`；三个站点命令在 Soota 白名单中，执行前还会核对服务版本、当前只读元数据和参数契约，发现同名本地 adapter 覆盖就停止。上游升级后需重新核验契约。Soota 不暴露 opencli-mcp 的通用浏览器写操作。
 
 ## 独立升级与回滚
 
@@ -71,6 +84,8 @@ uv run soota runtime rollback --json
 | 文件 | 职责 |
 | --- | --- |
 | `providers/router.py` | 能力选择、元数据兜底和请求预算 |
+| `providers/mcp_client.py` | 本地 stdio MCP 会话、响应大小与超时控制 |
+| `providers/opencli_mcp.py` | opencli-mcp 只读命令白名单、结果规范化和缓存 |
 | `providers/opencli.py` | 只读命令白名单、输出规范化、缓存与快照 |
 | `providers/opencli_context.py` | 浏览器上下文绑定与 daemon 版本门禁 |
 | `providers/process.py` | 无 shell 的 argv 调用、输出上限、超时和取消 |

@@ -22,8 +22,11 @@ from soota.models import (
     TranscriptMode,
     TranscriptStatus,
 )
+from soota.providers.mcp_client import StdioMCPClient
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli import capabilities_for as opencli_capabilities
+from soota.providers.opencli_mcp import OpenCLIMCPProvider
+from soota.providers.opencli_mcp import capabilities_for as mcp_capabilities
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
 from soota.providers.router import RequestBudget, inspect_item, validate_policy
 from soota.providers.tikhub.capability import capabilities_for
@@ -76,6 +79,7 @@ def doctor(settings: SootaSettings) -> CommandResult:
     asr_engine = resolve_engine(settings.asr)
     data = {
         "soota_version": __version__,
+        "opencli_mcp": {"installed": StdioMCPClient.available(settings.opencli_mcp)},
         "opencli": OpenCLIRuntime(settings).status(),
         "tikhub_sdk_required": TIKHUB_SDK_VERSION,
         "tikhub_sdk_installed": tikhub_ver,
@@ -122,6 +126,7 @@ def inspect(
     validate_policy(provider, fallback, max_cost)
     source = recognize(url)
     capabilities = {
+        "opencli-mcp": mcp_capabilities(source).model_dump(),
         "opencli": opencli_capabilities(source).model_dump(),
         "tikhub": capabilities_for(source).model_dump(),
     }
@@ -163,30 +168,36 @@ def estimate(
         raise InputError("--mode 只支持 ingest 或 catalog。")
     source = recognize(url)
     validate_policy(provider, None, None)
-    if provider != "tikhub" and transcript != TranscriptMode.ASR and opencli_capabilities(source).inspect:
+    mcp = (provider == "opencli-mcp" or provider == "auto" and StdioMCPClient.available(settings.opencli_mcp)) and (
+        mcp_capabilities(source).inspect
+    )
+    opencli = provider in {"auto", "opencli"} and opencli_capabilities(source).inspect
+    if provider != "tikhub" and transcript != TranscriptMode.ASR and (mcp or opencli):
+        free_name = "opencli-mcp" if mcp else "opencli"
         return CommandResult(
             ok=True,
             status="success",
             code="ok",
             exit_code=0,
-            message="OpenCLI 摄取预估完成；未联网。",
+            message="免费来源摄取预估完成；未联网。",
             data={
-                "provider": "opencli",
+                "provider": free_name,
                 "estimated_cost_usd": 0,
                 "request_count": 1 if transcript == TranscriptMode.NONE else 2,
                 "source": source.model_dump(),
-                "endpoints": [f"opencli:{source.platform}/video"]
+                "endpoints": [f"{free_name}:{source.platform}/video"]
                 + (
                     []
                     if transcript == TranscriptMode.NONE
                     else [
-                        f"opencli:{source.platform}/" + ("subtitle" if source.platform == "bilibili" else "transcript")
+                        f"{free_name}:{source.platform}/"
+                        + ("subtitle" if source.platform == "bilibili" else "transcript")
                     ]
                 ),
             },
         )
-    if provider == "opencli":
-        raise SourceError("OpenCLI 尚未接入该来源或音频下载；可显式选择 TikHub。")
+    if provider in {"opencli-mcp", "opencli"}:
+        raise SourceError(f"{provider} 尚未接入该来源或音频下载；可显式选择 TikHub。")
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester)
     need_captions = transcript in {TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY}
@@ -270,7 +281,7 @@ def ingest(
     if transcript != TranscriptMode.ASR and provider != "tikhub":
         if dry_run:
             return estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
-        return ingest_opencli(
+        return ingest_free(
             settings,
             url,
             provider=provider,
@@ -282,8 +293,8 @@ def ingest(
             transcript=transcript,
             asr=asr,
         )
-    if provider == "opencli" and fallback != "tikhub":
-        raise SourceError("OpenCLI 尚未接入音频下载，不能直接执行 ASR；auto 模式会先获取字幕。")
+    if provider in {"opencli-mcp", "opencli"} and fallback != "tikhub":
+        raise SourceError(f"{provider} 尚未接入音频下载，不能直接执行 ASR；auto 模式会先获取字幕。")
     ensure_dirs(settings)
     source = recognize(url)
     if source.kind not in INGESTABLE_KINDS:
@@ -381,7 +392,7 @@ def ingest(
     )
 
 
-def ingest_opencli(
+def ingest_free(
     settings: SootaSettings,
     url: str,
     *,
@@ -400,31 +411,45 @@ def ingest_opencli(
     document = TranscriptDocument(status=TranscriptStatus.MISSING)
     item: MediaItem | None = None
     missing_reason: str | None = None
+    attempted: list[str] = []
     if transcript == TranscriptMode.NONE:
         item, records, warnings = inspect_item(
             settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
         )
-    elif not opencli_capabilities(source).captions:
-        missing_reason = "该来源尚未接入 OpenCLI 字幕。"
     else:
-        client: OpenCLIProvider | None = None
-        try:
-            client = OpenCLIProvider(settings)
-            with client.runtime.lock():
-                item = client.inspect(source)
-                captions = client.get_captions(item)
-            document = TranscriptDocument(
-                status=captions.status, source=captions.source, language=captions.language, segments=captions.segments
-            )
-            if captions.status != TranscriptStatus.READY:
-                missing_reason = "OpenCLI 没有返回可用字幕。"
-            else:
-                warnings.append("OpenCLI 未标明实际字幕语言及人工/自动轨道类型，已保留为未知。")
-        except RuntimeUnavailable as exc:
-            missing_reason = exc.message
-        finally:
-            if client is not None:
-                records = client.records
+        candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider]]] = []
+        if provider in {"auto", "opencli-mcp"} and mcp_capabilities(source).captions:
+            candidates.append(("opencli-mcp", OpenCLIMCPProvider))
+        if provider in {"auto", "opencli"} and opencli_capabilities(source).captions:
+            candidates.append(("opencli", OpenCLIProvider))
+        for name, factory in candidates:
+            attempted.append(name)
+            client: OpenCLIMCPProvider | OpenCLIProvider | None = None
+            try:
+                client = factory(settings)
+                candidate_item = client.inspect(source)
+                item = candidate_item
+                captions = client.get_captions(candidate_item)
+                document = TranscriptDocument(
+                    status=captions.status,
+                    source=captions.source,
+                    language=captions.language,
+                    segments=captions.segments,
+                )
+                if captions.status == TranscriptStatus.READY:
+                    missing_reason = None
+                    warnings.append(f"{name} 未标明实际字幕语言及人工/自动轨道类型，已保留为未知。")
+                    break
+                missing_reason = f"{name} 没有返回可用字幕。"
+            except RuntimeUnavailable as exc:
+                if provider != "auto" and fallback != "tikhub":
+                    raise
+                missing_reason = f"{name} 不可用：{exc.message}"
+            finally:
+                if client is not None:
+                    records.extend(client.records)
+        if not candidates:
+            missing_reason = "所选免费来源尚未接入该视频字幕。"
     if missing_reason:
         if fallback == "tikhub":
             result = ingest(
@@ -438,15 +463,15 @@ def ingest_opencli(
                 requester=requester,
                 asr=asr,
             )
-            result.warnings.insert(0, missing_reason + " 已按显式设置使用 TikHub 兜底。")
+            result.warnings.insert(0, missing_reason + " 已按费用策略使用 TikHub 兜底。")
             result.data["routing"] = {
-                "attempted": ["opencli", "tikhub"],
-                "opencli_requests": [r.model_dump() for r in records],
+                "attempted": [*attempted, "tikhub"],
+                "free_requests": [r.model_dump() for r in records],
             }
             CostLedger(settings.ledger_path).append(source.id, records)
             return result
         if item is None:
-            raise SourceError(missing_reason, hint="检查 OpenCLI，或显式选择 TikHub；不会自动产生付费请求。")
+            raise SourceError(missing_reason, hint="检查免费来源，或显式选择 TikHub；不会自动产生付费请求。")
         warnings.append(missing_reason + " 已保留元数据；未授权 TikHub 兜底。")
     assert item is not None
     ready = document.status == TranscriptStatus.READY or transcript == TranscriptMode.NONE
@@ -461,7 +486,7 @@ def ingest_opencli(
             cache_hit=bool(records) and all(r.cache_hit for r in records),
             estimated_cost_usd=sum(r.estimated_cost_usd or 0 for r in records),
             actual_cost_usd=None,
-            request_count=len([r for r in records if r.billed]),
+            request_count=len([r for r in records if not r.cache_hit]),
             warnings=warnings,
         ),
     )

@@ -18,6 +18,7 @@ class FeatureAlias:
     tikhub: str
     tikhub_parameter: str
     opencli_extra: dict[str, Any] = field(default_factory=dict)
+    opencli_mcp: str | None = None
 
 
 ALIASES = [
@@ -96,6 +97,7 @@ ALIASES = [
         "bvid",
         "bilibili.web.fetch_one_video",
         "url",
+        opencli_mcp="bilibili/video",
     ),
     FeatureAlias(
         "youtube.video.detail",

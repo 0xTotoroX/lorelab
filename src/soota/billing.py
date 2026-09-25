@@ -109,4 +109,4 @@ class PaymentGate:
 
 
 def selected_provider(settings: SootaSettings, explicit: str | None) -> str:
-    return explicit if explicit is not None else settings.payment.default_provider
+    return explicit if explicit is not None else settings.routing.default_provider
