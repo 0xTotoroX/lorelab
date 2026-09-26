@@ -2,7 +2,7 @@
 
 记录 mubu-integration Skill 的里程碑演化。
 
-## Unreleased — fork 节点编辑
+## v1.4.0-alpha.1 — Totoro fork 节点编辑（2026-09-26）
 
 - 新增 `nodes`、`node-update`、`node-create`、`node-delete`，默认仅预览，`--execute` 单次提交并读回核验。
 - `--auth desktop` 支持只读复用幕布本机登录；自动发现 macOS App Store 数据目录，不复制 Token、不依赖桌面常驻。

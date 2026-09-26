@@ -13,4 +13,4 @@
 旧入口 scripts/mubu_api.py 现为向后兼容 shim，重新导出本包全部公开符号。
 """
 
-__version__ = "1.3.16"
+__version__ = "1.4.0-alpha.1"

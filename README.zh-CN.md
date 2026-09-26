@@ -6,6 +6,8 @@
 
 本 fork 新增节点级编辑与可选的桌面会话认证，已在 macOS 实测。请先读[节点编辑与限制](docs/node-editing.md)；原有密码/JWT 命令保持兼容。
 
+已完成、未完成、后续计划及同步上游规则：[Fork 维护说明](docs/fork-maintenance.md)。
+
 > 把幕布变成 Markdown 原生、可被 AI Agent 操控的大纲工具。
 
 [![GitHub stars](https://img.shields.io/github/stars/liuboacean/mubu-integration?style=social)](https://github.com/liuboacean/mubu-integration/stargazers)
