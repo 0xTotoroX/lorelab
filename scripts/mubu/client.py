@@ -197,8 +197,9 @@ class MubuClient:
         重试上限 MAX_NETWORK_RETRIES（即最多共发起 3 次请求），退避见 NETWORK_BACKOFF。
         其余 4xx（含 401）等非 5xx/非 429 响应会原样返回，交由上层 _request 处理鉴权重试。
         """
+        network_retries = kwargs.pop("_network_retries", MAX_NETWORK_RETRIES)
         last_err: Optional[Exception] = None
-        for attempt in range(MAX_NETWORK_RETRIES + 1):
+        for attempt in range(network_retries + 1):
             try:
                 logger.debug("HTTP %s %s (attempt=%s, timeout=%ss)",
                              method, url, attempt + 1, REQUEST_TIMEOUT)
@@ -208,18 +209,18 @@ class MubuClient:
             except requests.exceptions.RequestException as e:
                 # 网络层异常：退避后重试
                 last_err = e
-                if attempt < MAX_NETWORK_RETRIES:
+                if attempt < network_retries:
                     time.sleep(NETWORK_BACKOFF[min(attempt, len(NETWORK_BACKOFF) - 1)])
                     continue
                 raise MubuError(
-                    f"网络连接失败，请检查网络（已重试 {MAX_NETWORK_RETRIES} 次）: {e}",
+                    f"网络连接失败，请检查网络（已重试 {network_retries} 次）: {e}",
                     status_code=None,
                 )
 
             # 429 限流 → 按 Retry-After 退避后重试（不重登）
             if response.status_code == 429:
                 last_err = None
-                if attempt < MAX_NETWORK_RETRIES:
+                if attempt < network_retries:
                     retry_after = response.headers.get("Retry-After")
                     if retry_after and str(retry_after).isdigit():
                         time.sleep(min(int(retry_after), 30))
@@ -227,7 +228,7 @@ class MubuClient:
                         time.sleep(NETWORK_BACKOFF[min(attempt, len(NETWORK_BACKOFF) - 1)])
                     continue
                 raise MubuError(
-                    f"请求过于频繁（HTTP 429），请稍后重试（已重试 {MAX_NETWORK_RETRIES} 次）",
+                    f"请求过于频繁（HTTP 429），请稍后重试（已重试 {network_retries} 次）",
                     status_code=429,
                     body=response.text,
                 )
@@ -235,12 +236,12 @@ class MubuClient:
             # 5xx 服务端错误 → 退避重试（不重登）
             if response.status_code >= 500:
                 last_err = None
-                if attempt < MAX_NETWORK_RETRIES:
+                if attempt < network_retries:
                     time.sleep(NETWORK_BACKOFF[min(attempt, len(NETWORK_BACKOFF) - 1)])
                     continue
                 raise MubuError(
                     f"幕布服务暂不可用，请稍后重试（HTTP {response.status_code}，"
-                    f"已重试 {MAX_NETWORK_RETRIES} 次仍失败）",
+                    f"已重试 {network_retries} 次仍失败）",
                     status_code=response.status_code,
                     body=response.text,
                 )
@@ -292,6 +293,9 @@ class MubuClient:
                 status_code=response.status_code,
                 body=response.text,
             )
+
+        if not isinstance(result, dict):
+            raise MubuError("API 响应不是 JSON 对象", status_code=response.status_code)
 
         # 仅鉴权失效才重登重试；第二次仍失败则抛错，不再重登
         if self._is_auth_error(result, response):

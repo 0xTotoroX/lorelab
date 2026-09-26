@@ -6,6 +6,7 @@ import json
 import logging
 import sys
 
+from mubu import node_cli
 from mubu.client import MubuClient
 from mubu.config import (
     MAX_SEARCH_DEPTH,
@@ -21,6 +22,8 @@ from mubu.convert import (
     format_search,
     markdown_to_doc,
 )
+from mubu.desktop import DesktopClient
+from mubu.node_service import NodeWriteError
 
 
 def _configure_logging(verbose: bool) -> None:
@@ -42,10 +45,14 @@ def _configure_logging(verbose: bool) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="幕布 API 命令行工具")
+    parser.add_argument("--auth", choices=["password", "desktop"], default="password",
+                        help="认证方式：默认原有密码/JWT；desktop 只读复用本机幕布会话")
+    parser.add_argument("--data-root", help="desktop 模式的幕布数据根目录（通常自动发现）")
     # P1 #16：--verbose 控制 debug 日志（默认仅 warning/error）
     parser.add_argument("--verbose", action="store_true",
                         help="输出调试日志（DEBUG 级别，含请求级信息）")
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
+    node_cli.add_commands(subparsers)
 
     # 登录（凭据取自环境变量 / ~/.workbuddy/.env.mubu；缺失时交互式输入，
     # 不再提供 --phone/--password 明文参数，避免出现在 ps / shell 历史中）
@@ -159,12 +166,21 @@ def main() -> None:
     args = parser.parse_args()
     _configure_logging(args.verbose)
 
+    if args.data_root and args.auth != "desktop":
+        parser.error("--data-root 仅适用于 --auth desktop")
+    if args.command == "login" and args.auth == "desktop":
+        parser.error("desktop 模式请在幕布桌面端登录，再运行 --auth desktop list 验证")
+
     if not args.command:
         parser.print_help()
         return
 
     try:
-        client = MubuClient()
+        client = DesktopClient(args.data_root) if args.auth == "desktop" else MubuClient()
+
+        if args.command in node_cli.COMMANDS:
+            node_cli.run(client, args)
+            return
 
         if args.command == "login":
             # 凭据优先来自环境变量 / .env.mubu；缺失时交互式输入
@@ -326,6 +342,9 @@ def main() -> None:
             else:
                 print(doc_to_opml(doc))
 
+    except NodeWriteError as e:
+        print(json.dumps(e.result, ensure_ascii=False, indent=2))
+        sys.exit(2 if e.result["status"] == "conflict" else 3)
     except Exception as e:
         # 仅记录 msg（已脱敏：不含密码/token/原始 body），不泄露敏感信息
         logger.error("%s", e)

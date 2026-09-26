@@ -2,6 +2,15 @@
 
 记录 mubu-integration Skill 的里程碑演化。
 
+## Unreleased — fork 节点编辑
+
+- 新增 `nodes`、`node-update`、`node-create`、`node-delete`，默认仅预览，`--execute` 单次提交并读回核验。
+- `--auth desktop` 支持只读复用幕布本机登录；自动发现 macOS App Store 数据目录，不复制 Token、不依赖桌面常驻。
+- 新增 `--expect-version`、发送前快照复核、整树内容比较与本地操作记录；网络结果不明确时不重发。
+- 节点写入使用独立随机 `memberId`，不需要手工抓取或扫描同步日志。
+- 限制：服务端不提供本实现已证实可用的原子版本锁；仅用于串行编辑。正文/描述替换为纯文本，未实现富文本局部保留、自动撤销或 MCP。
+- 验证：155 项测试、ruff 通过；Mac 云端实测节点读写、指定位置新增、删除子树、预览无写入和旧预览拒绝，网页显示已确认。真实图片附件场景和 Windows/Linux 未实测。
+
 ## v1.3.16（CI 门禁闭环 · ruff 导入合规修复，2026-09-02）
 
 本轮无新功能、无破坏性变更，仅修复 v1.3.15 引入的 `lint` job 在 CI 中实际失败却被 `continue-on-error` 掩盖的问题，使 CI 真实通过。

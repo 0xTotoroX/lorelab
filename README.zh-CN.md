@@ -4,6 +4,8 @@
 
 # mubu-integration
 
+本 fork 新增节点级编辑与可选的桌面会话认证，已在 macOS 实测。请先读[节点编辑与限制](docs/node-editing.md)；原有密码/JWT 命令保持兼容。
+
 > 把幕布变成 Markdown 原生、可被 AI Agent 操控的大纲工具。
 
 [![GitHub stars](https://img.shields.io/github/stars/liuboacean/mubu-integration?style=social)](https://github.com/liuboacean/mubu-integration/stargazers)
