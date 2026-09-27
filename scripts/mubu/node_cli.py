@@ -56,7 +56,7 @@ def add_commands(subparsers):
             parser.add_argument("--label", help="链接显示文字，默认 URL")
 
 
-def run(client, args):
+def run(client, args, *, emit=True):
     editor = NodeEditor(client)
     if args.command == "nodes":
         result = editor.nodes(args.doc_id, args.query, root_id=args.root_id,
@@ -67,4 +67,6 @@ def run(client, args):
                   if hasattr(args, key)}
         result = editor.mutate(args.doc_id, args.command.removeprefix("node-"), args.node_id,
                                execute=args.execute, expect_version=args.expect_version, **fields)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if emit:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result

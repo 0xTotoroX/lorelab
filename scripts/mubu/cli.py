@@ -1,12 +1,11 @@
 """mubu 包 — 命令行入口（argparse 子命令 + 日志配置）。"""
 
-import argparse
 import getpass
 import json
 import logging
 import sys
 
-from mubu import media_cli, node_cli
+from mubu import agent_cli, media_cli, node_cli, operations
 from mubu.client import MubuClient
 from mubu.config import (
     MAX_SEARCH_DEPTH,
@@ -44,7 +43,8 @@ def _configure_logging(verbose: bool) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="幕布 API 命令行工具")
+    parser = agent_cli.Parser(description="幕布 API 命令行工具")
+    parser.add_argument("--agent", action="store_true", help="Agent 模式：JSON 输出、无交互、不自动重试")
     parser.add_argument("--auth", choices=["password", "desktop"], default="password",
                         help="认证方式：默认原有密码/JWT；desktop 只读复用本机幕布会话")
     parser.add_argument("--data-root", help="desktop 模式的幕布数据根目录（通常自动发现）")
@@ -54,6 +54,7 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
     node_cli.add_commands(subparsers)
     media_cli.add_commands(subparsers)
+    operations.add_commands(subparsers)
 
     # 登录（凭据取自环境变量 / ~/.workbuddy/.env.mubu；缺失时交互式输入，
     # 不再提供 --phone/--password 明文参数，避免出现在 ps / shell 历史中）
@@ -176,20 +177,48 @@ def main() -> None:
         parser.print_help()
         return
 
+    def output(data, text=None):
+        if args.agent:
+            status = data.get("status", "ok") if isinstance(data, dict) else "ok"
+            agent_cli.emit(args.command, data, status=status)
+        else:
+            print(text if text is not None else json.dumps(data, ensure_ascii=False, indent=2))
+
     try:
+        if args.command in operations.COMMANDS and not getattr(args, "verify", False):
+            output(operations.run(args))
+            return
+        if args.agent:
+            if getattr(args, "execute", False) and args.expect_version is None:
+                raise agent_cli.AgentError('VERSION_REQUIRED', '--execute 需要预览返回的 --expect-version')
+            if args.command == 'save' and not (args.md or args.file or args.content):
+                raise agent_cli.AgentError('INPUT_REQUIRED', 'Agent 模式需要 --file、--md 或 --content，不等待 stdin')
+            if args.command in {'delete', 'purge'} and not args.yes:
+                raise agent_cli.AgentError('CONFIRMATION_REQUIRED', '该操作需要 --yes')
         client = DesktopClient(args.data_root) if args.auth == "desktop" else MubuClient()
+        client.agent_mode = args.agent
+
+        if args.command in operations.COMMANDS:
+            output(operations.run(args, client))
+            return
 
         if args.command in media_cli.COMMANDS:
-            media_cli.run(client, args)
+            result = media_cli.run(client, args, emit=not args.agent)
+            if args.agent:
+                output(result)
             return
 
         if args.command in node_cli.COMMANDS:
-            node_cli.run(client, args)
+            result = node_cli.run(client, args, emit=not args.agent)
+            if args.agent:
+                output(result)
             return
 
         if args.command == "login":
             # 凭据优先来自环境变量 / .env.mubu；缺失时交互式输入
             # （无明文 CLI 参数，避免 ps / shell 历史泄露）
+            if args.agent and (not client.phone or not client.password):
+                raise agent_cli.AgentError('AUTH_REQUIRED', '缺少登录凭据；Agent 模式不等待输入', 'authenticate')
             if not client.phone:
                 try:
                     client.phone = input("请输入幕布手机号: ").strip()
@@ -201,18 +230,21 @@ def main() -> None:
                 except EOFError:
                     pass
             result = client.login()
-            print(f"登录成功: {result['username']} (ID: {result['user_id']})")
+            output({"username": result['username'], "user_id": result['user_id']},
+                   f"登录成功: {result['username']} (ID: {result['user_id']})")
 
         elif args.command == "list":
             data = client.get_list(args.folder, include_trashed=args.include_trash)
-            if args.json:
-                print(json.dumps(data, indent=2, ensure_ascii=False))
+            if args.agent or args.json:
+                output(data)
             else:
                 print(format_list(data))
 
         elif args.command == "mkdir":
             folder_id = client.create_folder(args.name, args.parent)
-            print(f"创建文件夹成功: {folder_id}")
+            if args.agent and (not isinstance(folder_id, str) or not folder_id.strip()):
+                raise agent_cli.AgentError('WRITE_UNCONFIRMED', '创建响应缺少文件夹 ID；请查询目录', 'inspect_remote_state')
+            output({"folder_id": folder_id}, f"创建文件夹成功: {folder_id}")
 
         elif args.command == "create":
             md_path = getattr(args, "md", None)
@@ -226,14 +258,17 @@ def main() -> None:
             else:
                 content = args.content
             doc_id = client.create_doc(args.name, args.folder, content)
-            print(f"创建文档成功: {doc_id}")
+            if args.agent and (not isinstance(doc_id, str) or not doc_id.strip()):
+                raise agent_cli.AgentError('WRITE_UNCONFIRMED', '创建响应缺少文档 ID；请查询目录', 'inspect_remote_state')
+            output({"doc_id": doc_id}, f"创建文档成功: {doc_id}")
 
         elif args.command == "get":
             doc = client.get_doc(args.doc_id)
             if args.export == "json":
-                print(json.dumps(doc, indent=2, ensure_ascii=False))
+                output(doc)
             else:
-                print(export_markdown(doc))
+                text = export_markdown(doc)
+                output({"format": "markdown", "content": text}, text)
 
         elif args.command == "save":
             md_path = getattr(args, "md", None)
@@ -255,7 +290,7 @@ def main() -> None:
             # 以新 definition 全量覆盖写回（事件契约见 client.build_update_event）
             event = client.build_update_event(new_def, args.doc_id)
             client.save_doc(args.doc_id, events=[event])
-            print("保存成功")
+            output({"doc_id": args.doc_id}, "保存成功")
 
         elif args.command == "delete":
             # v1.3.5：delete 改为「软删除」——仅移入本地回收站，云端副本仍在，
@@ -269,15 +304,13 @@ def main() -> None:
                 )
                 sys.exit(1)
             client.trash_item(args.id, args.type)
-            print(f"已移入本地回收站: {args.id}（restore 可恢复，purge 可彻底删除）")
+            output({"id": args.id, "status": "trashed"}, f"已移入本地回收站: {args.id}（restore 可恢复，purge 可彻底删除）")
 
         elif args.command == "restore":
             # 仅移除本地标记，零服务端调用（即便云端项已不存在也安全）。
             ok = client.restore_item(args.id)
-            if ok:
-                print(f"已恢复: {args.id}")
-            else:
-                print(f"未找到回收站项: {args.id}")
+            output({"id": args.id, "restored": ok},
+                   f"已恢复: {args.id}" if ok else f"未找到回收站项: {args.id}")
 
         elif args.command == "purge":
             # 唯一不可逆操作：调用服务端真实删除 + 移除本地标记。
@@ -289,11 +322,13 @@ def main() -> None:
                 )
                 sys.exit(1)
             client.purge_item(args.id, item_type=args.type)
-            print(f"已彻底删除: {args.id}（不可恢复）")
+            output({"id": args.id, "status": "purged"}, f"已彻底删除: {args.id}（不可恢复）")
 
         elif args.command == "trash":
             items = client.list_trash()
-            if not items:
+            if args.agent:
+                output({"items": items})
+            elif not items:
                 print("回收站为空")
             else:
                 for it in items:
@@ -302,7 +337,7 @@ def main() -> None:
 
         elif args.command == "move":
             client.move(args.item_id, args.target, args.type)
-            print(f"移动成功: {args.item_id} -> {args.target}")
+            output({"id": args.item_id, "target": args.target}, f"移动成功: {args.item_id} -> {args.target}")
 
         elif args.command == "search":
             result = client.search(
@@ -318,7 +353,14 @@ def main() -> None:
                     "搜索因达到上限（limit=%s）而提前结束，结果可能不完整",
                     result.get("limit"),
                 )
-            if args.json:
+            if args.agent and result.get("errors"):
+                agent_cli.emit(args.command, result, status='partial', error={
+                    'code': 'PARTIAL_FAILURE', 'message': '部分目录或文档未能搜索',
+                    'retryable': False, 'next_action': 'inspect_search'})
+                sys.exit(1)
+            if args.agent:
+                output(result)
+            elif args.json:
                 print(json.dumps(results, indent=2, ensure_ascii=False))
             else:
                 print(format_search(results))
@@ -330,7 +372,12 @@ def main() -> None:
             summary = f"导出完成: {stats['docs']} 文档 / {stats['folders']} 文件夹"
             if stats["errors"]:
                 summary += f"（{stats['errors']} 失败）"
-            print(summary)
+            if args.agent and (stats["errors"] or stats.get("truncated")):
+                agent_cli.emit(args.command, stats, status='partial', error={
+                    'code': 'PARTIAL_FAILURE', 'message': '导出不完整：有失败项或达到深度上限',
+                    'retryable': False, 'next_action': 'inspect_export'})
+                sys.exit(1)
+            output(stats, summary)
 
         elif args.command == "rename":
             if args.type == "doc":
@@ -338,19 +385,23 @@ def main() -> None:
             else:
                 # 文件夹重命名走已验证端点 /list/rename_folder（M12 真机验证）
                 client.rename_folder(args.id, args.name)
-            print(f"重命名成功: {args.id} -> {args.name}")
+            output({"id": args.id, "name": args.name}, f"重命名成功: {args.id} -> {args.name}")
 
         elif args.command == "opml":
             doc = client.get_doc(args.doc_id)
-            if args.format == "freeplane":
-                print(doc_to_freeplane(doc))
-            else:
-                print(doc_to_opml(doc))
+            text = doc_to_freeplane(doc) if args.format == "freeplane" else doc_to_opml(doc)
+            output({"format": args.format, "content": text}, text)
 
     except NodeWriteError as e:
-        print(json.dumps(e.result, ensure_ascii=False, indent=2))
+        if args.agent:
+            agent_cli.write_failure(e, args.command)
+        else:
+            print(json.dumps(e.result, ensure_ascii=False, indent=2))
         sys.exit(2 if e.result["status"] == "conflict" else 3)
     except Exception as e:
         # 仅记录 msg（已脱敏：不含密码/token/原始 body），不泄露敏感信息
-        logger.error("%s", e)
+        if args.agent:
+            agent_cli.fail(e, args.command)
+        else:
+            logger.error("%s", e)
         sys.exit(1)

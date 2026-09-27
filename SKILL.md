@@ -7,6 +7,17 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 幕布（mubu.com）是一款极简大纲工具，支持将大纲一键转为思维导图。本 Skill 提供 API 集成能力。
 
+## Agent 默认调用方式
+
+所有实际调用在子命令前添加 `--agent`，复用桌面会话时加 `--auth desktop`。先读取 [Agent 调用约定](docs/agent-usage.md)，依据 JSON 的 `ok/status/error.code/data` 和退出码处理，不解析中文文案判断成功。
+
+- 在用户已授权的范围内完成读取、预览与执行，不为 `--execute` 再次索要相同授权。
+- 节点/媒体执行必须带预览的 `--expect-version`；同一文档串行操作。
+- `AUTH_REQUIRED` 时停止写入并报告需要登录；不等待交互输入，不绕过登录。
+- `uncertain` 时先用 `operations` 找记录，再用 `operation-status ID --verify` 只读复核；不直接重传，也不以未观察到变化认定可以重试。
+- `search` 的截断及 `export-tree` 的部分失败必须显式报告；不能把部分结果当成整个库。
+- 下方继承的命令与配置说明仍适用，但 Agent 模式不进行错误后的自动重登/重发。
+
 ## Fork 能力与调用边界
 
 本项目 Fork 自 [liuboacean/mubu-integration](https://github.com/liuboacean/mubu-integration)。先查看当前 [README](.github/README.zh-CN.md)、[节点说明](docs/node-editing.md) 与 [媒体说明](docs/media.md)，区分已发布功能与待发布的 1.4.0 功能。
@@ -14,18 +25,18 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 - **读取**：密码模式读取环境变量或仓库外的凭据文件；`--auth desktop` 只读本机幕布已有登录记录。上传仅读取用户指定的本地文件。
 - **本地写入**：上游密码 Token 缓存、本地回收站、显式导出文件，以及节点/媒体操作日志。日志可能含完整文档，禁止提交或公开；桌面 Token 和 TOS 临时凭据不写日志。
 - **网络**：幕布 v3/v4 私有接口；附件使用幕布提供的临时凭据向其火山 TOS 存储上传，下载核验不转发幕布鉴权头。没有遥测。
-- **写入规则**：在用户授权范围内操作。新增节点与媒体命令默认预览，执行需要 `--execute`，可用 `--expect-version` 绑定文档版本；上游旧命令保留自身行为，不能把这些保护泛化给所有命令。`delete` 为本地标记，`purge --yes` 调用云端删除。
+- **写入规则**：在用户授权范围内操作。新增节点与媒体命令默认预览，执行需要 `--execute`，Agent 模式必须用 `--expect-version` 绑定文档版本；上游旧命令保留自身行为，不能把这些保护泛化给所有命令。`delete` 为本地标记，`purge --yes` 调用云端删除。
 - **错误处理**：上传/节点写入不自动重发。`uncertain` 表示可能已发生写入，先查记录和云端内容，不能盲目重试。只做个人串行编辑，不承诺服务端原子版本锁。
 - **认证**：桌面失效需用户在幕布桌面端重新登录。新节点命令自行生成 memberId；只有保留的旧 `save` 仍要求手工配置。
 
-新增命令：`nodes`、`node-update`、`node-create`、`node-delete`、`node-move`、`node-link`、`image-upload`、`attachment-upload`、`attachments`、`auth-status`。以 `--help` 和上述文档为准。图片属于节点，附件属于文档；不假定 Mubu Sync 已支持导出全部媒体。
+新增命令：`nodes`、`node-update`、`node-create`、`node-delete`、`node-move`、`node-link`、`image-upload`、`attachment-upload`、`attachments`、`auth-status`、`operations`、`operation-status`。以 `--help` 和上述文档为准。图片属于节点，附件属于文档；不假定 Mubu Sync 已支持导出全部媒体。
 
 ## 功能概览
 
 | 功能 | 接口 | 说明 |
 |------|------|------|
 | 用户登录 | `POST /user/phone_login` | 手机号密码登录获取 Token |
-| Token 刷新 | 自动处理 | access_token 2小时过期，临近过期自动重新登录（重登仅重试 1 次，杜绝死循环） |
+| Token 刷新 | 自动处理 | 密码模式发送前可按已有凭据续期；Agent 模式收到鉴权错误后不重登/重发 |
 | 创建文件夹 | `POST /list/create_folder` | 在指定位置创建文件夹 |
 | 创建文档 | `POST /list/create_doc` | 创建新的大纲文档 |
 | 获取列表 | `POST /list/get` | 获取文件夹下的文档列表 |
@@ -142,7 +153,7 @@ def save_token(token_data):
     """原子写 + 仅属主可读写：避免中途崩溃留下残缺文件，并防止其它用户读取。"""
     token_data = dict(token_data)
     token_data["expires_at"] = time.time() + 7200  # 2小时后过期
-    # 注：真实 scripts/mubu_api.py 的 _save_token 还会用跨进程 fcntl.flock
+    # 注：真实 scripts/mubu_api.py --agent 的 _save_token 还会用跨进程 fcntl.flock
     # advisory 锁包裹整段写（M4 已做成跨平台安全：无 fcntl 平台降级为无锁）；
     # 此处省略锁，聚焦写盘逻辑。
     dir_name = os.path.dirname(TOKEN_FILE) or "."
@@ -251,31 +262,31 @@ Markdown 往返示例：
 
 ```bash
 # 导出为 Markdown
-python3 scripts/mubu_api.py get <doc_id> --export markdown
+python3 scripts/mubu_api.py --agent get <doc_id> --export markdown
 
 # 从 Markdown 创建文档
-python3 scripts/mubu_api.py create "我的文档" --folder <folder_id> --md ./outline.md
+python3 scripts/mubu_api.py --agent create "我的文档" --folder <folder_id> --md ./outline.md
 
 # 从 Markdown 更新文档
-python3 scripts/mubu_api.py save <doc_id> --md ./outline.md
+python3 scripts/mubu_api.py --agent save <doc_id> --md ./outline.md
 
 # 移动文档
-python3 scripts/mubu_api.py move <doc_id> --target <folder_id>
+python3 scripts/mubu_api.py --agent move <doc_id> --target <folder_id>
 
 # 按名称本地搜索文档/文件夹（递归遍历所有子文件夹，大小写不敏感）
-python3 scripts/mubu_api.py search "项目"
-python3 scripts/mubu_api.py search "项目" --json
+python3 scripts/mubu_api.py --agent search "项目"
+python3 scripts/mubu_api.py --agent search "项目" --json
 
 # 递归导出整个文件夹树为嵌套 Markdown
-python3 scripts/mubu_api.py export-tree --folder <root_folder_id> --output ./backup
+python3 scripts/mubu_api.py --agent export-tree --folder <root_folder_id> --output ./backup
 
 # 重命名文档 / 文件夹
-python3 scripts/mubu_api.py rename <doc_id> --name "新标题" --type doc
-python3 scripts/mubu_api.py rename <folder_id> --name "新文件夹名" --type folder
+python3 scripts/mubu_api.py --agent rename <doc_id> --name "新标题" --type doc
+python3 scripts/mubu_api.py --agent rename <folder_id> --name "新文件夹名" --type folder
 
 # 导出为 OPML / FreeMind
-python3 scripts/mubu_api.py opml <doc_id> --format opml
-python3 scripts/mubu_api.py opml <doc_id> --format freeplane
+python3 scripts/mubu_api.py --agent opml <doc_id> --format opml
+python3 scripts/mubu_api.py --agent opml <doc_id> --format freeplane
 ```
 
 ---
@@ -364,24 +375,24 @@ MUBU_MEMBER_ID=你的幕布 colla 成员 ID
 
 | 用户意图 | 执行命令 |
 |---------|---------|
-| 登录幕布 | `python3 scripts/mubu_api.py login` |
-| 查看文档列表 | `python3 scripts/mubu_api.py list` |
-| 查看某文件夹 | `python3 scripts/mubu_api.py list --folder <folder_id>` |
-| 创建文件夹 | `python3 scripts/mubu_api.py mkdir "文件夹名"` |
-| 创建文档 | `python3 scripts/mubu_api.py create "文档名" --folder <folder_id>` |
-| 从 Markdown 创建文档 | `python3 scripts/mubu_api.py create "文档名" --folder <folder_id> --md outline.md` |
-| 获取文档内容 | `python3 scripts/mubu_api.py get <doc_id>` |
-| 导出为 Markdown | `python3 scripts/mubu_api.py get <doc_id> --export markdown` |
-| 从 Markdown 保存文档 | `python3 scripts/mubu_api.py save <doc_id> --md outline.md` |
-| 从文件保存文档 | `python3 scripts/mubu_api.py save <doc_id> --file content.json` |
-| 移动文档 | `python3 scripts/mubu_api.py move <doc_id> --target <folder_id>` |
-| 软删除（移入回收站） | `python3 scripts/mubu_api.py delete <id> --type doc\|folder --yes`（云端仍在，`restore` 可恢复）|
-| 从回收站恢复 | `python3 scripts/mubu_api.py restore <id>` |
-| 彻底删除（不可逆） | `python3 scripts/mubu_api.py purge <id> --yes`（必须显式 `--yes`，调用服务端真实删除）|
-| 查看回收站 | `python3 scripts/mubu_api.py trash` |
-| 按名称搜索 | `python3 scripts/mubu_api.py search <关键字> [--max-depth N] [--limit N]` |
-| 按名称搜索（含回收站） | `python3 scripts/mubu_api.py search <关键字> [--max-depth N] [--limit N] --include-trash` |
-| 按名称搜索（JSON） | `python3 scripts/mubu_api.py search <关键字> [--max-depth N] [--limit N] --json` |
+| 登录幕布 | `python3 scripts/mubu_api.py --agent login` |
+| 查看文档列表 | `python3 scripts/mubu_api.py --agent list` |
+| 查看某文件夹 | `python3 scripts/mubu_api.py --agent list --folder <folder_id>` |
+| 创建文件夹 | `python3 scripts/mubu_api.py --agent mkdir "文件夹名"` |
+| 创建文档 | `python3 scripts/mubu_api.py --agent create "文档名" --folder <folder_id>` |
+| 从 Markdown 创建文档 | `python3 scripts/mubu_api.py --agent create "文档名" --folder <folder_id> --md outline.md` |
+| 获取文档内容 | `python3 scripts/mubu_api.py --agent get <doc_id>` |
+| 导出为 Markdown | `python3 scripts/mubu_api.py --agent get <doc_id> --export markdown` |
+| 从 Markdown 保存文档 | `python3 scripts/mubu_api.py --agent save <doc_id> --md outline.md` |
+| 从文件保存文档 | `python3 scripts/mubu_api.py --agent save <doc_id> --file content.json` |
+| 移动文档 | `python3 scripts/mubu_api.py --agent move <doc_id> --target <folder_id>` |
+| 软删除（移入回收站） | `python3 scripts/mubu_api.py --agent delete <id> --type doc\|folder --yes`（云端仍在，`restore` 可恢复）|
+| 从回收站恢复 | `python3 scripts/mubu_api.py --agent restore <id>` |
+| 彻底删除（不可逆） | `python3 scripts/mubu_api.py --agent purge <id> --yes`（必须显式 `--yes`，调用服务端真实删除）|
+| 查看回收站 | `python3 scripts/mubu_api.py --agent trash` |
+| 按名称搜索 | `python3 scripts/mubu_api.py --agent search <关键字> [--max-depth N] [--limit N]` |
+| 按名称搜索（含回收站） | `python3 scripts/mubu_api.py --agent search <关键字> [--max-depth N] [--limit N] --include-trash` |
+| 按名称搜索（JSON） | `python3 scripts/mubu_api.py --agent search <关键字> [--max-depth N] [--limit N] --json` |
 
 ### 典型工作流
 
@@ -424,7 +435,7 @@ MUBU_MEMBER_ID=你的幕布 colla 成员 ID
 
 执行步骤：
 1. 登录获取 Token
-2. 本地搜索匹配文档：`python3 scripts/mubu_api.py search "读书笔记"`
+2. 本地搜索匹配文档：`python3 scripts/mubu_api.py --agent search "读书笔记"`
 3. 获取文档内容
 4. 转换为 Markdown 并返回
 

@@ -77,7 +77,9 @@ class NodeEditor:
         operation_id = uuid.uuid4().hex
         path = self.state_dir / "operations" / (operation_id + ".json")
         record = {"operation_id": operation_id, "before": before,
-                  "event": plan["event"], "status": "prepared"}
+                  "event": plan["event"], "status": "prepared",
+                  "action": action, "node_id": plan["node_id"],
+                  "expected": plan["expected"], "changed_ids": sorted(plan["changed_ids"])}
         self._record(path, record)
         payload = {"memberId": str(secrets.randbelow(2**53 - 1001) + 1000),
                    "type": "CHANGE", "version": before["version"],

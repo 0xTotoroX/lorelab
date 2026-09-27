@@ -4,6 +4,8 @@
 
 ## 运行
 
+Agent 统一加 `--agent`，执行时必须提供预览版本；JSON 字段与错误处理见 [Agent 调用约定](agent-usage.md)。以下保留原 CLI 用法。
+
 在仓库根目录创建独立 Python 环境：
 
 ```sh

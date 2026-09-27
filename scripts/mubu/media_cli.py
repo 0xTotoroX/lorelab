@@ -24,7 +24,7 @@ def add_commands(subparsers):
     parser.add_argument('--json', action='store_true')
 
 
-def run(client, args):
+def run(client, args, *, emit=True):
     if args.command == 'auth-status':
         client.get_list('0')
         result = {'status': 'authenticated', 'auth': args.auth}
@@ -35,4 +35,6 @@ def run(client, args):
                     kind='image' if args.command == 'image-upload' else 'attachment',
                     node_id=getattr(args, 'node_id', None), execute=args.execute,
                     expect_version=args.expect_version)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    if emit:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    return result

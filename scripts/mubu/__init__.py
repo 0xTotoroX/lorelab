@@ -11,6 +11,8 @@
 - rich_text: 保留格式的唯一文本片段替换与链接
 - media: 图片/附件上传、绑定、核验和阶段记录
 - media_cli: 图片/附件命令和只读鉴权检查
+- agent_cli: Agent JSON 输出、错误码与无交互参数处理
+- operations: 操作摘要及只读云端核验
 - cli: 命令行入口（argparse 子命令 + 日志配置）
 
 旧入口 scripts/mubu_api.py 现为向后兼容 shim，重新导出本包全部公开符号。

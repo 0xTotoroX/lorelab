@@ -2,6 +2,8 @@
 
 这些命令随 1.4.0 准备发布，尚未包含在既有发布包中。通过 `scripts/mubu_api.py` 运行；下文以已登录的桌面会话为例。命令默认 JSON 输出。
 
+Agent 调用请加 `--agent`；遇到不确定结果可用 `operation-status ID --verify` 只读核验，见 [Agent 调用约定](agent-usage.md)。
+
 ## 图片与附件的区别
 
 - `image-upload`：上传 PNG/JPEG/GIF，追加到一个节点的 `images` 列表。保留原图片、正文、描述及其他属性，不自动压缩或转换。

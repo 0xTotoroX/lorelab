@@ -271,6 +271,9 @@ class MubuClient:
             max_retries: 鉴权失败时的重试次数上限（默认 1，杜绝死循环）
             auth: 是否需要在发起前确保 Token 有效（login 自身应传 False）
         """
+        if getattr(self, "agent_mode", False):
+            max_retries = 0
+            kwargs["_network_retries"] = 0
         if auth:
             self.ensure_valid_token()
 
@@ -659,27 +662,29 @@ class MubuClient:
         })
 
     def export_tree(self, root_folder_id: str = "0", output_dir: str = ".",
-                    max_depth: int = MAX_SEARCH_DEPTH) -> Dict[str, int]:
+                    max_depth: int = MAX_SEARCH_DEPTH) -> Dict[str, Any]:
         """递归导出整个文件夹树为嵌套 Markdown 文件。
 
         文档写为 ``<name>.md``，子文件夹创建为同级子目录并继续递归。
         单个文件夹/文档拉取失败不阻断整体遍历（记入 errors 统计）。
 
         Returns:
-            {"docs": 导出文档数, "folders": 创建文件夹数, "errors": 失败数}
+            docs/folders/errors 计数、truncated 深度截断标记与 failures 失败对象。
         """
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
-        stats: Dict[str, int] = {"docs": 0, "folders": 0, "errors": 0}
+        stats = {"docs": 0, "folders": 0, "errors": 0, "truncated": False, "failures": []}
 
         def walk(folder_id: str, current_dir: Path, depth: int) -> None:
             if depth > max_depth:
+                stats["truncated"] = True
                 return
             try:
                 data = self.get_list(folder_id)
             except MubuError as e:
-                logger.warning("导出遍历文件夹 %s 失败: %s", folder_id, e)
+                logger.warning("导出遍历文件夹 %s 失败: %s", folder_id, "请求未完成" if getattr(self, "agent_mode", False) else e)
                 stats["errors"] += 1
+                stats["failures"].append({"type": "folder", "id": folder_id})
                 return
             folders = data.get("folders", []) or []
             docs = data.get("documents") or data.get("docs") or []
@@ -693,8 +698,9 @@ class MubuClient:
                     (current_dir / f"{safe_name}.md").write_text(md, encoding="utf-8")
                     stats["docs"] += 1
                 except MubuError as e:
-                    logger.warning("导出文档 %s 失败: %s", doc_id, e)
+                    logger.warning("导出文档 %s 失败: %s", doc_id, "请求未完成" if getattr(self, "agent_mode", False) else e)
                     stats["errors"] += 1
+                    stats["failures"].append({"type": "doc", "id": doc_id})
             for f in folders:
                 fid = f.get("id")
                 fname = (f.get("name") or "untitled").strip()
@@ -743,11 +749,13 @@ class MubuClient:
             - results: 匹配项列表，每项含 id / name / type（"doc" | "folder"）
               / path（从根起的路径）
             - truncated: 是否因达到上限而提前结束（结果可能不完整）
+            - errors/failures: 拉取失败的数量和对象，不能把失败视为无匹配
         """
         keyword_lower = (keyword or "").lower()
         results: List[Dict[str, Any]] = []
         req_count = 0
         truncated = False
+        failures = []
         visited: set = set()  # 已访问 folder_id，防环引用无限递归
         # 软删除过滤集：含 include_trashed 时不加载（即不过滤）
         trash = self._load_trash() if not include_trashed else {}
@@ -765,7 +773,8 @@ class MubuClient:
                 data = self.get_list(folder_id, include_trashed=include_trashed)
             except MubuError as e:
                 # 单个文件夹拉取失败不阻断整体遍历
-                logger.warning("遍历文件夹 %s 失败: %s", folder_id, e)
+                logger.warning("遍历文件夹 %s 失败: %s", folder_id, "请求未完成" if getattr(self, "agent_mode", False) else e)
+                failures.append({"type": "folder", "id": folder_id})
                 return
             req_count += 1
             if len(results) >= limit:
@@ -792,6 +801,7 @@ class MubuClient:
                     try:
                         doc = self.get_doc(doc_id)
                     except MubuError:
+                        failures.append({"type": "doc", "id": doc_id})
                         continue
                     if self._keyword_in_nodes(doc.get("nodes", []), keyword_lower):
                         results.append({"id": doc_id, "name": name, "type": "doc",
@@ -819,6 +829,8 @@ class MubuClient:
             "truncated": truncated,
             "limit": limit,
             "max_depth": max_depth,
+            "errors": len(failures),
+            "failures": failures,
         }
 
     def _keyword_in_nodes(self, nodes: Any, keyword_lower: str) -> bool:
