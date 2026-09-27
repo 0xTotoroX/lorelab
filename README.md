@@ -4,10 +4,6 @@
 
 # mubu-integration
 
-This fork adds precise node editing and opt-in desktop-session authentication (macOS verified). See [node editing and limitations](docs/node-editing.md). Existing password/JWT commands remain available.
-
-Fork status, roadmap, version naming and upstream updates: [maintenance guide](docs/fork-maintenance.md).
-
 > Turn Mubu (幕布) into a Markdown-native, AI-agent-controllable outliner.
 
 [![GitHub stars](https://img.shields.io/github/stars/liuboacean/mubu-integration?style=social)](https://github.com/liuboacean/mubu-integration/stargazers)

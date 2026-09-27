@@ -171,7 +171,7 @@ class MubuClient:
         仅当 HTTP 401，或响应 code 表示登录失效（含相关关键字）时返回 True。
         403 权限不足或其它非 0 code 不触发重登，避免误重试。
         """
-        if response.status_code == 401:
+        if response.status_code == 401 or result.get("code") == 10007:
             return True
         code = result.get("code")
         if code is not None and code != 0:
@@ -180,7 +180,7 @@ class MubuClient:
             # "expire"/"login"/"过期" 等易出现在正常业务错误中的泛化词，
             # 避免误触发重登、掩盖真实错误（排障手 #7 / 安全官）
             auth_keywords = (
-                "登录", "未登录", "重新登录", "登录失效", "unauthorized"
+                "登录", "未登录", "重新登录", "登录失效", "unauthorized", "login expired"
             )
             if any(k in msg for k in auth_keywords):
                 return True
@@ -275,7 +275,11 @@ class MubuClient:
             self.ensure_valid_token()
 
         logger.debug("请求 %s %s (auth=%s)", method, endpoint, auth)
-        url = f"{BASE_URL}{endpoint}"
+        api_version = kwargs.pop("_api_version", 3)
+        if api_version not in (3, 4):
+            raise MubuError("不支持的 API 版本")
+        base_url = BASE_URL.replace("/v3/api", f"/v{api_version}/api")
+        url = f"{base_url}{endpoint}"
         headers = self._get_headers()
         if "headers" in kwargs:
             headers.update(kwargs.pop("headers"))
@@ -300,6 +304,7 @@ class MubuClient:
         # 仅鉴权失效才重登重试；第二次仍失败则抛错，不再重登
         if self._is_auth_error(result, response):
             if max_retries > 0:
+                kwargs["_api_version"] = api_version
                 self.login()
                 return self._request(method, endpoint, max_retries=max_retries - 1, auth=auth, **kwargs)
             # 401 或登录失效类错误，重试后仍失败 → 给出下一步操作指引

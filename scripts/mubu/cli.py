@@ -6,7 +6,7 @@ import json
 import logging
 import sys
 
-from mubu import node_cli
+from mubu import media_cli, node_cli
 from mubu.client import MubuClient
 from mubu.config import (
     MAX_SEARCH_DEPTH,
@@ -53,6 +53,7 @@ def main() -> None:
                         help="输出调试日志（DEBUG 级别，含请求级信息）")
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
     node_cli.add_commands(subparsers)
+    media_cli.add_commands(subparsers)
 
     # 登录（凭据取自环境变量 / ~/.workbuddy/.env.mubu；缺失时交互式输入，
     # 不再提供 --phone/--password 明文参数，避免出现在 ps / shell 历史中）
@@ -177,6 +178,10 @@ def main() -> None:
 
     try:
         client = DesktopClient(args.data_root) if args.auth == "desktop" else MubuClient()
+
+        if args.command in media_cli.COMMANDS:
+            media_cli.run(client, args)
+            return
 
         if args.command in node_cli.COMMANDS:
             node_cli.run(client, args)

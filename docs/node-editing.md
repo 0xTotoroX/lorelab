@@ -42,7 +42,7 @@ python3 -m venv .venv
 .venv/bin/python scripts/mubu_api.py --auth desktop node-delete DOC_ID --node-id NODE_ID
 ```
 
-节点命令始终输出 JSON，`--json` 是显式别名。`nodes --query TEXT` 筛选单篇文档的正文和描述。`node-create` 当前需要一个已存在的父节点，不提供顶层新建节点命令。
+节点命令始终输出 JSON，`--json` 是显式别名。`nodes --query TEXT` 筛选单篇文档的正文和描述。旧发布版的 `node-create` 需要父节点；1.4.0 新增 `--root` 顶层创建，见下文。
 
 ## 状态与失败处理
 
@@ -63,9 +63,9 @@ python3 -m venv .venv
 
 服务器在真实测试中接受了“旧版本 + 新 memberId”的更新，并改变目标正文。`--expect-version` 和发送前二次读取只能降低竞争概率，**不是服务端原子比较交换（CAS）**。写后读取也无法排除其后的其他客户端修改。因此第一版只用于串行编辑，不能承诺协同写入安全。
 
-正文/描述按纯文本替换，转义 `<>&` 和换行。兄弟节点、子节点、另一字段及未知属性不进入更新 payload，读回还会检查整篇 definition。服务端省略叶子空 children/默认 taskStatus，以及受影响节点 modified 的变化，被视为等价。图片/未知字段保留已有离线测试；本次实机测试文档没有图片附件，不能当作真实附件验收。
+正文/描述按纯文本替换，转义 `<>&` 和换行。兄弟节点、子节点、另一字段及未知属性不进入更新 payload，读回还会检查整篇 definition。服务端省略叶子空 children/默认 taskStatus，以及受影响节点 modified 的变化，被视为等价。旧发布版仅做图片/未知字段离线保留测试。1.4.0 已在含图片、加粗正文、链接及文档附件的合成文档中验收局部替换与图片追加；不能推广为所有格式的无损编辑。
 
-没有隐式全树覆盖、批量编辑、自动撤销、完整富文本编辑或 MCP。
+没有隐式全树覆盖、批量编辑、自动撤销、任意富文本格式编辑或 MCP。
 
 ## 实现与证据
 
@@ -88,3 +88,39 @@ PYTHONPATH=scripts .venv/bin/python -m pytest -q
 ```
 
 实机验收：桌面未启动时，读取、正文更新、描述更新、嵌套新增、指定位置插入、删除子树、旧预览拒绝均通过；新增后删除的测试子树已清理，独立验收文档保留供人工查看。上游旧的文档管理能力只运行回归测试，不据此宣称全部重新实测。
+
+## 1.4.0 新增：分支、结构与保留格式
+
+下列命令随 1.4.0 准备发布，尚未包含在既有发布包中。
+
+```sh
+# 分支根为相对深度 0；输出包含祖先路径和图片引用
+.venv/bin/python scripts/mubu_api.py --auth desktop nodes DOC_ID \
+  --node-id NODE_ID --depth 2 --include-html
+
+# 顶层新增（--root 与 --node-id 二选一）；默认预览
+.venv/bin/python scripts/mubu_api.py --auth desktop node-create DOC_ID --root --text '新主题' --index 0
+
+# 移动完整子树，保留 ID、内容和图片；目标为父节点或顶层
+.venv/bin/python scripts/mubu_api.py --auth desktop node-move DOC_ID \
+  --node-id NODE_ID --parent-id PARENT_ID --index 0
+.venv/bin/python scripts/mubu_api.py --auth desktop node-move DOC_ID --node-id NODE_ID --root --index 1
+
+# 替换唯一的文字片段，保留该片段所在格式标签
+.venv/bin/python scripts/mubu_api.py --auth desktop node-update DOC_ID \
+  --node-id NODE_ID --replace '原文字' --text '新文字'
+
+# 保留原描述并另起一行追加
+.venv/bin/python scripts/mubu_api.py --auth desktop node-update DOC_ID \
+  --node-id NODE_ID --field note --append --text '新增说明'
+
+# 默认在描述中追加链接；可用 --field text 追加到正文
+.venv/bin/python scripts/mubu_api.py --auth desktop node-link DOC_ID \
+  --node-id NODE_ID --url 'https://mubu.com/help/124' --label '来源'
+```
+
+写命令执行仍需 `--execute`，可配合 `--expect-version`。同级排序也使用 `node-move`；`--index` 按**移除目标子树后的**目标列表计算，省略为末尾。拒绝移动到自己或后代节点下。移动使用官方 `structureChanged` 单事件，不是删除后重建。
+
+`--replace` 仅允许原文字在一个文本格式片段内唯一匹配；跨加粗/链接等标签的匹配、多处匹配或空搜索词会拒绝。它不提供任意 HTML 注入、全面样式编辑或正则替换。`--append` 和 `node-link` 保留原字段并追加。链接支持完整 HTTP、HTTPS、Obsidian URL；Obsidian 链接能否在具体幕布客户端打开尚未实机验收。
+
+实机新增验收：顶层创建、跨父节点/顶层往返移动、原节点 ID 保持、链接显示、带加粗正文/图片/文档附件时的局部文字替换与追加图片。认证失效用合成无效凭据得到真实拒绝响应，未执行真实账号登出再登录。上传命令及更多边界见 [媒体说明](media.md)。

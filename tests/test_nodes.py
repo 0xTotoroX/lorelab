@@ -311,3 +311,95 @@ def test_auth_arguments_fail_without_credential_prompt(args):
             main()
     assert exc.value.code == 2
     prompt.assert_not_called()
+
+
+def test_branch_depth_and_ancestor_context(snapshot):
+    nodes = list_nodes(snapshot['definition'], root_id='child', depth=0, include_html=True)
+    assert [n['node_id'] for n in nodes] == ['child']
+    assert nodes[0]['ancestors'] == [{'node_id': 'parent', 'text': '父节点'}]
+    assert nodes[0]['text_html'] == '<span>子节点</span>'
+    assert [n['node_id'] for n in list_nodes(snapshot['definition'], depth=0)] == ['parent', 'sibling']
+    with pytest.raises(MubuError):
+        list_nodes(snapshot['definition'], root_id='missing')
+
+
+def test_root_creation_preserves_existing_tree(snapshot):
+    plan = make_plan(snapshot, 'create', None, text='root', index=1)
+    assert plan['event']['created'][0]['parentId'] is None
+    assert plan['event']['created'][0]['path'] == ['nodes', 1]
+    assert plan['expected']['nodes'][0] == snapshot['definition']['nodes'][0]
+    assert plan['expected']['nodes'][2] == snapshot['definition']['nodes'][1]
+
+
+def test_move_subtree_recalculates_destination_path(snapshot):
+    plan = make_plan(snapshot, 'move', 'parent', parent_id='sibling', index=0)
+    assert plan['expected']['nodes'][0]['id'] == 'sibling'
+    assert plan['expected']['nodes'][0]['children'][0] == snapshot['definition']['nodes'][0]
+    change = plan['event']['changed'][0]
+    assert change['original']['path'] == ['nodes', 0]
+    assert change['changed']['path'] == ['nodes', 0, 'children', 0]
+    assert plan['changed_ids'] == {'parent', 'sibling'}
+
+
+def test_move_to_root_and_reorder(snapshot):
+    plan = make_plan(snapshot, 'move', 'child', parent_id=None, index=0)
+    assert [n['id'] for n in plan['expected']['nodes']] == ['child', 'parent', 'sibling']
+    assert plan['expected']['nodes'][1]['children'] == []
+    reordered = make_plan(snapshot, 'move', 'parent', index=1)
+    assert [n['id'] for n in reordered['expected']['nodes']] == ['sibling', 'parent']
+
+
+@pytest.mark.parametrize('parent_id', ['parent', 'child', 'missing'])
+def test_move_rejects_cycles_and_missing_destinations(snapshot, parent_id):
+    with pytest.raises(MubuError):
+        make_plan(snapshot, 'move', 'parent', parent_id=parent_id)
+
+
+def test_rich_replace_and_append_keep_format_links_and_images(snapshot):
+    node = snapshot['definition']['nodes'][0]
+    node['text'] = '<b>旧观点 &amp; 条件</b><a href="https://example.com">出处</a>'
+    plan = make_plan(snapshot, 'update', 'parent', text='新观点', replace='旧观点')
+    assert plan['expected']['nodes'][0]['text'] == node['text'].replace('旧观点', '新观点')
+    assert plan['expected']['nodes'][0]['images'] == node['images']
+    appended = make_plan(snapshot, 'update', 'parent', text='补充', append=True)
+    assert appended['expected']['nodes'][0]['text'].startswith(node['text'] + '<span>\n</span>')
+
+
+@pytest.mark.parametrize('source,old', [('<b>相同</b><i>相同</i>', '相同'),
+                                        ('<b>跨</b><i>格式</i>', '跨格式'), ('abc', '')])
+def test_rich_replace_rejects_ambiguous_or_cross_format(snapshot, source, old):
+    snapshot['definition']['nodes'][0]['text'] = source
+    with pytest.raises(MubuError):
+        make_plan(snapshot, 'update', 'parent', text='new', replace=old)
+
+
+def test_link_append_preserves_original_and_escapes(snapshot):
+    plan = make_plan(snapshot, 'link', 'parent', field='note',
+                     url='https://example.com/?a=1&b=2', label='<来源>')
+    assert plan['expected']['nodes'][0]['note'] == (
+        '<span>描述</span><span>\n</span><a href="https://example.com/?a=1&amp;b=2">&lt;来源&gt;</a>')
+    with pytest.raises(MubuError):
+        make_plan(snapshot, 'link', 'parent', url='javascript:alert(1)')
+
+
+@responses.activate
+def test_desktop_expired_read_gives_desktop_relogin_guidance(tmp_path):
+    client = DesktopClient.__new__(DesktopClient)
+    client.token, client.user_id = 'expired', 'user'
+    client._session = requests.Session()
+    responses.post(BASE_URL + '/document/get', json={'code': 10007, 'msg': 'Unauthorized'})
+    with pytest.raises(MubuError, match='幕布桌面端重新登录'):
+        NodeEditor(client, tmp_path).snapshot('doc')
+    assert len(responses.calls) == 1
+
+
+@responses.activate
+def test_live_observed_login_expired_code_two(tmp_path):
+    client = DesktopClient.__new__(DesktopClient)
+    client.token, client.user_id = 'expired', 'user'
+    client._session = requests.Session()
+    responses.post(BASE_URL + '/document/get', json={'code': 2, 'msg': 'Login Expired',
+                                                    'data': {'message': 'Login Expired'}})
+    with pytest.raises(MubuError, match='幕布桌面端重新登录'):
+        NodeEditor(client, tmp_path).snapshot('doc')
+    assert len(responses.calls) == 1

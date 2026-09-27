@@ -1,19 +1,24 @@
 ---
 name: mubu-integration
-description: 幕布（mubu）与 Obsidian 集成：将幕布大纲导入 Obsidian、把 Markdown 同步到幕布、查询/导出幕布笔记。触发词：幕布、mubu、幕布导入 Obsidian、mubu 同步、幕布笔记导出
+description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图片上传与文档附件。触发词：幕布、mubu、幕布节点编辑、幕布图片附件、幕布笔记导出。不是自动双向同步。
 ---
 
 # 幕布集成 Skill
 
 幕布（mubu.com）是一款极简大纲工具，支持将大纲一键转为思维导图。本 Skill 提供 API 集成能力。
 
-## 权限与安全边界
-本 Skill 以你的幕布账号身份操作**远程真实内容**，使用前请知悉其权限边界：
-- **读取**：仅读取环境变量 `MUBU_PHONE` / `MUBU_PASSWORD` / `MUBU_MEMBER_ID`（环境变量未设置时，才由仓库外的 `~/.workbuddy/.env.mubu` 补全；`MUBU_MEMBER_ID` 即幕布 colla 成员 ID，仅 `save` 写回需要。**该值任何 API 都不返回，无法自动获取，必须手动设置 `MUBU_MEMBER_ID` 或提前写入 token 缓存的 `member_id`**）。
-- **写入**：仅在本地写入 Token 缓存文件 `~/.mubu_token`（权限 `0o600` + 跨进程 `fcntl` 锁），不写入其它文件。
-- **网络**：仅访问 `api2.mubu.com`（base URL 可由 `MUBU_BASE_URL` 覆盖，但仅限 `mubu.com` 家族域名，防 MITM），**无第三方服务、无遥测、无数据外发**。
-- **写操作需确认**：真实会改动幕布内容的写操作为 `create`（新建）、`rename_folder`（重命名文件夹）、`save`（保存文档，端点 `/colla/events`，需 `member_id`）、`move`（移动，端点 `/list/custom/drag`）、`rename_doc`（文档重命名，端点 `/list/rename_doc`）、`purge`（彻底删除，唯一真实调用服务端删除，不可逆）；`delete` 现为**软删除**（仅标记进本地回收站，云端副本仍在）。`save` / `move` / `rename_doc` 已在 v1.3.9 经真机验证可用。所有真实写操作均需显式传 `--yes` 才执行，否则中止并提示。
-- **信任边界**：Skill 不读取你的其它本地文件、不执行与幕布无关的 shell 命令；它只做「登录 → 读写你的幕布文档」这一件事。
+## Fork 能力与调用边界
+
+本项目 Fork 自 [liuboacean/mubu-integration](https://github.com/liuboacean/mubu-integration)。先查看当前 [README](.github/README.zh-CN.md)、[节点说明](docs/node-editing.md) 与 [媒体说明](docs/media.md)，区分已发布功能与待发布的 1.4.0 功能。
+
+- **读取**：密码模式读取环境变量或仓库外的凭据文件；`--auth desktop` 只读本机幕布已有登录记录。上传仅读取用户指定的本地文件。
+- **本地写入**：上游密码 Token 缓存、本地回收站、显式导出文件，以及节点/媒体操作日志。日志可能含完整文档，禁止提交或公开；桌面 Token 和 TOS 临时凭据不写日志。
+- **网络**：幕布 v3/v4 私有接口；附件使用幕布提供的临时凭据向其火山 TOS 存储上传，下载核验不转发幕布鉴权头。没有遥测。
+- **写入规则**：在用户授权范围内操作。新增节点与媒体命令默认预览，执行需要 `--execute`，可用 `--expect-version` 绑定文档版本；上游旧命令保留自身行为，不能把这些保护泛化给所有命令。`delete` 为本地标记，`purge --yes` 调用云端删除。
+- **错误处理**：上传/节点写入不自动重发。`uncertain` 表示可能已发生写入，先查记录和云端内容，不能盲目重试。只做个人串行编辑，不承诺服务端原子版本锁。
+- **认证**：桌面失效需用户在幕布桌面端重新登录。新节点命令自行生成 memberId；只有保留的旧 `save` 仍要求手工配置。
+
+新增命令：`nodes`、`node-update`、`node-create`、`node-delete`、`node-move`、`node-link`、`image-upload`、`attachment-upload`、`attachments`、`auth-status`。以 `--help` 和上述文档为准。图片属于节点，附件属于文档；不假定 Mubu Sync 已支持导出全部媒体。
 
 ## 功能概览
 

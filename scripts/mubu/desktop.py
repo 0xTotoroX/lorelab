@@ -93,6 +93,18 @@ class DesktopClient(MubuClient):
     def login(self) -> dict:
         raise MubuError("桌面会话失效；请在幕布桌面端重新登录，再重新运行 CLI")
 
+    def _request(self, method, endpoint, **kwargs):
+        try:
+            return super()._request(method, endpoint, **kwargs)
+        except MubuError as error:
+            body = error.body if isinstance(error.body, dict) else {}
+            if error.status_code == 401 or body.get("code") == 10007 or (
+                "登录失效" in str(error) or "重新登录" in str(error)
+            ):
+                raise MubuError("桌面会话失效；请在幕布桌面端重新登录，再重新运行 CLI",
+                                status_code=error.status_code, body=error.body) from None
+            raise
+
     def get_doc(self, doc_id: str) -> dict:
         data = self._request("POST", self.document_endpoint, max_retries=0, json={"docId": doc_id})
         try:

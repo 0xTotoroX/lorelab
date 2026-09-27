@@ -38,10 +38,10 @@ class NodeEditor:
         return {"doc_id": doc_id, "name": raw.get("name"),
                 "version": version, "definition": definition}
 
-    def nodes(self, doc_id, query=None):
+    def nodes(self, doc_id, query=None, **options):
         snapshot = self.snapshot(doc_id)
         return {"doc_id": doc_id, "name": snapshot["name"], "version": snapshot["version"],
-                "nodes": list_nodes(snapshot["definition"], query)}
+                "nodes": list_nodes(snapshot["definition"], query, **options)}
 
     def _record(self, path, record):
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
