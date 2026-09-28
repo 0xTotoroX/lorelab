@@ -85,7 +85,7 @@ uv run soota catalog "频道或 UP 主 URL" --incremental --max-cost 0.004 --jso
 
 ## 输出与个人配置
 
-用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过配置或 `--output` 指定 Obsidian 内的目录，Soota 不会自动定位或写入知识库。个人名单、处理规则、登录凭据和采集结果不应放入项目源码或共享 Skill。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
+用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过 `SOOTA_OUTPUT_DIR` 或 `--output` 指定 Obsidian 内的目录，Soota 不会自动定位或写入知识库。个人路径、账号选择和凭据从环境变量读取，不应把实际值写入项目或共享 Skill。名单、处理规则和采集结果保存在项目外的私人文件中。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
 
 ```text
 output/{platform}/{source_id}/

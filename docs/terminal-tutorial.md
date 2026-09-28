@@ -128,14 +128,18 @@ ask 是初始默认值：按能力先试 opencli-mcp、OpenCLI，轮到 TikHub �
 
 ## 个人资料与知识库规则
 
-配置文件放在项目外的 `~/.config/soota/config.toml`。已有的输出目录配置可指向自己的 Obsidian 知识库，例如：
+个人路径、浏览器 profile 和凭据通过环境变量传入。终端会话或项目外的私人 shell 配置保存实际值；不要将这些值写入仓库、共享 Skill、日志或聊天。下列示例只有占位值：
 
-```toml
-[soota]
-output_dir = "~/Documents/MyVault/收件箱/Soota"
+```bash
+export SOOTA_OUTPUT_DIR="/path/to/private-vault/收件箱/Soota"
+# 仅在需要覆盖默认路径或选择浏览器上下文时设置：
+export SOOTA_CONFIG_DIR="/path/to/private-soota-config"
+export OPENCLI_PROFILE="PROFILE_ALIAS"
 ```
 
-把示例路径换成自己的目录。个人关注名单、账号别名和执行偏好应放在用户自己的配置目录中，并由 Agent 按任务读取；当前 Soota 尚没有名单管理、定时追踪或规则执行命令，增加一个文件不会自动触发采集。
+还支持 `SOOTA_CACHE_DIR`、`SOOTA_DATA_DIR`、`SOOTA_OPENCLI_BINARY`、`SOOTA_OPENCLI_MCP_BINARY`。TikHub 凭据使用 `TIKHUB_API_KEY`；不要把真实值写在共享示例中。已有项目外的 `config.toml` 继续兼容，环境变量优先覆盖对应字段。
+
+个人关注名单和执行规则是结构化资料，应保存在项目外的私人文件中；环境变量只保存需要传递的路径或配置值，不把整份名单塞入环境变量。当前 Soota 尚没有名单管理、定时追踪或规则执行命令，不会自动读取名单文件。
 
 Obsidian 中的 `AGENTS.md` 可约定摘要格式、分类、引用和落盘位置，由 Agent 在写笔记前读取；Soota CLI 不解释该文件。通用 Skill 只说明工具使用方式，不能内置个人名单、私人知识库路径或账号资料。
 
