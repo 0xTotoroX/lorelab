@@ -1,56 +1,48 @@
-# 三来源功能映射与费用策略
+# 功能入口与费用策略
 
-Soota 的 `features` 是统一功能注册表：列出 Soota 已核验的 opencli-mcp 只读命令，动态读取 OpenCLI 命令元数据，再加入随包维护的 TikHub OpenAPI 注册表。原生入口保留三者已接入的能力；明确核验为同一用途的功能提供统一入口与来源顺序。功能清单可调用不代表每个网站都已联网验收，登录、权限、地区和上游改版仍可能影响执行。
+Soota 保留自己的采集、字幕、目录、任务、费用与运行时命令，以及已核验的 11 个统一业务入口和 TikHub 接口封装。`features` 不再批量导入 OpenCLI 的原生命令；旧的 `opencli.*` 功能 ID 已移除，调用时会提示改用上游 CLI。
 
-## 功能范围
+## 按任务发现能力
 
-2026-09-22 本机 OpenCLI 1.8.3 的 `list -f json` 登记 **1,050 条命令、162 个入口**：803 条 read、247 条 write；757 条需要浏览器，293 条不需要。范围包括搜索、用户资料、内容详情、时间线、评论、字幕、下载、热榜、开发者工具，以及发布和修改。`read` 仍可能下载文件；OpenCLI 不收 TikHub API 费用，但它调用的其他服务是否收费不能从清单推定。
+对于已有标准流程，直接使用 `ingest`、`inspect` 或 `catalog`，由 Soota 按已接入的能力路由。临时查询或组合任务由 Agent 依次查阅以下入口；这是任务执行顺序，不会把任意上游返回值自动转换成 Soota 内容包。
 
-该统计不包含 OpenCLI 自身的 daemon、plugin、browser 管理命令或外部 CLI passthrough。运行时升级后重新 `features list` 就会读取新功能；不需要把 1,050 条命令硬编码进 Soota。
+1. 先用 `soota mcp search` 查 opencli-mcp 的站点命令、说明和参数；能满足任务且标为 `read` 时，用 `soota mcp run` 执行。
+2. MCP 没有所需能力时，查 `opencli list -f json` 和具体命令的 `--help`，直接使用 OpenCLI。
+3. 两者均无法提供所需能力时，查 `soota api list/show`，通过 Soota 包装的 TikHub 接口执行，遵守费用策略。
 
-TikHub 快照含 1,063 条版本记录，选取新版后为 **964 个接口入口**，其中 900 个当前内容查询、63 个辅助接口、1 个已废弃入口。内容查询沿用 `api` 的验证与计费；辅助接口在 `features` 下显式 `--allow-write` 才能执行，未知价格仍停止，已废弃接口不可执行。该名称表示对非普通读取操作的显式选择，不代表每个辅助接口都会写入。
-
-opencli-mcp 当前接入 3 个只读站点命令：Bilibili 视频详情、字幕和 X 最近帖子。按上文 OpenCLI 1.8.3 快照计算，再加上 11 个跨 Provider 的统一入口，合计 **2,028 个入口**；其中 `bilibili.video.detail` 有三种方案，其余统一入口维持现有映射。该数量是功能入口数，实时运行时或上游接口变更后以 `features list` 为准。
-
-## 发现、查看、调用
-
-在仓库目录运行，或安装后省略 `uv run`：
+用户明确指定来源时遵从该选择。空结果、登录失败、限流或请求结果未知，不等于缺少能力，也不授权自动重试或付费。
 
 ```bash
-uv run soota features list --limit 50 --json
-uv run soota features list --site youtube --json
-uv run soota features list --provider opencli-mcp --json
-uv run soota features list --provider opencli --search subtitle --json
+uv run soota mcp search "bilibili subtitle" --json
+# 根据查询到的 args 准备 params.json；本例为 {"bvid":"BV1M1421t7hT"}
+uv run soota mcp run bilibili subtitle --params-file params.json --dry-run --json
+uv run soota mcp run bilibili subtitle --params-file params.json --output ./subtitle-native.json --json
+
+# MCP 不具备所需能力时，再查看 OpenCLI
+opencli list -f json
+opencli youtube transcript --help
+
+# TikHub 通过 Soota 的封装查询和调用
+uv run soota api list --platform youtube --json
+uv run soota api show bilibili.web.fetch_one_video --json
+```
+
+`mcp search` 查询上游实时元数据；`mcp run` 在同一会话中重新核对命令的只读声明和参数后执行。它不依赖逐条维护的映射，只开放站点读取命令，不开放通用浏览器控制或写操作。`--dry-run` 会连接 MCP 核对参数，但不执行业务命令。`--params-file` 必须是 JSON 对象，保留数字、布尔值、数组等实际类型；`--output` 将凭据脱敏后的原生结果写入新文件。返回结果仍由上游定义，不自动分页或生成 Markdown。
+
+## Soota 保留的功能注册表
+
+```bash
+uv run soota features list --site bilibili --json
 uv run soota features list --provider tikhub --search search --json
-uv run soota features list --offset 50 --limit 50 --json
 uv run soota features show twitter.profile --json
-uv run soota features show opencli.bilibili.subtitle --json
+uv run soota features call twitter.profile --param username=example --dry-run --json
+uv run soota features call twitter.profile --param username=example --json
 uv run soota features show opencli-mcp.bilibili.subtitle --json
-uv run soota features show tikhub.twitter.web.fetch_user_profile --json
 ```
 
-每个条目都有 `plans`，说明对应来源和操作。OpenCLI、TikHub 的 `show` 提供各自参数契约；opencli-mcp 的 `show` 标明已核验的站点命令，参数可在 `call --dry-run` 中核对。原生 ID 分别以 `opencli-mcp.`、`opencli.`、`tikhub.` 开头。指定原生 ID 就是明确选择该 Provider，不再自动替换。
+`features` 保留 3 个已有 MCP 适配器、11 个统一业务入口和 TikHub 注册表。TikHub 快照选取新版后有 964 个入口：900 个内容查询、63 个辅助接口、1 个已废弃入口。辅助接口需要显式 `--allow-write`，未知价格仍停止，已废弃接口不可执行。这个选项不代表每个辅助接口都会写入。
 
-```bash
-# 默认按已核验能力选择来源
-uv run soota features call twitter.profile --param username=jack --json
-
-# 只预览参数和所选方案，不调用业务接口
-uv run soota features call twitter.profile --param username=jack --dry-run --json
-
-# 明确选择 TikHub；默认仍会逐次询问是否付费
-uv run soota features call twitter.profile --param username=jack --provider tikhub --max-cost 0.01 --json
-
-# 字幕原生结果；需要已登录浏览器以及可用字幕
-uv run soota features call opencli.bilibili.subtitle --param bvid=BV1M1421t7hT --json
-uv run soota features call opencli-mcp.bilibili.subtitle \
-  --param bvid=BV1M1421t7hT --output ./subtitle-native.json --json
-
-# 搜索支持 top/latest，不承诺两家结果或分页完全一致
-uv run soota features call twitter.post.search --param 'query=from:jack' --param sort=latest --json
-```
-
-复杂参数可用 `--params-file params.json`，TikHub JSON 请求体用 `--body body.json`。字符串 ID 在 JSON 中保留引号；布尔参数写 `true` / `false`。未知参数、错误类型、重复参数在执行前拒绝。写入操作先 `show`、`--dry-run` 核对，再明确加 `--allow-write`。`features call --output` 将脱敏原生响应保存到新文件，stdout 只返回路径与状态。结果仍保持原生结构，`output_contract=provider_native`；若需要 Soota 的标准字幕、Markdown、目录续跑，使用 `ingest` / `catalog`。
+统一入口的 `plans` 说明可用来源；指定 `opencli-mcp.*` 或 `tikhub.*` ID 表示明确选择对应来源。复杂参数用 `--params-file`，TikHub 请求体用 `--body`。`features call --output NEW_FILE.json --json` 保存凭据脱敏后的原生响应；需要标准字幕、Markdown 或目录续跑时使用 `ingest` / `catalog`。
 
 ## 已核验的重叠映射
 
@@ -70,7 +62,7 @@ uv run soota features call twitter.post.search --param 'query=from:jack' --param
 | `youtube.video.detail` | `url` | 标准视频链接 |
 | `xiaohongshu.note.detail` | `url` | 已展开官方笔记链接，含 xsec_token；输出脱敏 |
 
-仅在请求发送前确认免费来源不可用时，统一入口才考虑下一方案。执行失败、限流、登录问题、无效 JSON、断线后结果不确定都不会触发盲目重试或自动收费。尚未核验等价关系的命令保留各自原生入口，不按同名猜测互换参数或分页。
+仅在请求发送前确认免费来源不可用时，统一入口才考虑下一方案。执行失败、限流、登录问题、无效 JSON、断线后结果不确定都不会触发盲目重试或自动收费。其他能力通过 MCP 查询入口、OpenCLI 原生命令或 TikHub API 查询，不按同名猜测互换参数或分页。
 
 已有标准流程也遵循此优先级：Bilibili 元数据与字幕先试 opencli-mcp，YouTube 从 OpenCLI 开始，TikHub 保留独立实现。X 的 opencli-mcp/OpenCLI 目录都是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
 
@@ -100,10 +92,12 @@ auto 配置必须明确给出 `--min-balance` 或 `--no-balance-limit`。余额�
 
 ## 代码边界
 
-- `features.py`：功能发现、原生入口和统一映射路由。
+- `features.py`：Soota 业务入口、已接入 MCP 适配器和 TikHub 注册表路由。
+- `mcp_cli.py`：按需搜索和执行 MCP 只读站点命令。
+- `providers/mcp_contract.py`：根据上游描述验证站点命令与 JSON 参数。
 - `feature_aliases.py`：人工核验的参数映射与语义限制。
 - `features_cli.py`：功能 list/show/call 命令。
-- `providers/opencli_commands.py`：动态元数据、参数验证、无 shell 的命令转发。
+- `providers/opencli_commands.py`：供现有业务入口使用的元数据、参数验证和无 shell 调用。
 - `providers/mcp_client.py` 与 `providers/opencli_mcp.py`：内部 stdio 客户端、只读能力白名单和规范化。
 - `billing.py`：每请求付费确认、余额暂停和免费元数据限速。
 - `policy_cli.py`：策略显示和原子保存。

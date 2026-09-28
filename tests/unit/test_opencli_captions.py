@@ -101,6 +101,7 @@ def test_default_estimate_is_free_offline_and_never_checks_tikhub_wallet(setting
 
 
 def test_empty_captions_preserve_metadata_without_paid_fallback_and_do_not_poison_cache(settings, monkeypatch):
+    monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: False)
     rows = []
     monkeypatch.setattr(
         OpenCLIProvider, "_run", lambda self, site, name, args: video_rows() if name == "video" else rows
@@ -115,6 +116,8 @@ def test_empty_captions_preserve_metadata_without_paid_fallback_and_do_not_poiso
 
 @pytest.mark.parametrize("error", [AuthBudgetError("login or 429"), ContractError("invalid captions")])
 def test_caption_restrictions_and_contract_errors_never_trigger_paid_fallback(settings, monkeypatch, error):
+    monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: False)
+
     def command(self, site, name, args):
         if name == "video":
             return video_rows()

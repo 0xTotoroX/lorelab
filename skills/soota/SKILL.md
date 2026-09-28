@@ -5,11 +5,13 @@ description: Use the local Soota CLI when the user wants to fetch or save YouTub
 
 # Soota
 
-Project: `/path/to/soota`. Run `uv run --project /path/to/soota soota ...` or an installed `soota` from this project. Codex calls this CLI; Soota chooses its internal Providers. Do not register opencli-mcp as a separate Codex tool for this workflow.
+Use an installed `soota` command. For a source checkout, resolve this SKILL.md symlink, locate the repository two directories above its skill directory, verify pyproject.toml belongs to Soota, and run `uv run --project <repository> soota ...`. Do not hard-code a personal checkout path. Codex calls this CLI; Soota chooses its internal Providers. Do not register opencli-mcp as a separate Codex tool for this workflow.
 
 1. Match the requested output. For a video, use `ingest URL --transcript captions-only|auto|asr|none --json`; `captions-only` saves actual captions and never starts ASR. Use `inspect URL --json` for metadata only. Run `doctor --json` if the runtime is unknown.
 2. The default capability order is opencli-mcp → OpenCLI → authorized TikHub. `--provider` selects one source explicitly. `--max-cost 0` blocks billed TikHub requests. In ask mode, noninteractive paid calls stop with `payment_required`; never bypass that gate or enable auto payment for the user.
 3. `--json` prints one status document. Report output paths, actual Provider, caption status/source, cache hit, request count, and estimated cost. Read `data.transcript` as a file path. For a download-only request, do not load or print the full transcript. For a requested summary, read the transcript in chunks, create Analysis JSON, then use `render`.
-4. For platform API queries and mapped functions, read [API reference](references/api.md). For catalogs and incremental snapshots, read [catalog reference](references/catalog.md). For summaries and evidence IDs, read [analysis reference](references/analysis.md). Load only the reference needed for this task.
+4. For ad hoc capability discovery and platform API queries, read [API reference](references/api.md). For catalogs and incremental snapshots, read [catalog reference](references/catalog.md). For summaries and evidence IDs, read [analysis reference](references/analysis.md). Load only the reference needed for this task.
 
 Keep cookies and API keys out of chat and command arguments. Captions take precedence over ASR; comments and danmaku are not captions. Do not archive full video or write into Obsidian unless the user asks. A Provider error after dispatch is not permission to retry or charge another source.
+
+Personal creator lists, account aliases, processing preferences and private paths belong in user-owned files outside this repository and shared Skill. Read only files needed for the requested task. Follow the destination vault’s local rules when writing requested notes; do not claim Soota automatically reads vault rules, schedules collection or manages watchlists. Check the destination’s own Git/sync exclusions before calling personal files untracked.

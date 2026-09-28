@@ -65,23 +65,6 @@ def list_features(
                     "plans": [{"provider": "opencli-mcp", "operation": operation}],
                 }
             )
-    if provider in {None, "opencli"}:
-        try:
-            for command in opencli_commands.commands(settings):
-                rows.append(
-                    {
-                        "id": "opencli." + command["command"].replace("/", "."),
-                        "site": command["site"],
-                        "description": command.get("description", ""),
-                        "providers": ["opencli"],
-                        "access": command["access"],
-                        "callable": True,
-                        "browser": command["browser"],
-                        "plans": [{"provider": "opencli", "operation": command["command"]}],
-                    }
-                )
-        except RuntimeUnavailable as exc:
-            warnings.append(exc.message + " OpenCLI 功能未载入；安装运行时后重新 list 即自动发现。")
     if provider in {None, "tikhub"}:
         for endpoint in load_registry().preferred():
             rows.append(
@@ -120,7 +103,7 @@ def list_features(
             "total": len(selected),
             "offset": offset,
             "next_offset": offset + len(page) if offset + len(page) < len(selected) else None,
-            "inventory": "opencli-mcp 已核验只读白名单；OpenCLI 动态发现；TikHub 随包版本化注册表；未逐一联网验收",
+            "inventory": "Soota 业务入口、已核验 MCP 能力和 TikHub 封装；OpenCLI 原生命令直接使用上游 CLI",
         },
         warnings,
     )
@@ -153,7 +136,7 @@ def resolve_opencli(settings: SootaSettings, selector: str) -> dict[str, Any]:
     for command in opencli_commands.commands(settings):
         if selector == "opencli." + command["command"].replace("/", "."):
             return command
-    raise RuntimeUnavailable("当前 OpenCLI 运行时没有该功能。", hint="features list --provider opencli 查看当前能力。")
+    raise RuntimeUnavailable("当前 OpenCLI 运行时没有该功能。", hint="通过 opencli list -f json 查询上游当前能力。")
 
 
 def show_feature(settings: SootaSettings, selector: str) -> CommandResult:
@@ -161,8 +144,7 @@ def show_feature(settings: SootaSettings, selector: str) -> CommandResult:
     if alias:
         return success(alias.description, {"feature": alias_view(settings, alias)})
     if selector.startswith("opencli."):
-        command = resolve_opencli(settings, selector)
-        return success("OpenCLI 原生功能契约。", {"feature": {"id": selector, **command}})
+        raise InputError("OpenCLI 原生命令映射已移除。", hint="使用 opencli list -f json 和上游命令的 --help。")
     if selector.startswith("opencli-mcp."):
         site_name, command_name = resolve_mcp(selector)
         return success(
@@ -355,9 +337,7 @@ def call_feature(
     if body_file:
         raise InputError("--body 仅适用于 tikhub.* 原生功能。")
     if selector.startswith("opencli."):
-        if provider in {"opencli-mcp", "tikhub"}:
-            raise InputError("原生 OpenCLI 功能不能指定其他 Provider；请选择统一功能 id。")
-        result = _native_opencli(settings, selector, values, dry_run=dry_run, allow_write=allow_write)
+        raise InputError("OpenCLI 原生命令映射已移除。", hint="直接调用 OpenCLI，或选择 Soota 的统一业务入口。")
     elif selector.startswith("opencli-mcp."):
         if provider in {"opencli", "tikhub"}:
             raise InputError("原生 opencli-mcp 功能不能指定其他 Provider；请选择统一功能 id。")

@@ -13,6 +13,7 @@ from soota.catalog import resume_catalog as resume_catalog_cmd
 from soota.cli_output import run as _run
 from soota.cli_output import run_settings
 from soota.features_cli import app as features_app
+from soota.mcp_cli import app as mcp_app
 from soota.models import TranscriptMode
 from soota.pipeline import doctor as doctor_cmd
 from soota.pipeline import estimate as estimate_cmd
@@ -36,6 +37,7 @@ app.add_typer(runtime_app, name="runtime")
 app.add_typer(policy_app, name="policy")
 app.add_typer(features_app, name="features")
 app.add_typer(updates_app, name="updates")
+app.add_typer(mcp_app, name="mcp")
 
 
 @app.command()

@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import shutil
 import subprocess
 import threading
 import time
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
 from soota.config import OpenCLIMCPConfig
 from soota.errors import ContractError, SourceError
+from soota.providers.mcp_contract import validate_read_command
 from soota.providers.opencli_runtime import RuntimeUnavailable
 
 VERIFIED_SERVER_VERSION = "0.0.22"
@@ -38,17 +41,26 @@ class StdioMCPClient:
         return self._call(name, arguments)
 
     def call_site_readonly(
-        self, site: str, command: str, args: dict[str, Any], *, expected_domain: str
+        self,
+        site: str,
+        command: str,
+        args: dict[str, Any],
+        *,
+        expected_domain: str | None = None,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
         self._assert_no_override(site, command)
         return self._call(
             "site_run",
             {"site": site, "command": command, "args": args},
             readonly_guard=(site, command, args, expected_domain),
+            dry_run=dry_run,
         )
 
     @staticmethod
     def _assert_no_override(site: str, command: str) -> None:
+        if not all(re.fullmatch(r"[a-zA-Z0-9_][a-zA-Z0-9_-]*", part) for part in (site, command)):
+            raise ContractError("opencli-mcp 站点或命令名称无效。")
         # The Chrome-owned host loads this directory after built-ins, so a same-name user adapter wins.
         override = Path.home() / ".opencli-mcp" / "adapters" / site / f"{command}.js"
         if override.exists() or override.is_symlink():
@@ -56,35 +68,17 @@ class StdioMCPClient:
 
     @staticmethod
     def _assert_read_contract(
-        payload: dict[str, Any], site: str, command: str, args: dict[str, Any], expected_domain: str
+        payload: dict[str, Any], site: str, command: str, args: dict[str, Any], expected_domain: str | None
     ) -> None:
-        results = payload.get("results")
-        if not isinstance(results, list):
-            raise ContractError("opencli-mcp 未返回站点命令元数据。")
-        matches = [
-            row for row in results if isinstance(row, dict) and row.get("site") == site and row.get("name") == command
-        ]
-        if len(matches) != 1 or matches[0].get("access") != "read" or matches[0].get("domain") != expected_domain:
-            raise ContractError("opencli-mcp 站点命令不再符合已核验的只读契约。")
-        fields = matches[0].get("args")
-        if not isinstance(fields, list) or not all(isinstance(field, dict) for field in fields):
-            raise ContractError("opencli-mcp 站点参数契约缺失。")
-        declared = {field.get("name"): field for field in fields}
-        if len(declared) != len(fields) or any(key not in declared for key in args):
-            raise ContractError("opencli-mcp 站点参数契约已变化。")
-        if any(field.get("required") is True and field.get("name") not in args for field in fields):
-            raise ContractError("opencli-mcp 站点新增必填参数。")
-        for key, value in args.items():
-            expected_type = "int" if isinstance(value, int) and not isinstance(value, bool) else "string"
-            if declared[key].get("type") != expected_type:
-                raise ContractError("opencli-mcp 站点参数类型已变化。")
+        validate_read_command(payload, site, command, args, expected_domain)
 
     def _call(
         self,
         name: str,
         arguments: dict[str, Any],
         *,
-        readonly_guard: tuple[str, str, dict[str, Any], str] | None = None,
+        readonly_guard: tuple[str, str, dict[str, Any], str | None] | None = None,
+        dry_run: bool = False,
     ) -> dict[str, Any]:
         binary = self.config.binary or "opencli-mcp"
         resolved = shutil.which(binary)
@@ -152,6 +146,8 @@ class StdioMCPClient:
                 discovery = self._decode_tool(self._response(messages, 2, min(self.config.timeout_seconds, 15)))
                 self._assert_read_contract(discovery, site, command, args, expected_domain)
                 self._assert_no_override(site, command)
+                if dry_run:
+                    return {"ok": True, "site": site, "command": command, "args": args, "dispatched": False}
             call_id = 3 if readonly_guard is not None else 2
             self._send(
                 process,
@@ -166,14 +162,17 @@ class StdioMCPClient:
             response = self._response(messages, call_id, self.config.timeout_seconds, dispatched=True)
             return self._decode_tool(response)
         finally:
-            if process.poll() is None:
-                process.terminate()
+            with suppress(OSError):
+                process.stdin.close()
             try:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=3)
-            process.stdin.close()
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3)
             process.stdout.close()
 
     @staticmethod

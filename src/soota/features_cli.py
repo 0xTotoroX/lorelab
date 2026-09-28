@@ -8,7 +8,7 @@ import typer
 from soota.cli_output import run_settings
 from soota.features import call_feature, list_features, show_feature
 
-app = typer.Typer(help="映射 opencli-mcp、OpenCLI、TikHub 功能并集；原生入口与已核验的重叠功能。")
+app = typer.Typer(help="查看和执行 Soota 业务入口、已核验 MCP 能力与 TikHub 封装。")
 
 
 @app.command("list")
@@ -50,7 +50,7 @@ def call(
     ] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="TikHub 本次额外费用上限，USD")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
-    allow_write: Annotated[bool, typer.Option("--allow-write", help="明确允许所选 OpenCLI 写入命令")] = False,
+    allow_write: Annotated[bool, typer.Option("--allow-write", help="明确允许 TikHub 辅助接口")] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     run_settings(

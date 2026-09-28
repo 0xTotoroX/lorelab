@@ -24,7 +24,7 @@ def discovery(monkeypatch):
 def test_union_and_all_native_plans(settings):
     result = list_features(settings, limit=5000)
     features = result.data["features"]
-    assert len(features) == len(ROWS) + len(load_registry().preferred()) + len(ALIASES) + 3
+    assert len(features) == len(load_registry().preferred()) + len(ALIASES) + 3
     assert all(row["plans"] for row in features)
     assert next(row for row in features if row["id"] == "twitter.profile")["plans"][0]["provider"] == "opencli"
     unsupported = next(row for row in features if row["id"] == "tikhub.tiktok.web.device_register")
@@ -82,7 +82,7 @@ def test_priority_explicit_override_and_unavailable_fallback(settings, monkeypat
     assert result.data["provider"] == "tikhub"
     with pytest.raises(RuntimeUnavailable):
         call_feature(settings, "twitter.profile", params=["username=example"], provider="opencli")
-    assert list_features(settings).warnings
+    assert not any(row["id"].startswith("opencli.") for row in list_features(settings).data["features"])
 
 
 def test_failure_after_dispatch_never_falls_back(settings, monkeypatch):
@@ -204,18 +204,14 @@ def test_xiaohongshu_signed_paths(path):
     assert paid == {"note_id": "123", "xsec_token": "secret"}
 
 
-def test_native_passcode_is_redacted_in_preview(settings, monkeypatch):
-    row = {
-        "site": "quark",
-        "name": "save",
-        "command": "quark/save",
-        "access": "write",
-        "browser": True,
-        "args": [{"name": "passcode", "type": "str"}],
-    }
-    monkeypatch.setattr(opencli_commands, "commands", lambda settings: [row])
-    result = call_feature(settings, "opencli.quark.save", params=["passcode=1234"], dry_run=True)
-    assert "1234" not in json.dumps(result.model_dump())
+@pytest.mark.parametrize("selector", ["opencli.quark.save", "opencli.twitter.profile"])
+def test_removed_native_opencli_entries_never_discover_or_dispatch(settings, monkeypatch, selector):
+    monkeypatch.setattr(opencli_commands, "commands", lambda *args: pytest.fail("must not discover native mappings"))
+    monkeypatch.setattr(opencli_commands, "execute", lambda *args, **kwargs: pytest.fail("must not dispatch"))
+    for action in (show_feature, call_feature):
+        with pytest.raises(InputError, match="映射已移除"):
+            action(settings, selector)
+    assert not any(row["id"].startswith("opencli.") for row in list_features(settings, limit=5000).data["features"])
 
 
 def test_integer_parameters_do_not_round_long_ids():

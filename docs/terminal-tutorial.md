@@ -108,9 +108,12 @@ uv run soota runtime rollback --json
 
 完整边界和配置见 [Provider 与运行时](providers.md)，可续跑的 TikHub 视频目录见 [目录说明](catalog.md)。
 
-## 查询全部功能与设置付款方式
+## 查询任务能力与设置付款方式
 
 ```bash
+uv run soota mcp search "bilibili subtitle" --json
+# MCP 不具备所需能力时查阅上游 OpenCLI
+opencli list -f json
 uv run soota features list --site bilibili --json
 uv run soota features show twitter.profile --json
 uv run soota features call twitter.profile --param username=jack --json
@@ -121,4 +124,19 @@ uv run soota policy set --mode auto --min-balance 5
 uv run soota policy set --mode auto --no-balance-limit
 ```
 
-ask 是初始默认值：按能力先试 opencli-mcp、OpenCLI，轮到 TikHub 收费前在终端询问 y/N。auto 只改变 TikHub 的付费授权，不改来源顺序；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。完整能力范围、11 个重叠映射及原生功能操作见 [三来源功能映射与费用策略](features.md)。
+ask 是初始默认值：按能力先试 opencli-mcp、OpenCLI，轮到 TikHub 收费前在终端询问 y/N。auto 只改变 TikHub 的付费授权，不改来源顺序；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。现有业务入口、MCP 按需调用和 TikHub 封装见 [功能入口与费用策略](features.md)。
+
+## 个人资料与知识库规则
+
+配置文件放在项目外的 `~/.config/soota/config.toml`。已有的输出目录配置可指向自己的 Obsidian 知识库，例如：
+
+```toml
+[soota]
+output_dir = "~/Documents/MyVault/收件箱/Soota"
+```
+
+把示例路径换成自己的目录。个人关注名单、账号别名和执行偏好应放在用户自己的配置目录中，并由 Agent 按任务读取；当前 Soota 尚没有名单管理、定时追踪或规则执行命令，增加一个文件不会自动触发采集。
+
+Obsidian 中的 `AGENTS.md` 可约定摘要格式、分类、引用和落盘位置，由 Agent 在写笔记前读取；Soota CLI 不解释该文件。通用 Skill 只说明工具使用方式，不能内置个人名单、私人知识库路径或账号资料。
+
+项目外不等于不会上传：知识库、用户配置或云盘若另外开启同步，需要在各自的同步/Git 配置中排除私人名单、状态和采集结果。Git 忽略规则不会清除已经提交过的历史内容。

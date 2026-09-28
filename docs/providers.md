@@ -1,6 +1,6 @@
 # Provider 与独立运行时
 
-Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp、OpenCLI、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按来源策略选择；初始顺序为 opencli-mcp → OpenCLI → 经授权的 TikHub。完整原生功能和重叠映射见 [功能并集](features.md)。
+Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp、OpenCLI、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按来源策略选择；初始顺序为 opencli-mcp → OpenCLI → 经授权的 TikHub。业务入口和按需发现方式见 [功能入口与费用策略](features.md)。
 
 ## 当前接入范围
 
@@ -61,7 +61,9 @@ metadata_cache_seconds = 300
 default_provider = "auto"  # 或 opencli-mcp / opencli / tikhub
 ```
 
-`SOOTA_OPENCLI_MCP_BINARY` 可覆盖 MCP 可执行文件路径。MCP 元数据和字幕缓存独立于 OpenCLI；切换浏览器登录账号时应清除相应缓存。当前核验 opencli-mcp `0.0.22`；三个站点命令在 Soota 白名单中，执行前还会核对服务版本、当前只读元数据和参数契约，发现同名本地 adapter 覆盖就停止。上游升级后需重新核验契约。Soota 不暴露 opencli-mcp 的通用浏览器写操作。
+`SOOTA_OPENCLI_MCP_BINARY` 可覆盖 MCP 可执行文件路径。MCP 元数据和字幕缓存独立于 OpenCLI；切换浏览器登录账号时应清除相应缓存。当前核验 opencli-mcp `0.0.22`；标准内容流程接入三个站点命令，`mcp search/run` 还可按需发现并调用其他只读站点命令。执行前会核对服务版本、当前只读元数据和参数契约，发现同名本地 adapter 覆盖就停止。上游升级后需重新核验契约。Soota 不暴露 opencli-mcp 的通用浏览器写操作。
+
+每条 Soota MCP 命令拥有独立 stdio 会话；结束时关闭 stdin，让上游清理会话，超时后才终止进程。Chrome 管理的 Native Messaging 宿主与浏览器扩展可能继续运行，这不代表 Soota 仍保持连接。
 
 ## 独立升级与回滚
 
@@ -86,6 +88,8 @@ uv run soota runtime rollback --json
 | 文件 | 职责 |
 | --- | --- |
 | `providers/router.py` | 能力选择、元数据兜底和请求预算 |
+| `mcp_cli.py` | 按需发现并调用 MCP 只读站点命令 |
+| `providers/mcp_contract.py` | 将上游参数描述转换为 JSON Schema 并验证调用 |
 | `providers/mcp_client.py` | 本地 stdio MCP 会话、响应大小与超时控制 |
 | `providers/opencli_mcp.py` | opencli-mcp 只读命令白名单、结果规范化和缓存 |
 | `providers/opencli.py` | 只读命令白名单、输出规范化、缓存与快照 |

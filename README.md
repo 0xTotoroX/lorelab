@@ -4,7 +4,7 @@
 
 Soota 是本地优先的内容摄取 CLI：优先使用 opencli-mcp 和 OpenCLI 的已核验免费能力，再按费用策略使用 TikHub，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令；opencli-mcp 由 Soota 内部调用，无需在 Codex 中单独注册。
 
-已接入 opencli-mcp 的 Bilibili 视频详情与字幕、X 最近快照，以及 OpenCLI 的 X 最近快照、视频元数据和字幕；还提供三个来源的功能入口、11 个统一重叠入口、逐次确认/自动付费策略，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 opencli-mcp 的 Bilibili 视频详情与字幕、X 最近快照，以及 OpenCLI 的 X 最近快照、视频元数据和字幕；还提供 MCP 命令按需查询与只读调用、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -34,6 +34,7 @@ security add-generic-password -s soota.tikhub -a api_key -w
 uv run soota doctor --json
 uv run soota updates check --json
 uv run soota platforms --json
+uv run soota mcp search "bilibili subtitle" --json
 uv run soota api list --platform bilibili --task detail --json
 uv run soota api show bilibili.web.fetch_one_video --json
 uv run soota inspect "URL" --json
@@ -82,7 +83,9 @@ uv run soota catalog "频道或 UP 主 URL" --incremental --max-cost 0.004 --jso
 
 `--incremental` 创建新快照，跳过本机历史目录中已收录的视频；遇到整页都已收录时停止。默认上限是 100 条、10 页。目录只生成视频链接与已有元数据，不自动获取字幕、音频或摘要。使用方法、恢复边界与接口证据见 [目录采集说明](docs/catalog.md)。
 
-## 输出
+## 输出与个人配置
+
+用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过配置或 `--output` 指定 Obsidian 内的目录，Soota 不会自动定位或写入知识库。个人名单、处理规则、登录凭据和采集结果不应放入项目源码或共享 Skill。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
 
 ```text
 output/{platform}/{source_id}/

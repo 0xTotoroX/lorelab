@@ -20,14 +20,17 @@ BILI = "https://www.bilibili.com/video/BV1M1421t7hT"
 X = "https://x.com/example"
 
 
-def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path):
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path, dry_run):
     fake = tmp_path / "fake-mcp"
+    marker = tmp_path / "session-closed"
     fake.write_text(
         "#!/usr/bin/env python3\n"
         + textwrap.dedent(
             """
             import json
             import sys
+            from pathlib import Path
             for line in sys.stdin:
                 request = json.loads(line)
                 if request.get('method') == 'initialize':
@@ -50,14 +53,23 @@ def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path):
                     continue
                 sys.stdout.write(json.dumps(response) + '\\n')
                 sys.stdout.flush()
+            Path(__file__).with_name('session-closed').write_text('closed on EOF')
             """
         )
     )
+    if dry_run:
+        fake.write_text(
+            fake.read_text().replace("assert request['params']['name'] == 'site_run'", "raise SystemExit(9)")
+        )
     fake.chmod(0o755)
     result = StdioMCPClient(OpenCLIMCPConfig(binary=str(fake), timeout_seconds=2)).call_site_readonly(
-        "bilibili", "video", {"bvid": "BV1M1421t7hT"}, expected_domain="bilibili.com"
+        "bilibili", "video", {"bvid": "BV1M1421t7hT"}, dry_run=dry_run
     )
-    assert result == {"ok": True, "rows": [{"title": "Example"}]}
+    if dry_run:
+        assert result["dispatched"] is False
+    else:
+        assert result == {"ok": True, "rows": [{"title": "Example"}]}
+    assert marker.read_text() == "closed on EOF"
 
 
 def test_readonly_guard_rejects_write_override_and_changed_contract(tmp_path, monkeypatch):
