@@ -22,6 +22,7 @@ from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
 from soota.policy_cli import app as policy_app
 from soota.runtime_cli import app as runtime_app
+from soota.updates_cli import app as updates_app
 
 app = typer.Typer(
     add_completion=False,
@@ -34,6 +35,7 @@ app.add_typer(api_app, name="api")
 app.add_typer(runtime_app, name="runtime")
 app.add_typer(policy_app, name="policy")
 app.add_typer(features_app, name="features")
+app.add_typer(updates_app, name="updates")
 
 
 @app.command()

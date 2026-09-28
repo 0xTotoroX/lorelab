@@ -52,14 +52,14 @@ def test_free_metadata_without_key_or_sdk_and_cache_profile_isolation(settings, 
         return video_rows()
 
     monkeypatch.setattr(OpenCLIProvider, "_run", read)
-    first = inspect(settings, BILI, max_cost=0)
-    second = inspect(settings, BILI, max_cost=0)
+    first = inspect(settings, BILI, provider="opencli", max_cost=0)
+    second = inspect(settings, BILI, provider="opencli", max_cost=0)
     assert first.data["provider"] == "opencli"
     assert first.data["metadata"]["duration_seconds"] == 754
     assert second.data["requests"][0]["cache_hit"]
     assert len(calls) == 1
     settings.opencli.profile = "separate-account"
-    inspect(settings, BILI)
+    inspect(settings, BILI, provider="opencli")
     assert len(calls) == 2
 
 
@@ -67,8 +67,8 @@ def test_cache_expiration_and_identity_contract(settings, monkeypatch):
     calls = []
     monkeypatch.setattr(OpenCLIProvider, "_run", lambda *args: calls.append(1) or video_rows())
     settings.opencli.metadata_cache_seconds = 0
-    inspect(settings, BILI)
-    inspect(settings, BILI)
+    inspect(settings, BILI, provider="opencli")
+    inspect(settings, BILI, provider="opencli")
     assert len(calls) == 2
     rows = video_rows()
     rows[0]["value"] = "BV1111111111"
@@ -79,7 +79,7 @@ def test_cache_expiration_and_identity_contract(settings, monkeypatch):
 def test_metadata_bundle_does_not_read_tikhub_or_write_missing_transcript_cache(settings, monkeypatch):
     monkeypatch.setattr("soota.providers.router.TikHubProvider", fail)
     monkeypatch.setattr(OpenCLIProvider, "_run", lambda *args: video_rows())
-    result = ingest(settings, BILI, transcript=TranscriptMode.NONE, max_cost=0)
+    result = ingest(settings, BILI, transcript=TranscriptMode.NONE, provider="opencli", max_cost=0)
     manifest = json.loads(Path(result.data["manifest"]).read_text())
     assert result.ok and manifest["processing"]["provider"] == "opencli"
     assert manifest["metadata"]["provenance"]["profile"] == "test-context"
@@ -100,7 +100,7 @@ def test_authorized_fallback_only_for_unavailable_runtime(settings, monkeypatch)
     with pytest.raises(RuntimeUnavailable):
         inspect_item(settings, recognize(BILI), provider="opencli", requester=fail)
     item, records, warnings = inspect_item(
-        settings, recognize(BILI), fallback="tikhub", max_cost=0.01, requester=requester
+        settings, recognize(BILI), provider="opencli", fallback="tikhub", max_cost=0.01, requester=requester
     )
     assert item.provenance["provider"] == "tikhub" and warnings
     assert calls == ["/api/v1/bilibili/web/fetch_one_video_v3"]
@@ -115,7 +115,7 @@ def test_restricted_or_broken_source_never_falls_back(settings, monkeypatch, err
     monkeypatch.setattr(OpenCLIProvider, "_run", broken)
     monkeypatch.setattr("soota.providers.router.TikHubProvider", fail)
     with pytest.raises(type(error)):
-        inspect_item(settings, recognize(BILI), fallback="tikhub", max_cost=0.01)
+        inspect_item(settings, recognize(BILI), provider="opencli", fallback="tikhub", max_cost=0.01)
 
 
 def test_zero_budget_never_dispatches_paid_even_with_zero_price(settings, monkeypatch):
@@ -131,17 +131,17 @@ def test_zero_budget_never_dispatches_paid_even_with_zero_price(settings, monkey
 def test_snapshot_preserves_posts_deduplicates_and_never_claims_caught_up(settings, monkeypatch):
     monkeypatch.setattr("soota.catalog.TikHubProvider", fail)
     monkeypatch.setattr(OpenCLIProvider, "_run", lambda *args: [post(), post(), post("456", "Second"), {"id": "bad"}])
-    first = catalog(settings, X, max_items=5, max_cost=0)
+    first = catalog(settings, X, max_items=5, max_cost=0, provider="opencli")
     assert first.ok and first.data["completeness"] == "unknown" and not first.data["resumable"]
     assert first.data["item_count"] == 2 and first.data["stop_reason"] == "bounded_snapshot"
     payload = json.loads(Path(first.data["catalog"]).read_text())
     assert payload["items"][0]["text"] == "A full post"
     assert any("不符合" in w for w in first.warnings)
     assert payload["processing"]["provider"] == "opencli"
-    second = catalog(settings, X, max_items=5, max_cost=0, incremental=True)
+    second = catalog(settings, X, max_items=5, max_cost=0, incremental=True, provider="opencli")
     assert second.data["item_count"] == 0 and second.data["stop_reason"] == "bounded_snapshot"
     settings.opencli.profile = "other"
-    third = catalog(settings, X, max_items=5, max_cost=0, incremental=True)
+    third = catalog(settings, X, max_items=5, max_cost=0, incremental=True, provider="opencli")
     assert third.data["item_count"] == 2
     with pytest.raises(InputError, match="游标"):
         resume_catalog(settings, first.data["job_id"])

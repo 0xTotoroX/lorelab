@@ -85,12 +85,20 @@ uv run soota ingest "视频 URL" --provider tikhub --transcript auto \
 
 这里的 0.05 是示例预算上限，不是固定收费。
 
-## 4. 更新 OpenCLI，不更新 Soota
+## 4. 检查三个 Provider 的更新
+
+```bash
+uv run soota updates check --json
+```
+
+结果分别给出本机版本、npm／PyPI 最新包版本和上游主分支相对本机版本标签的提交关系。`package_update_available` 表示有较新的包版本；主分支 `ahead` 只表示有新提交，`diverged` 表示提交历史已分叉，都不能直接当作可安装的新版本。网络查询失败会返回 partial 和退出码 2；命令不会安装更新，也不会同步私有备份。
+
+OpenCLI 仍可单独升级和回滚：
 
 ```bash
 uv run soota runtime check-update --json
-# 按查询结果选择明确版本；此处 1.8.7 是本轮核实过的示例。
-uv run soota runtime update --version 1.8.7 --json
+# 按查询结果填入要安装的明确版本。
+uv run soota runtime update --version 版本号 --json
 uv run soota runtime status --json
 # 如需恢复：
 uv run soota runtime rollback --json

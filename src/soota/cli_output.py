@@ -35,6 +35,19 @@ def emit(result: CommandResult, json_output: bool) -> None:
             typer.echo(f"{job['id']}  {job.get('kind', 'ingest')}  {job.get('status', 'unknown')}")
         for platform in data.get("platforms", []):
             typer.echo(f"{platform['platform']:18} {platform['name']:14} API: {platform['api_operations']}")
+        for update in data.get("provider_updates", []):
+            relation = {
+                "identical": "与当前标签相同",
+                "ahead": f"多 {update['commits_ahead']} 个提交",
+                "behind": "主分支较旧",
+                "diverged": "历史已分叉",
+                "unknown": "无法比较",
+            }[update["branch_relation_to_installed_tag"]]
+            typer.echo(
+                f"{update['provider']}: 已装 {update['installed_version'] or '未安装'}，"
+                f"包最新版 {update['latest_package_version'] or '未知'}，"
+                f"上游主分支 {relation}"
+            )
         for endpoint in data.get("endpoints", []):
             if isinstance(endpoint, dict):
                 typer.echo(f"{endpoint['key']}  {endpoint['method']} {endpoint['path']}")

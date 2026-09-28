@@ -32,6 +32,7 @@ security add-generic-password -s soota.tikhub -a api_key -w
 
 ```bash
 uv run soota doctor --json
+uv run soota updates check --json
 uv run soota platforms --json
 uv run soota api list --platform bilibili --task detail --json
 uv run soota api show bilibili.web.fetch_one_video --json
@@ -47,6 +48,8 @@ uv run soota jobs resume JOB_ID --json
 字幕模式：`auto`、`captions-only`、`asr`、`none`。默认按能力依次尝试 opencli-mcp、OpenCLI、经授权的 TikHub；YouTube 直接从 OpenCLI 开始。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
 
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。
+
+`updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
 
 ## 多平台查询
 

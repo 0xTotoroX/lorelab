@@ -66,6 +66,7 @@ default_provider = "auto"  # 或 opencli-mcp / opencli / tikhub
 ## 独立升级与回滚
 
 ```bash
+uv run soota updates check --json
 uv run soota runtime status --json
 uv run soota runtime check-update --json
 uv run soota runtime update --version 1.8.7 --json
@@ -78,6 +79,7 @@ uv run soota runtime rollback --json
 - 运行时互斥锁避免 Soota 正在执行命令时升级。外部 OpenCLI 不受该锁管理；采集前只读检查 daemon 版本，若不同立即停止，防止 OpenCLI 自动接管用户的旧 daemon。应等待外部采集结束后手动切换 daemon，或 rollback。不要为了使用新版本中断已有任务。
 - 升级检查不访问网站，不证明站点可用；更新后用一条已知公开视频的零预算 `inspect` 验证。全局程序有本地补丁时，不会把补丁复制到受管官方包。
 - TikHub SDK 的升级使用开发流程：编辑锁定版本、`uv lock`、测试、核查该版许可、Git commit，再 `uv sync`；不在运行中的 Python 环境自我升级。
+- `updates check` 只读查询三个 Provider 的 npm／PyPI 包版本及 GitHub 默认分支。分支有新提交、包有新版和 Soota 已核验兼容是三件不同的事；此命令不安装、不切换运行时，也不同步上游仓库备份。
 
 ## 文件职责
 
@@ -91,6 +93,7 @@ uv run soota runtime rollback --json
 | `providers/process.py` | 无 shell 的 argv 调用、输出上限、超时和取消 |
 | `providers/opencli_runtime.py` | 外部/受管运行时选择、完整性校验、安装与回滚 |
 | `runtime_cli.py` | 对外暴露运行时管理命令 |
+| `updates.py`、`updates_cli.py` | 查询三个 Provider 的包版本和仓库提交关系，并提供只读 CLI 命令 |
 
 契约参考：[OpenCLI v1.8.3](https://github.com/jackwener/OpenCLI/tree/v1.8.3)、[TikHub 官方 X 接口](https://docs.tikhub.io/191321711e0)。TikHub X 官方响应样例的 `data` 为空，尚不足以实现严格分页解析器；本轮没有发送收费请求来猜测结构。
 
