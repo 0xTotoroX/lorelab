@@ -14,16 +14,18 @@ from soota.providers.opencli import capabilities_for as opencli_capabilities
 from soota.providers.opencli_mcp import OpenCLIMCPProvider
 from soota.providers.opencli_mcp import capabilities_for as mcp_capabilities
 from soota.providers.opencli_runtime import RuntimeUnavailable
+from soota.providers.soota import SootaProvider
+from soota.providers.soota import capabilities_for as soota_capabilities
 from soota.providers.tikhub.capability import capabilities_for as tikhub_capabilities
 from soota.providers.tikhub.client import TikHubProvider
 from soota.storage.cache import CacheStore
 
-ProviderName = Literal["auto", "opencli-mcp", "opencli", "tikhub"]
+ProviderName = Literal["auto", "opencli-mcp", "opencli", "soota", "tikhub"]
 
 
 def validate_policy(provider: str, fallback: str | None, max_cost: float | None) -> None:
-    if provider not in {"auto", "opencli-mcp", "opencli", "tikhub"} or fallback not in {None, "tikhub"}:
-        raise InputError("--provider 支持 auto/opencli-mcp/opencli/tikhub；--fallback 只支持 tikhub。")
+    if provider not in {"auto", "opencli-mcp", "opencli", "soota", "tikhub"} or fallback not in {None, "tikhub"}:
+        raise InputError("--provider 支持 auto/opencli-mcp/opencli/soota/tikhub；--fallback 只支持 tikhub。")
     if fallback and provider == "tikhub":
         raise InputError("TikHub 已是指定来源，无需再指定同名 fallback。")
     if max_cost is not None and (not math.isfinite(max_cost) or max_cost < 0):
@@ -35,6 +37,8 @@ def validate_policy(provider: str, fallback: str | None, max_cost: float | None)
 def catalog_provider(
     source: SourceRef, provider: str, *, mcp_available: bool = False
 ) -> Literal["opencli-mcp", "opencli", "tikhub"]:
+    if provider == "soota":
+        raise SourceError("soota 尚未接入目录能力。")
     if (provider == "opencli-mcp" or provider == "auto" and mcp_available) and mcp_capabilities(source).catalog:
         return "opencli-mcp"
     if provider == "opencli-mcp":
@@ -80,6 +84,7 @@ def inspect_item(
     for name, capability, factory in (
         ("opencli-mcp", mcp_capabilities(source).inspect, OpenCLIMCPProvider),
         ("opencli", opencli_capabilities(source).inspect, OpenCLIProvider),
+        ("soota", soota_capabilities(source).inspect, SootaProvider),
     ):
         if name == "opencli-mcp" and not settings.opencli_mcp.enabled:
             if provider == name:
@@ -91,11 +96,11 @@ def inspect_item(
             if provider == name:
                 raise SourceError(f"{name} 尚不具备该元数据能力。")
             continue
-        cheap: OpenCLIMCPProvider | OpenCLIProvider | None = None
+        cheap: OpenCLIMCPProvider | OpenCLIProvider | SootaProvider | None = None
         try:
             cheap = factory(settings)
             item = cheap.inspect(source)
-            return item, cheap.records, warnings
+            return item, [*records, *cheap.records], warnings
         except RuntimeUnavailable as exc:
             if provider != "auto" and fallback != "tikhub":
                 raise

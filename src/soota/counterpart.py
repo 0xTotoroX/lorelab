@@ -6,9 +6,11 @@ from difflib import SequenceMatcher
 from typing import Any
 from urllib.parse import urlparse
 
-from soota.errors import SourceError
+from soota.errors import CaptionUnavailable, SourceError
 from soota.models import CaptionResult, MediaItem, TranscriptStatus
 from soota.providers.opencli import OpenCLIProvider
+from soota.providers.opencli_runtime import RuntimeUnavailable
+from soota.providers.soota import SootaProvider
 from soota.routing import recognize
 
 
@@ -91,7 +93,7 @@ def channel_fields(rows: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def _youtube_counterpart(
-    client: OpenCLIProvider, original: MediaItem
+    client: OpenCLIProvider, original: MediaItem, caption_fallback: SootaProvider | None = None
 ) -> tuple[MediaItem, CaptionResult | None, list[str]]:
     name = creator_name(original)
     report: dict[str, Any] = {"status": "not_found", "candidates": []}
@@ -148,7 +150,18 @@ def _youtube_counterpart(
         return original, None, ["YouTube 同名频道的同期视频未唯一匹配，保留 B站；候选与原因已记录。"]
     chosen = matches[0]
     report["stage"] = "youtube_captions"
-    captions = client.get_captions(chosen)
+    try:
+        captions = client.get_captions(chosen)
+    except (CaptionUnavailable, RuntimeUnavailable):
+        if caption_fallback is None:
+            raise
+        captions = CaptionResult(status=TranscriptStatus.MISSING)
+    if captions.status != TranscriptStatus.READY and caption_fallback is not None:
+        local_item = caption_fallback.inspect(chosen.source)
+        captions = caption_fallback.get_captions(local_item)
+        if captions.status == TranscriptStatus.READY:
+            local_item.provenance["selection"] = chosen.provenance["selection"]
+            chosen = local_item
     if captions.status != TranscriptStatus.READY or not captions.segments:
         report["status"] = "youtube_captions_missing"
         return original, None, ["已找到同一期 YouTube 视频，但没有可用字幕，保留 B站来源。"]
@@ -157,10 +170,10 @@ def _youtube_counterpart(
 
 
 def youtube_counterpart(
-    client: OpenCLIProvider, original: MediaItem
+    client: OpenCLIProvider, original: MediaItem, caption_fallback: SootaProvider | None = None
 ) -> tuple[MediaItem, CaptionResult | None, list[str]]:
     try:
-        return _youtube_counterpart(client, original)
+        return _youtube_counterpart(client, original, caption_fallback)
     except SourceError as exc:
         original.provenance["youtube_check"] = {
             **original.provenance.get("youtube_check", {}),

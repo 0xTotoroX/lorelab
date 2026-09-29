@@ -10,7 +10,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from soota.config import SootaSettings
-from soota.errors import AuthBudgetError, ContractError, SourceError
+from soota.errors import AuthBudgetError, CaptionUnavailable, ContractError, SourceError
 from soota.models import (
     CapabilitySet,
     CaptionResult,
@@ -117,9 +117,9 @@ class OpenCLIProvider:
                     hint="检查浏览器页面和 Bridge 状态，稍后手动重试；不会自动重试或切换付费来源。",
                 )
             if (site, command) == ("youtube", "transcript") and "caption url returned empty response" in message:
-                raise SourceError(
+                raise CaptionUnavailable(
                     "OpenCLI 字幕地址返回空响应，采集未完成。",
-                    hint="可稍后手动重试，或使用本地 yt-dlp 获取字幕；不会自动切换付费来源。",
+                    hint="auto 模式可继续 soota 免费兜底；TikHub 仍受费用策略控制。",
                 )
             raise SourceError("OpenCLI 采集失败，未自动重试或切换来源。", details={"exit_code": result.returncode})
         try:

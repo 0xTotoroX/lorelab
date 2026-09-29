@@ -46,7 +46,7 @@ def call(
     body_file: Annotated[Path | None, typer.Option("--body")] = None,
     output: Annotated[Path | None, typer.Option("--output", help="保存脱敏原生结果到新 JSON 文件")] = None,
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/tikhub；省略时使用已保存策略")
+        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/soota/tikhub；省略时使用已保存策略")
     ] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="TikHub 本次额外费用上限，USD")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,

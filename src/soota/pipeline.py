@@ -9,7 +9,7 @@ from typing import Any, Literal
 from soota.billing import PaymentGate, selected_provider
 from soota.config import SootaSettings, ensure_dirs
 from soota.counterpart import youtube_counterpart
-from soota.errors import AuthBudgetError, InputError, SootaError, SourceError
+from soota.errors import AuthBudgetError, CaptionUnavailable, InputError, SootaError, SourceError
 from soota.models import (
     AnalysisManifest,
     AnalysisStatus,
@@ -30,6 +30,8 @@ from soota.providers.opencli_mcp import OpenCLIMCPProvider
 from soota.providers.opencli_mcp import capabilities_for as mcp_capabilities
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
 from soota.providers.router import RequestBudget, inspect_item, validate_policy
+from soota.providers.soota import SootaProvider
+from soota.providers.soota import capabilities_for as soota_capabilities
 from soota.providers.tikhub.capability import capabilities_for
 from soota.providers.tikhub.client import TikHubProvider
 from soota.render.analysis import load_analysis
@@ -101,6 +103,10 @@ def doctor(settings: SootaSettings) -> CommandResult:
             ),
         },
         "opencli": OpenCLIRuntime(settings).status(),
+        "soota": {
+            "yt_dlp_installed": bool(shutil.which(settings.local.binary)),
+            "capabilities": ["youtube.video", "youtube.captions"],
+        },
         "tikhub_sdk_required": TIKHUB_SDK_VERSION,
         "tikhub_sdk_bundled": bundled_version,
         "tikhub_sdk_managed": bool(settings.tikhub.runtime_python),
@@ -151,6 +157,7 @@ def inspect(
     capabilities = {
         **({"opencli-mcp": mcp_capabilities(source).model_dump()} if settings.opencli_mcp.enabled else {}),
         "opencli": opencli_capabilities(source).model_dump(),
+        "soota": soota_capabilities(source).model_dump(),
         "tikhub": capabilities_for(source).model_dump(),
     }
     data: dict[str, Any] = {"source": source.model_dump(), "capabilities": capabilities, "metadata": None}
@@ -195,8 +202,9 @@ def estimate(
         mcp_capabilities(source).inspect
     )
     opencli = provider in {"auto", "opencli"} and opencli_capabilities(source).inspect
-    if provider != "tikhub" and transcript != TranscriptMode.ASR and (mcp or opencli):
-        free_name = "opencli-mcp" if mcp else "opencli"
+    local = provider in {"auto", "soota"} and soota_capabilities(source).inspect
+    if provider != "tikhub" and transcript != TranscriptMode.ASR and (mcp or opencli or local):
+        free_name = "opencli-mcp" if mcp else "opencli" if opencli else "soota"
         return CommandResult(
             ok=True,
             status="success",
@@ -219,7 +227,7 @@ def estimate(
                 ),
             },
         )
-    if provider in {"opencli-mcp", "opencli"}:
+    if provider in {"opencli-mcp", "opencli", "soota"}:
         raise SourceError(f"{provider} 尚未接入该来源或音频下载；可显式选择 TikHub。")
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester)
@@ -336,7 +344,7 @@ def ingest(
             exclude_promotions=exclude_promotions,
             exclude_ranges=exclude_ranges or [],
         )
-    if provider in {"opencli-mcp", "opencli"} and fallback != "tikhub":
+    if provider in {"opencli-mcp", "opencli", "soota"} and fallback != "tikhub":
         raise SourceError(f"{provider} 尚未接入音频下载，不能直接执行 ASR；auto 模式会先获取字幕。")
     ensure_dirs(settings)
     source = recognize(url)
@@ -463,14 +471,17 @@ def ingest_free(
             settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
         )
     else:
-        candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider]]] = []
+        candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider] | type[SootaProvider]]] = []
         if settings.opencli_mcp.enabled and provider in {"auto", "opencli-mcp"} and mcp_capabilities(source).captions:
             candidates.append(("opencli-mcp", OpenCLIMCPProvider))
         if provider in {"auto", "opencli"} and opencli_capabilities(source).captions:
             candidates.append(("opencli", OpenCLIProvider))
+        if provider in {"auto", "soota"} and soota_capabilities(source).captions:
+            candidates.append(("soota", SootaProvider))
         for name, factory in candidates:
             attempted.append(name)
-            client: OpenCLIMCPProvider | OpenCLIProvider | None = None
+            client: OpenCLIMCPProvider | OpenCLIProvider | SootaProvider | None = None
+            counterpart_fallback: SootaProvider | None = None
             try:
                 client = factory(settings)
                 candidate_item = client.inspect(source)
@@ -478,7 +489,8 @@ def ingest_free(
                 captions = None
                 if prefer_youtube and name == "opencli" and source.platform == "bilibili":
                     assert isinstance(client, OpenCLIProvider)
-                    candidate_item, captions, notes = youtube_counterpart(client, candidate_item)
+                    counterpart_fallback = SootaProvider(settings) if provider == "auto" else None
+                    candidate_item, captions, notes = youtube_counterpart(client, candidate_item, counterpart_fallback)
                     item = candidate_item
                     warnings.extend(notes)
                 captions = captions or client.get_captions(candidate_item)
@@ -490,16 +502,26 @@ def ingest_free(
                 )
                 if captions.status == TranscriptStatus.READY:
                     missing_reason = None
-                    warnings.append(f"{name} 未标明实际字幕语言及人工/自动轨道类型，已保留为未知。")
+                    if captions.language is None or captions.source is None or captions.source.value == "unknown":
+                        warnings.append(f"{name} 未标明实际字幕语言及人工/自动轨道类型，已保留为未知。")
                     break
                 missing_reason = f"{name} 没有返回可用字幕。"
+            except CaptionUnavailable:
+                if provider != "auto":
+                    raise
+                missing_reason = f"{name} 字幕获取失败，尝试下一免费来源。"
+                warnings.append(missing_reason)
             except RuntimeUnavailable as exc:
                 if provider != "auto" and fallback != "tikhub":
                     raise
                 missing_reason = f"{name} 不可用：{exc.message}"
+                warnings.append(missing_reason)
             finally:
                 if client is not None:
                     records.extend(client.records)
+                if counterpart_fallback is not None and counterpart_fallback.records:
+                    records.extend(counterpart_fallback.records)
+                    attempted.append("soota")
         if not candidates:
             missing_reason = "所选免费来源尚未接入该视频字幕。"
     if missing_reason:
@@ -590,6 +612,7 @@ def ingest_free(
             "content": str(folder / "content.md"),
             "transcript": str(folder / "transcript.md"),
             "provider": item.provenance["provider"],
+            "routing": {"attempted": attempted},
             "selection": item.provenance.get("selection"),
             "youtube_check": item.provenance.get("youtube_check"),
             "promotion_filter": filter_report,

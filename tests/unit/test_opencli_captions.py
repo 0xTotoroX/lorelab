@@ -157,6 +157,14 @@ def test_authorized_caption_fallback_runs_only_after_opencli_missing(settings, m
             else []
         )
 
+    from soota.providers.opencli_runtime import RuntimeUnavailable
+    from soota.providers.soota import SootaProvider
+
+    def unavailable(*args):
+        events.append("soota")
+        raise RuntimeUnavailable("yt-dlp unavailable")
+
+    monkeypatch.setattr(SootaProvider, "inspect", unavailable)
     paid = _youtube_requester()
 
     def requester(*args, **kwargs):
@@ -168,7 +176,7 @@ def test_authorized_caption_fallback_runs_only_after_opencli_missing(settings, m
         settings, YOUTUBE, fallback="tikhub", max_cost=0.1, transcript=TranscriptMode.CAPTIONS_ONLY, requester=requester
     )
     assert result.ok and events[:2] == ["opencli:video", "opencli:transcript"]
-    assert "tikhub" in events[2:] and result.data["routing"]["attempted"] == ["opencli", "tikhub"]
+    assert "tikhub" in events[2:] and result.data["routing"]["attempted"] == ["opencli", "soota", "tikhub"]
 
 
 @pytest.mark.parametrize(

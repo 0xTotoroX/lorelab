@@ -25,7 +25,9 @@ prefer_youtube = true
 
 采用 YouTube 后，内容包放在 `youtube/视频ID/`，字幕保留 YouTube 时间轴；`selection.requested_source` 保留原 B站链接和选择依据。不会把 B站时间戳套到另一版本的视频上。
 
-本开关用于 OpenCLI 免费字幕路径；显式 TikHub 或 `--transcript asr` 会覆盖保存的免费字幕偏好，同时明确传入跨平台/过滤参数则提示不支持；跨平台/过滤任务不会自动转入付费采集。`--transcript none` 只取元数据，不搜索字幕来源。
+同一期 YouTube 字幕在 auto 模式先尝试 OpenCLI，已知空响应或字幕缺失时由 soota/yt-dlp 免费兜底；仍保留输入 B站链接和匹配依据。显式 `--provider opencli` 不切换 soota。
+
+本开关用于免费字幕路径；显式 TikHub 或 `--transcript asr` 会覆盖保存的免费字幕偏好，同时明确传入跨平台/过滤参数则提示不支持；跨平台/过滤任务不会自动转入付费采集。`--transcript none` 只取元数据，不搜索字幕来源。
 
 ## 排除推广片段
 

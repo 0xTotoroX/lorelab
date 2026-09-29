@@ -56,3 +56,7 @@ class StorageError(SootaError):
 class ContractError(SootaError):
     code = "contract"
     exit_code = 8
+
+
+class CaptionUnavailable(SourceError):
+    """Known acquisition failure eligible for another free caption provider."""

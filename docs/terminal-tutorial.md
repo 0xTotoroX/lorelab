@@ -89,9 +89,17 @@ uv run soota ingest "B站视频 URL" --no-prefer-youtube --max-cost 0 --json
 
 开启时默认过滤已标注的推广。没有标注或身份无法确认时会明确报告，详见 [字幕选择与过滤](subtitle-selection.md)。
 
-## 4. 三个 Provider 的自动更新
+安装好 yt-dlp 后，YouTube 自动尝试 OpenCLI → soota。可单独使用内置 soota 方案：
 
-在线采集和接口调用前默认检查最新发布包，有新版就安装，通过入口验证后使用。无需每次手动操作。MCP 更新后仍停用；TikHub 的付款方式不受更新影响。首次安装需要 npm、Node.js 和 uv。
+```bash
+uv run soota ingest "YouTube 视频 URL" --provider soota --transcript captions-only --max-cost 0 --json
+```
+
+默认读取 Chrome Cookie；用 `SOOTA_YTDLP_COOKIES_BROWSER` 选择浏览器/profile，设为空关闭。`SOOTA_YTDLP_BINARY` 可指定程序。JSON 返回实际 provider，内容包记录实际字幕语言和轨道类型。不会下载视频。
+
+## 4. 三个外部 Provider 的自动更新
+
+在线采集和接口调用前默认检查最新发布包，有新版就安装，通过入口验证后使用。无需每次手动操作。MCP 更新后仍停用；TikHub 的付款方式不受更新影响。首次安装需要 npm、Node.js 和 uv。内置 soota 算法随本项目更新，yt-dlp 由原安装工具维护。
 
 ```bash
 # 立即检查并安装三个 Provider 的最新发布包

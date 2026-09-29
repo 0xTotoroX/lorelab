@@ -54,8 +54,16 @@ class ContentSelectionConfig(BaseModel):
     prefer_youtube: bool = False
 
 
+class LocalProviderConfig(BaseModel):
+    binary: str = Field(default="yt-dlp", exclude=True)
+    cookies_browser: str = Field(default="chrome", exclude=True)
+    timeout_seconds: float = Field(default=90, gt=0)
+    max_output_bytes: int = Field(default=8_388_608, ge=1024)
+    cache_seconds: int = Field(default=300, ge=0)
+
+
 class RoutingConfig(BaseModel):
-    default_provider: Literal["auto", "opencli-mcp", "opencli", "tikhub"] = "auto"
+    default_provider: Literal["auto", "opencli-mcp", "opencli", "soota", "tikhub"] = "auto"
 
 
 class PaymentConfig(BaseModel):
@@ -74,6 +82,7 @@ class SootaSettings(BaseModel):
     tikhub: TikHubConfig = Field(default_factory=TikHubConfig)
     opencli: OpenCLIConfig = Field(default_factory=OpenCLIConfig)
     opencli_mcp: OpenCLIMCPConfig = Field(default_factory=OpenCLIMCPConfig)
+    local: LocalProviderConfig = Field(default_factory=LocalProviderConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     content_selection: ContentSelectionConfig = Field(default_factory=ContentSelectionConfig)
     payment: PaymentConfig = Field(default_factory=PaymentConfig)
@@ -183,6 +192,10 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
             }
         ),
         opencli_mcp=mcp_config,
+        local=LocalProviderConfig(
+            binary=os.environ.get("SOOTA_YTDLP_BINARY", "yt-dlp"),
+            cookies_browser=os.environ.get("SOOTA_YTDLP_COOKIES_BROWSER", "chrome"),
+        ),
         asr=AsrConfig(
             engine=str((data.get("asr") or {}).get("engine", "auto")),
             model=str((data.get("asr") or {}).get("model", "base")),

@@ -7,7 +7,8 @@ Soota 保留自己的采集、字幕、目录、任务、费用与运行时命�
 对于已有标准流程，直接使用 `ingest`、`inspect` 或 `catalog`，由 Soota 按已接入的能力路由。临时查询或组合任务由 Agent 依次查阅以下入口；这是任务执行顺序，不会把任意上游返回值自动转换成 Soota 内容包。
 
 1. 查 `opencli list -f json` 和具体命令的 `--help`，使用 OpenCLI。
-2. OpenCLI 无法提供所需能力时，查 `soota api list/show`，通过 Soota 包装的 TikHub 接口执行，遵守费用策略。
+2. YouTube 单视频元数据和字幕可使用 `soota inspect/ingest --provider soota`，由内置算法调用 yt-dlp。
+3. 免费来源无法提供所需能力时，查 `soota api list/show`，通过 Soota 包装的 TikHub 接口执行，遵守费用策略。
 
 opencli-mcp 默认停用，不进行发现或连接；`mcp search/run` 和显式 `--provider opencli-mcp` 会在启动进程前拒绝。用户明确选择其他来源时遵从该选择。空结果、登录失败、限流或请求结果未知，不等于缺少能力，也不授权自动重试或付费。
 
@@ -34,7 +35,7 @@ uv run soota features call twitter.profile --param username=example --json
 
 ## 已核验的重叠映射
 
-默认顺序为 OpenCLI → 经授权的 TikHub。`--provider opencli`、`--provider tikhub` 严格选择对应来源；`--provider auto` 明确恢复默认顺序。自动付费模式不改变来源排序；只有轮到 TikHub 时才改变付费确认方式。
+默认顺序为 OpenCLI → soota（已接入能力）→ 经授权的 TikHub。`--provider opencli`、`--provider soota`、`--provider tikhub` 严格选择对应来源；`--provider auto` 明确恢复默认顺序。自动付费模式不改变来源排序；只有轮到 TikHub 时才改变付费确认方式。
 
 | 统一入口 | 共同输入 | 语义范围 |
 |---|---|---|
@@ -47,12 +48,12 @@ uv run soota features call twitter.profile --param username=example --json
 | `instagram.user.search` | `query` | 首批用户搜索，无统一游标 |
 | `twitter.post.search` | `query`，可选 `sort` | 首批帖子；top/latest，无统一条数保证 |
 | `bilibili.video.detail` | `url` | 标准视频链接 |
-| `youtube.video.detail` | `url` | 标准视频链接 |
+| `youtube.video.detail` | `url` | 标准视频链接；soota 返回标准元数据，`output_contract=soota_metadata` |
 | `xiaohongshu.note.detail` | `url` | 已展开官方笔记链接，含 xsec_token；输出脱敏 |
 
 仅在请求发送前确认免费来源不可用时，统一入口才考虑下一方案。执行失败、限流、登录问题、无效 JSON、断线后结果不确定都不会触发盲目重试或自动收费。其他能力通过 OpenCLI 原生命令或 TikHub API 查询，不按同名猜测互换参数或分页。
 
-已有标准流程也遵循此优先级：Bilibili 和 YouTube 元数据与字幕都先试 OpenCLI，TikHub 保留独立实现。X 的 OpenCLI 目录是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
+已有标准流程也遵循此优先级：Bilibili 和 YouTube 元数据与字幕都先试 OpenCLI，YouTube 可由 soota 免费兜底，TikHub 保留独立实现。X 的 OpenCLI 目录是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
 
 ## 两种付费模式
 

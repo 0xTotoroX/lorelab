@@ -52,6 +52,12 @@ versions. They are included in Soota's wheel and source distribution.
   noncommercial/share-alike requirements; Soota Apache-2.0 does not replace them.
 - Missing annotations do not establish that a video is free of promotion.
 
+## yt-dlp (external executable)
+
+- Source: <https://github.com/yt-dlp/yt-dlp>.
+- Integration: optional separately installed executable used by the built-in `soota` Provider for YouTube metadata and captions. No upstream source or runtime is bundled or modified.
+- Upstream source is primarily Unlicense; distributed binaries and dependencies may carry additional licenses. The external installation retains its own license materials.
+
 ## Other dependencies
 
 The dependencies listed in `pyproject.toml` and their transitive dependencies
