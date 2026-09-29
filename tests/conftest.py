@@ -7,7 +7,7 @@ import httpx
 import pytest
 import tikhub
 
-from soota.config import AsrConfig, PaymentConfig, SootaSettings, TikHubConfig
+from soota.config import AsrConfig, AutoUpdateConfig, PaymentConfig, SootaSettings, TikHubConfig
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -18,6 +18,7 @@ def block_browser_commands(monkeypatch):
         raise AssertionError("Tests must stub OpenCLI; never use the user's browser.")
 
     monkeypatch.setattr("soota.providers.opencli.OpenCLIProvider._run", blocked)
+    monkeypatch.setenv("SOOTA_AUTO_UPDATE", "false")
     monkeypatch.setenv("OPENCLI_PROFILE", "test-context")
     monkeypatch.setattr("soota.providers.opencli_context.profile_config", lambda: {})
 
@@ -35,6 +36,7 @@ def settings(tmp_path: Path) -> SootaSettings:
         cache_dir=tmp_path / "cache",
         data_dir=tmp_path / "data",
         tikhub=TikHubConfig(),
+        updates=AutoUpdateConfig(enabled=False),
         payment=PaymentConfig(mode="auto"),
         asr=AsrConfig(engine="whisper-cli", model="base"),
     )

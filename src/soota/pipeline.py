@@ -9,7 +9,7 @@ from typing import Any, Literal
 from soota.billing import PaymentGate, selected_provider
 from soota.config import SootaSettings, ensure_dirs
 from soota.counterpart import youtube_counterpart
-from soota.errors import AuthBudgetError, InputError, SourceError
+from soota.errors import AuthBudgetError, InputError, SootaError, SourceError
 from soota.models import (
     AnalysisManifest,
     AnalysisStatus,
@@ -55,6 +55,7 @@ def _provider(
     max_cost: float | None = None,
 ) -> TikHubProvider:
     return TikHubProvider(
+        runtime_python=settings.tikhub.runtime_python,
         cache=cache,
         api_key=load_tikhub_api_key(),
         base_url=settings.tikhub.base_url,
@@ -80,15 +81,30 @@ def doctor(settings: SootaSettings) -> CommandResult:
         tikhub_ver = getattr(tikhub, "__version__", None) or TIKHUB_SDK_VERSION
     except ImportError:
         tikhub_ok = False
+    bundled_version = tikhub_ver
+    if settings.tikhub.runtime_python:
+        from soota.providers.managed import TikHubRuntime
+
+        try:
+            tikhub_ver = TikHubRuntime(settings).probe(settings.tikhub.runtime_python)
+            tikhub_ok = True
+        except SootaError:
+            tikhub_ver = None
+            tikhub_ok = False
     asr_engine = resolve_engine(settings.asr)
     data = {
         "soota_version": __version__,
         "opencli_mcp": {
             "enabled": settings.opencli_mcp.enabled,
-            "installed": bool(shutil.which(settings.opencli_mcp.binary or "opencli-mcp")),
+            "installed": bool(
+                shutil.which(settings.opencli_mcp.binary or settings.opencli_mcp.runtime_binary or "opencli-mcp")
+            ),
         },
         "opencli": OpenCLIRuntime(settings).status(),
         "tikhub_sdk_required": TIKHUB_SDK_VERSION,
+        "tikhub_sdk_bundled": bundled_version,
+        "tikhub_sdk_managed": bool(settings.tikhub.runtime_python),
+        "automatic_updates": settings.updates.model_dump(),
         "tikhub_sdk_installed": tikhub_ver,
         "tikhub_import_ok": tikhub_ok,
         "api_key_present": api_key_present(),

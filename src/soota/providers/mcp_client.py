@@ -36,7 +36,7 @@ class StdioMCPClient:
 
     @staticmethod
     def available(config: OpenCLIMCPConfig) -> bool:
-        return config.enabled and bool(shutil.which(config.binary or "opencli-mcp"))
+        return config.enabled and bool(shutil.which(config.binary or config.runtime_binary or "opencli-mcp"))
 
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name != "sites_search":
@@ -84,7 +84,7 @@ class StdioMCPClient:
         dry_run: bool = False,
     ) -> dict[str, Any]:
         require_enabled(self.config)
-        binary = self.config.binary or "opencli-mcp"
+        binary = self.config.binary or self.config.runtime_binary or "opencli-mcp"
         resolved = shutil.which(binary)
         if resolved is None:
             raise RuntimeUnavailable("opencli-mcp 未安装。", hint="安装并运行 opencli-mcp setup --clients none。")

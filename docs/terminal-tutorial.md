@@ -89,7 +89,26 @@ uv run soota ingest "B站视频 URL" --no-prefer-youtube --max-cost 0 --json
 
 开启时默认过滤已标注的推广。没有标注或身份无法确认时会明确报告，详见 [字幕选择与过滤](subtitle-selection.md)。
 
-## 4. 检查三个 Provider 的更新
+## 4. 三个 Provider 的自动更新
+
+在线采集和接口调用前默认检查最新发布包，有新版就安装，通过入口验证后使用。无需每次手动操作。MCP 更新后仍停用；TikHub 的付款方式不受更新影响。首次安装需要 npm、Node.js 和 uv。
+
+```bash
+# 立即检查并安装三个 Provider 的最新发布包
+soota updates apply --json
+# 暂时关闭自动更新；重新启用时改成 true
+export SOOTA_AUTO_UPDATE=false
+```
+
+可以在用户配置 `config.toml` 中设置检查间隔：
+
+```toml
+[updates]
+enabled = true
+interval_seconds = 0  # 每次在线任务检查；3600 表示一小时
+```
+
+帮助、预估、离线预览和渲染不触发更新，Soota 退出后也没有后台更新任务。显式指定外部 binary 的 Provider 交由用户管理。自动更新会报告安装或兼容性错误；查看 `runtime_updates` 和 warnings，不要把检查完成当作全部安装成功。下列命令只读查询版本与仓库变化：
 
 ```bash
 uv run soota updates check --json
@@ -109,7 +128,7 @@ uv run soota runtime status --json
 uv run soota runtime rollback --json
 ```
 
-更新安装在 Soota 自己的数据目录，不覆盖你现有全局 OpenCLI 或其中的本地补丁。若新程序与正在运行的 daemon 版本不同，Soota 会停止采集；先等已有采集结束，再运行 `soota runtime connect` 切换空闲 daemon，或直接 rollback。升级检查通过只证明 CLI 契约兼容，还应执行一次零预算 `inspect` 检查网站与扩展。
+更新安装在 Soota 自己的数据目录，不覆盖你现有全局 OpenCLI 或其中的本地补丁。自动更新可切换空闲 daemon；若仍有任务会延期。手动升级后版本不同则停止采集，先等已有采集结束，再运行 `soota runtime connect` 切换空闲 daemon，或直接 rollback。升级检查通过只证明 CLI 契约兼容，还应执行一次零预算 `inspect` 检查网站与扩展。
 
 完整边界和配置见 [Provider 与运行时](providers.md)，可续跑的 TikHub 视频目录见 [目录说明](catalog.md)。
 

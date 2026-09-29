@@ -273,6 +273,7 @@ def _provider(
         CostLedger(settings.ledger_path).append(job.source.id, [record], {"job_id": job.id, "reservation": True})
 
     provider = TikHubProvider(
+        runtime_python=settings.tikhub.runtime_python,
         cache=CacheStore(settings.cache_dir),
         base_url=settings.tikhub.base_url,
         timeout=settings.tikhub.timeout_seconds,

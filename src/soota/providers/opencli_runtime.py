@@ -36,9 +36,19 @@ class RuntimeUnavailable(SourceError):
 
 
 class OpenCLIRuntime:
+    command = "opencli"
+    package = PACKAGE
+
+    @property
+    def configured_binary(self) -> str | None:
+        return self.settings.opencli.binary
+
+    def metadata(self, version: str) -> dict[str, Any]:
+        return package_metadata(version)
+
     def __init__(self, settings: SootaSettings) -> None:
         self.settings = settings
-        self.root = settings.data_dir / "runtimes" / "opencli"
+        self.root = settings.data_dir / "runtimes" / self.command
 
     @contextmanager
     def lock(self, *, exclusive: bool = False) -> Iterator[None]:
@@ -70,12 +80,12 @@ class OpenCLIRuntime:
 
     def managed_binary(self, version: str) -> Path:
         validate_version(version)
-        return self.root / "versions" / version / "node_modules" / ".bin" / "opencli"
+        return self.root / "versions" / version / "node_modules" / ".bin" / self.command
 
     def resolve(self) -> tuple[str, str]:
-        explicit = self.settings.opencli.binary
+        explicit = self.configured_binary
         active = self.state().get("active") if explicit is None else None
-        candidate = explicit or (str(self.managed_binary(active)) if active else "opencli")
+        candidate = explicit or (str(self.managed_binary(active)) if active else self.command)
         binary = shutil.which(candidate)
         if binary is None:
             raise RuntimeUnavailable(
@@ -128,7 +138,7 @@ class OpenCLIRuntime:
 
     def update(self, version: str) -> dict[str, Any]:
         validate_version(version)
-        if self.settings.opencli.binary:
+        if self.configured_binary:
             raise InputError("已显式指定外部 binary；请先移除该配置再启用 Soota 管理的运行时。")
         npm = shutil.which("npm")
         if not npm:
@@ -139,7 +149,7 @@ class OpenCLIRuntime:
                 apply_managed_fixes(destination)
                 actual = self.probe(str(self.managed_binary(version)))
             else:
-                metadata = package_metadata(version)
+                metadata = self.metadata(version)
                 self.root.mkdir(parents=True, exist_ok=True)
                 with tempfile.TemporaryDirectory(prefix="stage-", dir=self.root) as folder:
                     stage = Path(folder)
@@ -165,14 +175,14 @@ class OpenCLIRuntime:
                             "OpenCLI 隔离安装失败；当前版本未切换。", details={"exit_code": result.returncode}
                         )
                     apply_managed_fixes(stage / "install")
-                    actual = self.probe(str(stage / "install" / "node_modules" / ".bin" / "opencli"))
+                    actual = self.probe(str(stage / "install" / "node_modules" / ".bin" / self.command))
                     if actual != version:
                         raise ContractError("安装后的 OpenCLI 版本与请求版本不同。")
                     atomic_write(
                         stage / "install" / "provenance.json",
                         json.dumps(
                             {
-                                "package": PACKAGE,
+                                "package": self.package,
                                 "version": version,
                                 "dist": metadata["dist"],
                                 "validation": "read-only CLI contract; browser not checked",
@@ -193,7 +203,7 @@ class OpenCLIRuntime:
         return self.status()
 
     def rollback(self) -> dict[str, Any]:
-        if self.settings.opencli.binary:
+        if self.configured_binary:
             raise InputError("显式配置的外部 binary 不由 Soota 升级或回滚。")
         with self.lock(exclusive=True):
             old = self.state()
@@ -213,12 +223,12 @@ def validate_version(version: str) -> None:
         raise InputError("请指定完整版本号，例如 1.8.3；不接受 latest 或版本范围。")
 
 
-def package_metadata(version: str = "latest") -> dict[str, Any]:
+def package_metadata(version: str = "latest", *, package: str = PACKAGE, registry: str = REGISTRY) -> dict[str, Any]:
     try:
-        response = httpx.get(f"{REGISTRY}/{version}", timeout=30)
+        response = httpx.get(f"{registry}/{version}", timeout=30)
         response.raise_for_status()
         value = response.json()
-        if not isinstance(value, dict) or value.get("name") != PACKAGE:
+        if not isinstance(value, dict) or value.get("name") != package:
             raise ValueError
         return value
     except (httpx.HTTPError, ValueError) as exc:
@@ -229,7 +239,8 @@ def download_verified(metadata: dict[str, Any], path: Path) -> None:
     try:
         dist = metadata["dist"]
         url = dist["tarball"]
-        if not url.startswith("https://registry.npmjs.org/@jackwener/opencli/-/"):
+        package = metadata.get("name", PACKAGE)
+        if package not in {PACKAGE, "opencli-mcp"} or not url.startswith(f"https://registry.npmjs.org/{package}/-/"):
             raise ValueError("unexpected registry host")
         integrity = dist["integrity"]
         algorithm, expected = integrity.split("-", 1)

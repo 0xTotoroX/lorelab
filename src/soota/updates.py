@@ -24,7 +24,7 @@ PROVIDERS = (
 
 def _installed_versions(settings: SootaSettings) -> dict[str, str | None]:
     runtime = OpenCLIRuntime(settings).status()
-    binary = shutil.which(settings.opencli_mcp.binary or "opencli-mcp")
+    binary = shutil.which(settings.opencli_mcp.binary or settings.opencli_mcp.runtime_binary or "opencli-mcp")
     mcp_version = None
     if binary:
         result = run_process([binary, "--version"], timeout=10, max_bytes=65536)
@@ -34,6 +34,9 @@ def _installed_versions(settings: SootaSettings) -> dict[str, str | None]:
         tikhub_version = version("tikhub")
     except PackageNotFoundError:
         tikhub_version = None
+    from soota.providers.managed import TikHubRuntime
+
+    tikhub_version = TikHubRuntime(settings).state().get("active") or tikhub_version
     return {
         "opencli-mcp": mcp_version,
         "opencli": runtime["version"] if runtime.get("available") else None,

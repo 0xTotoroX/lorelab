@@ -48,6 +48,11 @@ def emit(result: CommandResult, json_output: bool) -> None:
                 f"包最新版 {update['latest_package_version'] or '未知'}，"
                 f"上游主分支 {relation}"
             )
+        for update in data.get("runtime_updates", {}).get("providers", []):
+            label = {"updated": "已更新", "current": "已是最新", "external": "外部管理", "failed": "更新失败"}.get(
+                update["status"], update["status"]
+            )
+            typer.echo(f"{update['provider']}: {label} {update.get('active_version') or ''}")
         for endpoint in data.get("endpoints", []):
             if isinstance(endpoint, dict):
                 typer.echo(f"{endpoint['key']}  {endpoint['method']} {endpoint['path']}")
@@ -89,6 +94,21 @@ def run(json_output: bool, fn: Callable[..., CommandResult], *args: Any, **kwarg
 
 
 def run_settings(json_output: bool, fn: Callable[..., CommandResult], *args: Any, **kwargs: Any) -> None:
+    from soota.auto_updates import automatic_update, should_update
     from soota.config import load_settings
 
-    run(json_output, lambda: fn(load_settings(), *args, **kwargs))
+    def execute() -> CommandResult:
+        settings = load_settings()
+        report = automatic_update(settings) if should_update(settings, fn, args, kwargs) else None
+        try:
+            result = fn(settings, *args, **kwargs)
+        except SootaError as exc:
+            if report:
+                exc.details["runtime_updates"] = report
+            raise
+        if report:
+            result.data["runtime_updates"] = report
+            result.warnings.extend(report["warnings"])
+        return result
+
+    run(json_output, execute)

@@ -22,7 +22,13 @@ class AsrConfig(BaseModel):
     whisper_bin: str = "whisper"
 
 
+class AutoUpdateConfig(BaseModel):
+    enabled: bool = True
+    interval_seconds: int = Field(default=0, ge=0)
+
+
 class TikHubConfig(BaseModel):
+    runtime_python: str | None = Field(default=None, exclude=True)
     base_url: str = "https://api.tikhub.io"
     timeout_seconds: float = 60.0
 
@@ -36,6 +42,7 @@ class OpenCLIConfig(BaseModel):
 
 
 class OpenCLIMCPConfig(BaseModel):
+    runtime_binary: str | None = Field(default=None, exclude=True)
     enabled: bool = False
     binary: str | None = None
     timeout_seconds: float = Field(default=180, gt=0)
@@ -71,6 +78,7 @@ class SootaSettings(BaseModel):
     content_selection: ContentSelectionConfig = Field(default_factory=ContentSelectionConfig)
     payment: PaymentConfig = Field(default_factory=PaymentConfig)
     asr: AsrConfig = Field(default_factory=AsrConfig)
+    updates: AutoUpdateConfig = Field(default_factory=AutoUpdateConfig)
 
     @property
     def config_path(self) -> Path:
@@ -123,6 +131,12 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
     except (ValueError, TypeError, ValidationError) as exc:
         raise InputError("费用策略文件无效，未执行任何请求。", hint="使用 soota policy set --mode ask 恢复。") from exc
     try:
+        updates_config = AutoUpdateConfig.model_validate(
+            {
+                **(data.get("updates") or {}),
+                **({"enabled": os.environ["SOOTA_AUTO_UPDATE"]} if "SOOTA_AUTO_UPDATE" in os.environ else {}),
+            }
+        )
         selection_config = ContentSelectionConfig.model_validate(
             {
                 **(data.get("content_selection") or {}),
@@ -154,6 +168,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         cache_dir=cache_dir,
         data_dir=data_dir,
         payment=payment_config,
+        updates=updates_config,
         routing=routing_config,
         content_selection=selection_config,
         tikhub=TikHubConfig(
@@ -175,6 +190,9 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
             whisper_bin=str((data.get("asr") or {}).get("whisper_bin", "whisper")),
         ),
     )
+    from soota.providers.managed import bind_runtimes
+
+    bind_runtimes(settings)
     return settings
 
 

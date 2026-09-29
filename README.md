@@ -4,7 +4,7 @@
 
 Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再按费用策略使用 TikHub，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
 
-已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，三个 Provider 的默认自动更新，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -52,6 +52,10 @@ B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
+
+执行在线采集、接口调用或目录续跑前，Soota 默认检查三个 Provider 并安装 npm／PyPI 最新已发布包。可用 `soota updates apply --json` 立即检查并更新；帮助、预估、离线预览和笔记渲染不会触发更新。首次运行需要 npm、Node.js 和 uv，并可能花几分钟安装。MCP 包即使更新，接入仍保持停用；浏览器扩展不会自动更新。更新失败会报告原因，已经安装的版本保留。
+
+`SOOTA_AUTO_UPDATE=false` 可关闭自动更新；`config.toml` 的 `[updates] interval_seconds = 3600` 可将检查间隔改为一小时，默认 `0` 表示每次在线任务检查。固定版本或执行 `runtime rollback` 后若要继续使用该版，请关闭自动更新。安装位置、外部路径和兼容性检查见 [Provider 架构](docs/providers.md)。
 
 ## 多平台查询
 

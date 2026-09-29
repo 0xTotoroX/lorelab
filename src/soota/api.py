@@ -263,6 +263,7 @@ def call_endpoint(
         reserved.append(record)
 
     provider = TikHubProvider(
+        runtime_python=settings.tikhub.runtime_python,
         cache=CacheStore(settings.cache_dir),
         base_url=settings.tikhub.base_url,
         timeout=settings.tikhub.timeout_seconds,

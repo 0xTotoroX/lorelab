@@ -45,7 +45,9 @@ class OpenCLIMCPProvider:
     def __init__(self, settings: SootaSettings) -> None:
         require_enabled(settings.opencli_mcp)
         self.settings = settings
-        scope = hashlib.sha256(str(settings.opencli_mcp.binary or "default").encode()).hexdigest()[:16]
+        scope = hashlib.sha256(
+            str(settings.opencli_mcp.binary or settings.opencli_mcp.runtime_binary or "default").encode()
+        ).hexdigest()[:16]
         self.cache = CacheStore(settings.cache_dir / "opencli-mcp" / scope)
         self.records: list[RequestRecord] = []
 

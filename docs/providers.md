@@ -75,10 +75,15 @@ uv run soota runtime rollback --json
 - 未选择受管版本时使用 PATH 中现有 OpenCLI；Soota 不覆盖、修补或 `npm -g` 更新全局安装。
 - `update` 省略版本号时查询最新稳定版；也可 `--version 完整版本号` 固定版本。从官方 npm 下载并验证包的 SHA-512，安装到 Soota `data_dir/runtimes/opencli/versions/版本号`，禁用 npm 安装脚本，再检查版本、只读命令和 JSON 列契约；成功后原子切换指针。网络、安装或契约失败不切换。
 - 受管安装可应用已确认的局部兼容修复。只匹配已知上游代码，标记修改来源并记录 `soota-compatibility.json`；上游代码变化时不猜测替换，也不仅因版本变新拒绝安装。全局安装不改动。
-- 保留上一受管版本；第一次受管安装的 rollback 返回原有 PATH 安装。升级不更改 Python 代码或 TikHub SDK，也不自动更新浏览器扩展。独立更新仍受接口兼容性约束。
+- 保留上一受管版本；OpenCLI 第一次受管安装的 rollback 返回原有 PATH 安装。`runtime update/rollback` 仅管理 OpenCLI，关闭自动更新后才能持续固定旧版本。独立更新仍受接口兼容性约束。
 - 运行时互斥锁避免 Soota 正在执行命令时升级。外部 OpenCLI 不受该锁管理；采集前只读检查 daemon 版本，若不同立即停止，防止 OpenCLI 自动接管用户的旧 daemon。应等待外部采集结束后运行 `soota runtime connect` 切换空闲 daemon，或 rollback。不要为了使用新版本中断已有任务。
 - 升级检查不访问网站，不证明站点可用；更新后用一条已知公开视频的零预算 `inspect` 验证。全局程序有本地补丁时，不会把补丁复制到受管官方包。
-- TikHub SDK 的升级使用开发流程：编辑锁定版本、`uv lock`、测试、核查该版许可、Git commit，再 `uv sync`；不在运行中的 Python 环境自我升级。
+- 在线采集/调用前默认更新三个 Provider，或执行 `soota updates apply --json`。检查官方 npm／PyPI 最新发布包；不跟随 GitHub 未发布提交。`updates check` 保持只读。检查失败、安装失败或入口不兼容会报告，不重复执行采集或收费请求。
+- opencli-mcp 同样隔离安装，校验 `--version` 和 `stdio` 入口；安装不执行 setup、不启动 MCP 会话，也不改变 `enabled=false`。浏览器扩展与 Native Messaging host 的注册不属于包自动更新范围。
+- TikHub SDK 使用 uv 在 `data_dir/runtimes/tikhub/versions/版本号` 创建独立 Python 环境，从 PyPI 安装 wheel；通过离线 HTTP 模拟验证后切换 active 指针。实际请求由该环境的短生命周期子进程执行，密钥只经 stdin 传递，禁止 SDK 自动重试。付费确认、余额门槛和请求记账仍在 Soota 主进程。项目锁文件中的 SDK 作为未启用受管环境时的后备，不因运行时升级改写。
+- 新版包更新不代表 TikHub 接口注册表自动增加功能；打包的注册表、价格与业务解析器仍随 Soota 维护。SDK 的离线验证也不能代替真实站点验证。
+- `[updates] enabled = false` 或 `SOOTA_AUTO_UPDATE=false` 可关闭自动更新；`interval_seconds` 默认 0，每次在线任务检查，可设置更长间隔。`updates apply` 忽略开关和间隔强制检查。程序未运行时没有后台更新任务。
+- 显式设置 OpenCLI/MCP `binary` 或对应环境变量时，该运行时由用户管理，自动更新跳过并报告。默认受管安装不覆盖全局 npm 或当前 Soota Python 环境。更新期间的并发采集可能被运行时锁拒绝，应等更新完成再执行；不会中断已有浏览器任务。
 - `updates check` 只读查询三个 Provider 的 npm／PyPI 包版本及 GitHub 默认分支。分支有新提交、包有新版和 Soota 已核验兼容是三件不同的事；此命令不安装、不切换运行时，也不同步上游仓库备份。
 
 ## 文件职责
@@ -98,7 +103,10 @@ uv run soota runtime rollback --json
 | `counterpart.py` | 同名频道发现、身份与同一期视频验证 |
 | `transcripts/promotions.py` | 社区及人工区间过滤，保留原片段编号与时间 |
 | `runtime_cli.py` | 对外暴露运行时管理命令 |
-| `updates.py`、`updates_cli.py` | 查询三个 Provider 的包版本和仓库提交关系，并提供只读 CLI 命令 |
+| `updates.py`、`updates_cli.py` | 仓库更新查询与包更新 CLI 入口 |
+| `auto_updates.py` | 在线任务前的自动检查、更新锁、失败报告和检查间隔 |
+| `providers/managed.py` | MCP 与 TikHub 独立安装、离线验证和运行时绑定 |
+| `providers/tikhub_worker.py`、`providers/tikhub/managed_client.py` | 经 stdin 传递请求的隔离 SDK 子进程桥接 |
 
 契约参考：[OpenCLI v1.8.3](https://github.com/jackwener/OpenCLI/tree/v1.8.3)、[TikHub 官方 X 接口](https://docs.tikhub.io/191321711e0)。TikHub X 官方响应样例的 `data` 为空，尚不足以实现严格分页解析器；本轮没有发送收费请求来猜测结构。
 

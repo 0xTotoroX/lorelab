@@ -12,7 +12,7 @@ import httpx
 
 from soota import TIKHUB_SDK_VERSION
 from soota.billing import PaymentGate
-from soota.errors import AuthBudgetError, ContractError, SourceError, TranscriptError
+from soota.errors import AuthBudgetError, ContractError, SootaError, SourceError, TranscriptError
 from soota.models import (
     AudioAsset,
     CapabilitySet,
@@ -86,7 +86,9 @@ class TikHubProvider:
         before_request: Callable[[RequestRecord], None] | None = None,
         max_retries: int = 2,
         payment_gate: PaymentGate | None = None,
+        runtime_python: str | None = None,
     ) -> None:
+        self.runtime_python = runtime_python
         self.cache = cache
         self.api_key = api_key if api_key is not None else load_tikhub_api_key()
         self.base_url = base_url.rstrip("/")
@@ -432,6 +434,8 @@ class TikHubProvider:
                 return self._requester(method, path, params, json=json_body)
             try:
                 return client._request(method, path, params=params, json=json_body)
+            except SootaError:
+                raise
             except Exception as exc:
                 raise _map_tikhub_error(exc) from exc
 
@@ -447,6 +451,13 @@ class TikHubProvider:
                 "未找到 TikHub API Key。",
                 hint="export TIKHUB_API_KEY 或 Keychain service=soota.tikhub account=api_key。不要把 Key 发给聊天。",
             )
+        if self.runtime_python:
+            from soota.providers.tikhub.managed_client import ManagedClient
+
+            self._client = ManagedClient(
+                self.runtime_python, api_key=self.api_key, base_url=self.base_url, timeout=self.timeout
+            )
+            return self._client
         from tikhub import TikHub
 
         self._client = TikHub(

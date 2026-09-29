@@ -107,6 +107,7 @@ def inspect_item(
     if not tikhub_capabilities(source).inspect:
         raise SourceError("TikHub 尚未接入该来源的统一元数据解析。")
     paid = TikHubProvider(
+        runtime_python=settings.tikhub.runtime_python,
         cache=CacheStore(settings.cache_dir),
         base_url=settings.tikhub.base_url,
         timeout=settings.tikhub.timeout_seconds,
