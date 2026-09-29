@@ -70,6 +70,52 @@ YOUTUBE_TIMEDTEXT_FILTERS = (
     ),
 )
 
+YOUTUBE_LIVE_TRACK_ANCHOR = """        try {
+          if (boundOriginalFetch) {"""
+YOUTUBE_LIVE_TRACK = """        try {
+          // Modified by Soota: use the loaded player's signed URL before waiting
+          // for caption traffic. A separately fetched watch HTML URL may be empty.
+          try {
+            const response = player.getPlayerResponse?.();
+            const tracks = response?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+            const liveTrack = response?.videoDetails?.videoId === targetVideoId
+              && Array.isArray(tracks) && tracks.find(candidate => track.vss_id
+                ? candidate.vssId === track.vss_id
+                : candidate.languageCode === track.languageCode
+                  && (candidate.kind || '') === (track.kind || ''));
+            if (liveTrack?.baseUrl && boundOriginalFetch) {
+              const url = new URL(liveTrack.baseUrl, location.origin);
+              if (url.origin === location.origin && url.pathname === '/api/timedtext'
+                  && timedtextUrlMatchesVideo(url.href)) {
+                url.searchParams.set('fmt', 'json3');
+                const resp = await boundOriginalFetch(url.href, {
+                  credentials: 'include', signal: AbortSignal.timeout(5000),
+                });
+                if (resp.ok) {
+                  const parsed = parseJson3(await resp.text());
+                  if (parsed.rows?.length) return parsed.rows;
+                }
+              }
+            }
+          } catch {
+            // Token-required tracks and transient failures retain upstream capture.
+          }
+          if (boundOriginalFetch) {"""
+
+
+def _patch_youtube_live_track(install: Path) -> str | None:
+    relative = "node_modules/@jackwener/opencli/clis/youtube/transcript.js"
+    path = install / relative
+    if not path.is_file():
+        return None
+    original = path.read_text()
+    if original.count(YOUTUBE_LIVE_TRACK) == 1:
+        return relative
+    if original.count(YOUTUBE_LIVE_TRACK_ANCHOR) != 1:
+        return None
+    atomic_write(path, original.replace(YOUTUBE_LIVE_TRACK_ANCHOR, YOUTUBE_LIVE_TRACK, 1))
+    return relative
+
 
 def _patch_youtube(install: Path) -> str | None:
     relative = "node_modules/@jackwener/opencli/clis/youtube/transcript.js"
@@ -112,6 +158,7 @@ def apply_managed_fixes(install: Path) -> None:
         for name, relative in (
             ("media-owned-tab-navigation", _patch_navigation(install)),
             ("youtube-timedtext-optional-pot", _patch_youtube(install)),
+            ("youtube-live-player-caption-url", _patch_youtube_live_track(install)),
         )
         if relative is not None
     }
@@ -126,7 +173,7 @@ def apply_managed_fixes(install: Path) -> None:
                 "modified_by": "Soota",
                 "files": [
                     {"file": relative, "sha256": hashlib.sha256((install / relative).read_bytes()).hexdigest()}
-                    for relative in applied.values()
+                    for relative in dict.fromkeys(applied.values())
                 ],
             },
             indent=2,
