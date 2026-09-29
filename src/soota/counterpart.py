@@ -10,7 +10,7 @@ from soota.errors import CaptionUnavailable, SourceError
 from soota.models import CaptionResult, MediaItem, TranscriptStatus
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
-from soota.providers.soota import SootaProvider
+from soota.providers.ytdlp import YtDlpProvider
 from soota.routing import recognize
 
 
@@ -93,7 +93,7 @@ def channel_fields(rows: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def _youtube_counterpart(
-    client: OpenCLIProvider, original: MediaItem, caption_fallback: SootaProvider | None = None
+    client: OpenCLIProvider, original: MediaItem, caption_fallback: YtDlpProvider | None = None
 ) -> tuple[MediaItem, CaptionResult | None, list[str]]:
     name = creator_name(original)
     report: dict[str, Any] = {"status": "not_found", "candidates": []}
@@ -170,7 +170,7 @@ def _youtube_counterpart(
 
 
 def youtube_counterpart(
-    client: OpenCLIProvider, original: MediaItem, caption_fallback: SootaProvider | None = None
+    client: OpenCLIProvider, original: MediaItem, caption_fallback: YtDlpProvider | None = None
 ) -> tuple[MediaItem, CaptionResult | None, list[str]]:
     try:
         return _youtube_counterpart(client, original, caption_fallback)

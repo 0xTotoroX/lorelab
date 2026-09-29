@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import platformdirs
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, ValidationError, field_validator
 
 from soota.errors import InputError
 
@@ -63,7 +63,12 @@ class LocalProviderConfig(BaseModel):
 
 
 class RoutingConfig(BaseModel):
-    default_provider: Literal["auto", "opencli-mcp", "opencli", "soota", "tikhub"] = "auto"
+    default_provider: Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub"] = "auto"
+
+    @field_validator("default_provider", mode="before")
+    @classmethod
+    def legacy_provider(cls, value: Any) -> Any:
+        return "yt-dlp" if value == "soota" else value
 
 
 class PaymentConfig(BaseModel):

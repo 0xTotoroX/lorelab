@@ -101,6 +101,13 @@ def test_default_estimate_is_free_offline_and_never_checks_tikhub_wallet(setting
 
 
 def test_empty_captions_preserve_metadata_without_paid_fallback_and_do_not_poison_cache(settings, monkeypatch):
+    from soota.providers.opencli_runtime import RuntimeUnavailable
+    from soota.providers.ytdlp import YtDlpProvider
+
+    def unavailable(*args):
+        raise RuntimeUnavailable("yt-dlp absent")
+
+    monkeypatch.setattr(YtDlpProvider, "inspect", unavailable)
     monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: False)
     rows = []
     monkeypatch.setattr(
@@ -158,13 +165,13 @@ def test_authorized_caption_fallback_runs_only_after_opencli_missing(settings, m
         )
 
     from soota.providers.opencli_runtime import RuntimeUnavailable
-    from soota.providers.soota import SootaProvider
+    from soota.providers.ytdlp import YtDlpProvider
 
     def unavailable(*args):
-        events.append("soota")
+        events.append("yt-dlp")
         raise RuntimeUnavailable("yt-dlp unavailable")
 
-    monkeypatch.setattr(SootaProvider, "inspect", unavailable)
+    monkeypatch.setattr(YtDlpProvider, "inspect", unavailable)
     paid = _youtube_requester()
 
     def requester(*args, **kwargs):
@@ -176,7 +183,7 @@ def test_authorized_caption_fallback_runs_only_after_opencli_missing(settings, m
         settings, YOUTUBE, fallback="tikhub", max_cost=0.1, transcript=TranscriptMode.CAPTIONS_ONLY, requester=requester
     )
     assert result.ok and events[:2] == ["opencli:video", "opencli:transcript"]
-    assert "tikhub" in events[2:] and result.data["routing"]["attempted"] == ["opencli", "soota", "tikhub"]
+    assert "tikhub" in events[2:] and result.data["routing"]["attempted"] == ["opencli", "yt-dlp", "tikhub"]
 
 
 @pytest.mark.parametrize(

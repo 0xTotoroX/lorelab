@@ -18,7 +18,7 @@ def block_browser_commands(monkeypatch):
         raise AssertionError("Tests must stub OpenCLI; never use the user's browser.")
 
     monkeypatch.setattr("soota.providers.opencli.OpenCLIProvider._run", blocked)
-    monkeypatch.setattr("soota.providers.soota.run_process", blocked)
+    monkeypatch.setattr("soota.providers.ytdlp.run_process", blocked)
     monkeypatch.setenv("SOOTA_AUTO_UPDATE", "false")
     monkeypatch.setenv("OPENCLI_PROFILE", "test-context")
     monkeypatch.setattr("soota.providers.opencli_context.profile_config", lambda: {})

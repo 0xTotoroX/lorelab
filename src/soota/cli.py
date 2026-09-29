@@ -60,7 +60,7 @@ def doctor(
 @app.command()
 def inspect(
     url: Annotated[str, typer.Argument(help="YouTube 或 Bilibili URL")],
-    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/soota/tikhub")] = None,
+    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub")] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="可选 USD 费用上限；0 禁止计费请求")] = None,
@@ -102,7 +102,7 @@ def estimate(
 @app.command()
 def catalog(
     url: Annotated[str, typer.Argument(help="X、YouTube 频道或 Bilibili UP 主主页")],
-    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/soota/tikhub")] = None,
+    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub")] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="本任务累计收录的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="本任务累计读取的页数上限")] = DEFAULT_MAX_PAGES,
@@ -132,7 +132,7 @@ def catalog(
 @app.command()
 def ingest(
     url: Annotated[str, typer.Argument()],
-    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli/soota/tikhub")] = None,
+    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub")] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     output: Annotated[Path | None, typer.Option("--output")] = None,

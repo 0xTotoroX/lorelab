@@ -7,7 +7,7 @@ Soota 保留自己的采集、字幕、目录、任务、费用与运行时命�
 对于已有标准流程，直接使用 `ingest`、`inspect` 或 `catalog`，由 Soota 按已接入的能力路由。临时查询或组合任务由 Agent 依次查阅以下入口；这是任务执行顺序，不会把任意上游返回值自动转换成 Soota 内容包。
 
 1. 查 `opencli list -f json` 和具体命令的 `--help`，使用 OpenCLI。
-2. YouTube 单视频元数据和字幕可使用 `soota inspect/ingest --provider soota`，由内置算法调用 yt-dlp。
+2. YouTube/Bilibili 单视频元数据和字幕可使用 `soota inspect/ingest --provider yt-dlp`，由对应 Provider 调用 yt-dlp。
 3. 免费来源无法提供所需能力时，查 `soota api list/show`，通过 Soota 包装的 TikHub 接口执行，遵守费用策略。
 
 opencli-mcp 默认停用，不进行发现或连接；`mcp search/run` 和显式 `--provider opencli-mcp` 会在启动进程前拒绝。用户明确选择其他来源时遵从该选择。空结果、登录失败、限流或请求结果未知，不等于缺少能力，也不授权自动重试或付费。
@@ -35,7 +35,7 @@ uv run soota features call twitter.profile --param username=example --json
 
 ## 已核验的重叠映射
 
-默认顺序为 OpenCLI → soota（已接入能力）→ 经授权的 TikHub。`--provider opencli`、`--provider soota`、`--provider tikhub` 严格选择对应来源；`--provider auto` 明确恢复默认顺序。自动付费模式不改变来源排序；只有轮到 TikHub 时才改变付费确认方式。
+默认顺序为 OpenCLI → yt-dlp（已接入能力）→ 经授权的 TikHub。`--provider opencli`、`--provider yt-dlp`、`--provider tikhub` 严格选择对应来源；`--provider auto` 明确恢复默认顺序。自动付费模式不改变来源排序；只有轮到 TikHub 时才改变付费确认方式。
 
 | 统一入口 | 共同输入 | 语义范围 |
 |---|---|---|

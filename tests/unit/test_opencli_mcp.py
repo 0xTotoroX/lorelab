@@ -132,6 +132,12 @@ def test_auto_falls_back_only_when_mcp_is_unavailable(settings, monkeypatch):
 
 
 def test_metadata_survives_both_caption_runtimes_becoming_unavailable(settings, monkeypatch):
+    from soota.providers.ytdlp import YtDlpProvider
+
+    def unavailable(*args):
+        raise RuntimeUnavailable("yt-dlp absent")
+
+    monkeypatch.setattr(YtDlpProvider, "inspect", unavailable)
     monkeypatch.setattr(StdioMCPClient, "available", lambda config: True)
 
     def mcp_response(self, site, command, args):

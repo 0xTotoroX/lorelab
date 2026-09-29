@@ -1,0 +1,239 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import shutil
+import tempfile
+import time
+from pathlib import Path
+from typing import Any
+
+from soota.config import SootaSettings
+from soota.errors import AuthBudgetError, ContractError, SourceError
+from soota.models import (
+    CapabilitySet,
+    CaptionResult,
+    MediaItem,
+    RequestRecord,
+    SourceRef,
+    TranscriptSegment,
+    TranscriptSource,
+    TranscriptStatus,
+)
+from soota.providers.opencli_runtime import RuntimeUnavailable
+from soota.providers.process import run_process
+from soota.routing import recognize
+from soota.storage.cache import CacheStore
+from soota.transcripts.captions import parse_srt
+
+
+def capabilities_for(source: SourceRef) -> CapabilitySet:
+    supported = source.platform in {"youtube", "bilibili"} and source.kind == "video"
+    return CapabilitySet(inspect=supported, captions=supported)
+
+
+class YtDlpProvider:
+    """yt-dlp metadata and captions for YouTube and Bilibili."""
+
+    name = "yt-dlp"
+
+    def __init__(self, settings: SootaSettings) -> None:
+        self.settings = settings
+        self.config = settings.local
+        scope = hashlib.sha256(
+            f"{self.config.binary}|{self.config.cookies_browser}|{settings.default_language}".encode()
+        ).hexdigest()[:16]
+        self.cache = CacheStore(settings.cache_dir / "yt-dlp" / scope)
+        self.legacy_cache = CacheStore(settings.cache_dir / "soota" / scope)
+        self.records: list[RequestRecord] = []
+
+    def _run(self, source: SourceRef, args: list[str], operation: str) -> str:
+        binary = shutil.which(self.config.binary)
+        if not binary:
+            raise RuntimeUnavailable("未找到 yt-dlp。", hint="安装 yt-dlp，或通过 SOOTA_YTDLP_BINARY 指定程序。")
+        argv = [
+            binary,
+            "--ignore-config",
+            "--no-playlist",
+            "--skip-download",
+            "--no-progress",
+            "--socket-timeout",
+            "20",
+            "--retries",
+            "0",
+            "--extractor-retries",
+            "0",
+        ]
+        if self.config.cookies_browser:
+            argv += ["--cookies-from-browser", self.config.cookies_browser]
+        self.records.append(
+            RequestRecord(endpoint=f"yt-dlp:{source.platform}/{operation}", billed=False, estimated_cost_usd=0)
+        )
+        try:
+            result = run_process(
+                argv + args + ["--", source.canonical_url],
+                timeout=self.config.timeout_seconds,
+                max_bytes=self.config.max_output_bytes,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeUnavailable("yt-dlp 程序已不可用。") from exc
+        if result.returncode:
+            message = result.stderr.lower()
+            if any(
+                text in message for text in ("429", "403", "sign in", "login", "cookies", "captcha", "private video")
+            ):
+                raise AuthBudgetError("yt-dlp 遇到登录、Cookie 或访问限制；请检查浏览器状态，不自动切换付费来源。")
+            raise SourceError("yt-dlp 采集失败，未自动重试或切换付费来源。", details={"exit_code": result.returncode})
+        if "subtitles are only available when logged in" in result.stderr.lower():
+            raise AuthBudgetError("B 站字幕需要登录；请检查 yt-dlp 使用的浏览器 Cookie。")
+        return result.stdout
+
+    def _cached(self, source: SourceRef, artifact: str) -> dict[str, Any] | None:
+        cached = self.cache.get_json(source, artifact)
+        if not cached and source.platform == "youtube":
+            cached = self.legacy_cache.get_json(source, artifact)
+        if cached and 0 <= time.time() - cached.get("timestamp", 0) < self.config.cache_seconds:
+            self.records.append(
+                RequestRecord(endpoint=f"yt-dlp:cache:{artifact}", billed=False, cache_hit=True, estimated_cost_usd=0)
+            )
+            return dict(cached["result"])
+        return None
+
+    def inspect(self, source: SourceRef) -> MediaItem:
+        if not capabilities_for(source).inspect:
+            raise SourceError("yt-dlp Provider 当前接入 YouTube/Bilibili 单视频元数据和字幕。")
+        cached = self._cached(source, "inspect")
+        if cached:
+            item = MediaItem.model_validate(cached)
+            if item.source.cache_identity != source.cache_identity:
+                raise ContractError("yt-dlp 缓存来源不匹配。")
+            item.provenance["provider"] = self.name
+            return item
+        raw = self._run(source, ["--dump-single-json", "--simulate", "--write-subs", "--write-auto-subs"], "video")
+        try:
+            info = json.loads(raw)
+            if not isinstance(info, dict):
+                raise ValueError("invalid metadata")
+            actual_id = str(info.get("id") or "")
+            if source.platform == "bilibili":
+                actual_id = actual_id.removesuffix("_p1")
+                if source.id.startswith("av") and info.get("original_url") == source.canonical_url:
+                    resolved = recognize(str(info.get("webpage_url") or ""))
+                    if resolved.platform == "bilibili" and resolved.kind == "video" and resolved.id == actual_id:
+                        source = resolved.model_copy(update={"url": source.url})
+            if actual_id != source.id:
+                raise ValueError("source mismatch")
+            # Store only selected metadata and track names, never signed URLs or headers.
+            tracks: dict[str, list[str]] = {"official": [], "auto": []}
+            extension = "srt" if source.platform == "bilibili" else "json3"
+            for kind, key in (("official", "subtitles"), ("auto", "automatic_captions")):
+                for lang, formats in (info.get(key) or {}).items():
+                    if lang in {"live_chat", "danmaku"} or not any(f.get("ext") == extension for f in formats):
+                        continue
+                    actual_kind = "auto" if source.platform == "bilibili" and lang.startswith("ai-") else kind
+                    tracks[actual_kind].append(lang)
+            item = MediaItem(
+                source=source,
+                title=info.get("title"),
+                creator=info.get("channel") or info.get("uploader"),
+                duration_seconds=int(info["duration"]) if info.get("duration") is not None else None,
+                language=info.get("language"),
+                provenance={"provider": self.name, "engine": "yt-dlp", "caption_tracks": tracks},
+            )
+        except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
+            raise ContractError("yt-dlp 元数据格式无效或来源不匹配。") from exc
+        self.cache.put_json(source, "inspect", {"timestamp": time.time(), "result": item.model_dump(mode="json")})
+        return item
+
+    def get_captions(self, item: MediaItem) -> CaptionResult:
+        if not capabilities_for(item.source).captions:
+            raise SourceError("yt-dlp Provider 当前接入 YouTube/Bilibili 字幕。")
+        cached = self._cached(item.source, "captions")
+        if cached:
+            return CaptionResult.model_validate(cached)
+        tracks = item.provenance.get("caption_tracks", {})
+        selected = select_track(tracks, self.settings.default_language)
+        if selected is None:
+            return CaptionResult(status=TranscriptStatus.MISSING)
+        language, kind = selected
+        bili = item.source.platform == "bilibili"
+        extension = "srt" if bili else "json3"
+        # Bilibili AI tracks are exposed by yt-dlp as ordinary subtitles.
+        ordinary = bili or kind == TranscriptSource.OFFICIAL
+        with tempfile.TemporaryDirectory(prefix="soota-captions-") as directory:
+            self._run(
+                item.source,
+                [
+                    "--write-subs" if ordinary else "--no-write-subs",
+                    "--no-write-auto-subs" if ordinary else "--write-auto-subs",
+                    "--sub-langs",
+                    re.escape(language),
+                    "--sub-format",
+                    extension,
+                    "-o",
+                    str(Path(directory) / "captions.%(ext)s"),
+                ],
+                "transcript",
+            )
+            files = list(Path(directory).glob(f"captions.*.{extension}"))
+            if len(files) != 1:
+                raise SourceError("yt-dlp 未生成所选字幕文件；未把失败缓存为无字幕。")
+            if files[0].stat().st_size > self.config.max_output_bytes:
+                raise SourceError("yt-dlp 字幕文件超过大小上限。")
+            try:
+                text = files[0].read_text(encoding="utf-8")
+                if bili:
+                    segments = parse_srt(text, language=language, source=kind)
+                    if not segments or any(s.end_ms < s.start_ms for s in segments):
+                        raise ValueError("empty or invalid subtitle body")
+                    result = CaptionResult(
+                        status=TranscriptStatus.READY, language=language, source=kind, segments=segments
+                    )
+                else:
+                    result = parse_json3(json.loads(text), language, kind)
+            except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
+                raise ContractError(f"yt-dlp 字幕不是有效的 {extension.upper()}。") from exc
+        self.cache.put_json(
+            item.source, "captions", {"timestamp": time.time(), "result": result.model_dump(mode="json")}
+        )
+        return result
+
+
+def select_track(tracks: dict[str, Any], preferred: str) -> tuple[str, TranscriptSource] | None:
+    candidates = [(lang, TranscriptSource(kind)) for kind in ("official", "auto") for lang in tracks.get(kind, [])]
+    if not candidates:
+        return None
+
+    def rank(track: tuple[str, TranscriptSource]) -> tuple[int, bool, str]:
+        lang, kind = track
+        lang = lang.removeprefix("ai-")
+        match = 0 if lang == preferred else 1 if lang.split("-")[0] == preferred.split("-")[0] else 2
+        return match, kind != TranscriptSource.OFFICIAL, lang
+
+    return min(candidates, key=rank)
+
+
+def parse_json3(data: dict[str, Any], language: str, kind: TranscriptSource) -> CaptionResult:
+    segments: list[TranscriptSegment] = []
+    for event in data["events"]:
+        text = "".join(part.get("utf8", "") for part in event.get("segs", [])).strip()
+        if not text:
+            continue
+        start = int(event["tStartMs"])
+        end = start + int(event.get("dDurationMs", 0))
+        if start < 0 or end < start:
+            raise ValueError("invalid timestamp")
+        segments.append(
+            TranscriptSegment(
+                segment_id=f"seg-{len(segments) + 1:06d}",
+                start_ms=start,
+                end_ms=end,
+                text=text,
+                language=language,
+                source=kind,
+            )
+        )
+    if not segments:
+        raise ValueError("empty caption body")
+    return CaptionResult(status=TranscriptStatus.READY, source=kind, language=language, segments=segments)
