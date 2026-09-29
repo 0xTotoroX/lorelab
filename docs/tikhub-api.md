@@ -1,6 +1,6 @@
 # TikHub 接口与 CLI 能力
 
-2026-09-12 已接入统一接口注册表与 `platforms`、`api list/show/call`。现已增加 [三来源功能入口与费用策略](features.md)，默认依次尝试已核验的 opencli-mcp、OpenCLI，再按付费策略使用 TikHub。
+2026-09-12 已接入统一接口注册表与 `platforms`、`api list/show/call`。现已增加 [功能入口与费用策略](features.md)，默认先尝试已核验的 OpenCLI，再按付费策略使用 TikHub；opencli-mcp 默认停用。
 
 注册表来自当天的 [TikHub 公开 OpenAPI](https://api.tikhub.io/openapi.json)，服务文档版本为 `V5.3.2`。共登记 1,063 个 GET/POST 接口；同功能去除旧版本后有 964 个首选操作，其中 901 个属于可调用的内容查询，覆盖 21 个平台/产品入口。微信拆为视频号、公众号、搜一搜，因此按通常平台名称合并为 19 个平台。
 

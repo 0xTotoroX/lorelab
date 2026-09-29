@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from soota.config import PaymentConfig, SootaSettings
-from soota.errors import AuthBudgetError, SootaError
+from soota.errors import AuthBudgetError, InputError, SootaError
 from soota.models import RequestRecord
 
 
@@ -109,4 +109,7 @@ class PaymentGate:
 
 
 def selected_provider(settings: SootaSettings, explicit: str | None) -> str:
-    return explicit if explicit is not None else settings.routing.default_provider
+    chosen = explicit if explicit is not None else settings.routing.default_provider
+    if chosen == "opencli-mcp" and not settings.opencli_mcp.enabled:
+        raise InputError("MCP 接入已停用；请使用 auto、opencli 或 tikhub。")
+    return chosen

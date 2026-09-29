@@ -56,11 +56,13 @@ def write_bundle_to(
     manifest.transcript.status = document.status
     manifest.transcript.source = document.source
     manifest.transcript.language = document.language
-    manifest.files = {
-        "content.md": "content.md",
-        "transcript.md": "transcript.md",
-        "manifest.json": "manifest.json",
-    }
+    manifest.files.update(
+        {
+            "content.md": "content.md",
+            "transcript.md": "transcript.md",
+            "manifest.json": "manifest.json",
+        }
+    )
     atomic_write(
         manifest_path,
         json.dumps(json.loads(manifest.model_dump_json()), ensure_ascii=False, indent=2) + "\n",

@@ -141,6 +141,19 @@ def ingest(
     max_items: Annotated[int | None, typer.Option("--max-items")] = 1,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     force: Annotated[bool, typer.Option("--force")] = False,
+    prefer_youtube: Annotated[
+        bool | None,
+        typer.Option(
+            "--prefer-youtube/--no-prefer-youtube", help="B站视频检查同名YouTube频道及同一期，匹配后优先YouTube字幕"
+        ),
+    ] = None,
+    exclude_promotions: Annotated[
+        bool | None,
+        typer.Option("--exclude-promotions/--keep-promotions", help="过滤已标注推广；跨平台开关开启时默认启用"),
+    ] = None,
+    exclude_range: Annotated[
+        list[str] | None, typer.Option("--exclude-range", help="人工或Agent核实的推广区间，起秒:止秒，可重复")
+    ] = None,
 ) -> None:
     if max_items is not None and max_items < 1:
         raise typer.Exit(3)
@@ -155,6 +168,9 @@ def ingest(
         max_cost=max_cost,
         dry_run=dry_run,
         force=force,
+        prefer_youtube=prefer_youtube,
+        exclude_promotions=exclude_promotions,
+        exclude_ranges=exclude_range,
     )
 
 

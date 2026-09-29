@@ -59,7 +59,10 @@ def test_site_names_cannot_escape_adapter_directory(settings):
         StdioMCPClient(settings.opencli_mcp).call_site_readonly("../elsewhere", "read", {})
 
 
-def test_mcp_cli_discovery_does_not_run_site(monkeypatch):
+def test_mcp_cli_discovery_does_not_run_site(monkeypatch, settings):
+    settings.opencli_mcp.enabled = True
+    monkeypatch.setattr("soota.config.load_settings", lambda: settings)
+
     def search(self, name, args):
         assert name == "sites_search" and args == {"query": "reddit search", "limit": 20}
         return metadata()
@@ -71,6 +74,7 @@ def test_mcp_cli_discovery_does_not_run_site(monkeypatch):
 
 
 def test_mcp_run_saves_native_result_without_exposing_credentials(settings, tmp_path, monkeypatch):
+    settings.opencli_mcp.enabled = True
     params = tmp_path / "params.json"
     params.write_text('{"auth":{"api_key":"private-test-value"}}')
     monkeypatch.setattr(

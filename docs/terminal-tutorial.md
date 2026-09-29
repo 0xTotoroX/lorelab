@@ -18,13 +18,7 @@ opencli doctor
 opencli profile list
 ```
 
-opencli-mcp 另需 Node.js 22+ 和[自己的 Chrome 扩展](https://chromewebstore.google.com/detail/opencli-mcp/lnaoghmfcdnbhgcihkakfobckmfhllkg)。安装本地程序与扩展后运行以下命令；`--clients none` 不向 Codex 注册 MCP 工具：
-
-```bash
-npm install -g opencli-mcp@0.0.22
-opencli-mcp setup --clients none
-opencli-mcp doctor
-```
+opencli-mcp 当前默认停用，无需安装或连接。
 
 若有多个浏览器 profile，通过 `OPENCLI_PROFILE` 指定 `profile list` 中的别名或 context ID。Soota 不读取或导出浏览器密码。
 
@@ -46,7 +40,7 @@ uv run soota catalog "https://x.com/USERNAME" --max-items 50 \
   --max-cost 0 --incremental --json
 ```
 
-这是最近快照：opencli-mcp 最多 100 条，OpenCLI 最多 200 条，完整性未知。不能据此宣称已收齐历史，也不能 `jobs resume` 翻到更早帖子。`--max-cost 0` 禁止转入任何计费请求；浏览器采集仍需要本地运行时间和网络。
+这是最近快照：OpenCLI 最多 200 条，完整性未知。不能据此宣称已收齐历史，也不能 `jobs resume` 翻到更早帖子。`--max-cost 0` 禁止转入任何计费请求；浏览器采集仍需要本地运行时间和网络。
 
 ## 3. 读取或保存视频元数据
 
@@ -58,7 +52,7 @@ uv run soota ingest "https://www.youtube.com/watch?v=dQw4w9WgXcQ" \
   --transcript none --max-cost 0 --json
 ```
 
-第一个命令返回标题、作者和已有元数据；第二个保存元数据 Markdown 内容包。`none` 只保存元数据；需要字幕时使用默认 `auto`，Bilibili 优先尝试 opencli-mcp，YouTube 从 OpenCLI 开始。
+第一个命令返回标题、作者和已有元数据；第二个保存元数据 Markdown 内容包。`none` 只保存元数据；需要字幕时使用默认 `auto`，Bilibili 和 YouTube 都从 OpenCLI 开始。
 
 确实愿意在免费元数据来源不可用时使用 TikHub，可明确给出兜底和费用上限（USD）：
 
@@ -85,6 +79,16 @@ uv run soota ingest "视频 URL" --provider tikhub --transcript auto \
 
 这里的 0.05 是示例预算上限，不是固定收费。
 
+B站同作者同一期视频可选 YouTube 优先：
+
+```bash
+uv run soota ingest "B站视频 URL" --prefer-youtube --max-cost 0 --json
+# 本次关闭跨平台查找：
+uv run soota ingest "B站视频 URL" --no-prefer-youtube --max-cost 0 --json
+```
+
+开启时默认过滤已标注的推广。没有标注或身份无法确认时会明确报告，详见 [字幕选择与过滤](subtitle-selection.md)。
+
 ## 4. 检查三个 Provider 的更新
 
 ```bash
@@ -97,22 +101,22 @@ OpenCLI 仍可单独升级和回滚：
 
 ```bash
 uv run soota runtime check-update --json
-# 按查询结果填入要安装的明确版本。
-uv run soota runtime update --version 版本号 --json
+# 省略版本号，即查询并安装最新稳定版。
+uv run soota runtime update --json
+uv run soota runtime connect --json
 uv run soota runtime status --json
 # 如需恢复：
 uv run soota runtime rollback --json
 ```
 
-更新安装在 Soota 自己的数据目录，不覆盖你现有全局 OpenCLI 或其中的本地补丁。若新程序与正在运行的 daemon 版本不同，Soota 会停止采集；先等已有采集结束，再手动切换 daemon，或直接 rollback。升级检查通过只证明 CLI 契约兼容，还应执行一次零预算 `inspect` 检查网站与扩展。
+更新安装在 Soota 自己的数据目录，不覆盖你现有全局 OpenCLI 或其中的本地补丁。若新程序与正在运行的 daemon 版本不同，Soota 会停止采集；先等已有采集结束，再运行 `soota runtime connect` 切换空闲 daemon，或直接 rollback。升级检查通过只证明 CLI 契约兼容，还应执行一次零预算 `inspect` 检查网站与扩展。
 
 完整边界和配置见 [Provider 与运行时](providers.md)，可续跑的 TikHub 视频目录见 [目录说明](catalog.md)。
 
 ## 查询任务能力与设置付款方式
 
 ```bash
-uv run soota mcp search "bilibili subtitle" --json
-# MCP 不具备所需能力时查阅上游 OpenCLI
+# 查阅上游 OpenCLI
 opencli list -f json
 uv run soota features list --site bilibili --json
 uv run soota features show twitter.profile --json
@@ -124,7 +128,7 @@ uv run soota policy set --mode auto --min-balance 5
 uv run soota policy set --mode auto --no-balance-limit
 ```
 
-ask 是初始默认值：按能力先试 opencli-mcp、OpenCLI，轮到 TikHub 收费前在终端询问 y/N。auto 只改变 TikHub 的付费授权，不改来源顺序；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。现有业务入口、MCP 按需调用和 TikHub 封装见 [功能入口与费用策略](features.md)。
+ask 是初始默认值：按能力先试 OpenCLI，轮到 TikHub 收费前在终端询问 y/N。auto 只改变 TikHub 的付费授权，不改来源顺序；预估扣费后余额触及阈值即暂停，或明确选择不限制余额。`--max-cost` 是额外上限，不会取消 ask 确认。现有业务入口和 TikHub 封装见 [功能入口与费用策略](features.md)。
 
 ## 个人资料与知识库规则
 

@@ -14,7 +14,7 @@ from soota.errors import InputError, SourceError
 from soota.feature_aliases import ALIASES, FeatureAlias, alias_params
 from soota.models import CommandResult
 from soota.providers import opencli_commands
-from soota.providers.mcp_client import StdioMCPClient
+from soota.providers.mcp_client import StdioMCPClient, require_enabled
 from soota.providers.opencli_mcp import READ_COMMANDS, OpenCLIMCPProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
 from soota.providers.tikhub.registry import load_registry
@@ -47,7 +47,7 @@ def list_features(
         raise InputError("provider 支持 opencli-mcp/opencli/tikhub；limit 为 1–5000，offset 非负。")
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
-    if provider in {None, "opencli-mcp"}:
+    if settings.opencli_mcp.enabled and provider in {None, "opencli-mcp"}:
         installed = StdioMCPClient.available(settings.opencli_mcp)
         if not installed:
             warnings.append("opencli-mcp 未安装；已列出 Soota 已核验的只读能力，安装后可调用。")
@@ -103,7 +103,7 @@ def list_features(
             "total": len(selected),
             "offset": offset,
             "next_offset": offset + len(page) if offset + len(page) < len(selected) else None,
-            "inventory": "Soota 业务入口、已核验 MCP 能力和 TikHub 封装；OpenCLI 原生命令直接使用上游 CLI",
+            "inventory": "Soota 业务入口和 TikHub 封装；OpenCLI 原生命令直接使用上游 CLI",
         },
         warnings,
     )
@@ -111,7 +111,7 @@ def list_features(
 
 def alias_view(settings: SootaSettings, alias: FeatureAlias) -> dict[str, Any]:
     plans = [{"provider": "opencli", "operation": alias.opencli}, {"provider": "tikhub", "operation": alias.tikhub}]
-    if alias.opencli_mcp:
+    if settings.opencli_mcp.enabled and alias.opencli_mcp:
         plans.insert(0, {"provider": "opencli-mcp", "operation": alias.opencli_mcp})
     preferred = settings.routing.default_provider
     if preferred != "auto":
@@ -269,6 +269,7 @@ def mcp_arguments(site: str, command: str, params: dict[str, Any]) -> dict[str, 
 
 
 def _native_mcp(settings: SootaSettings, selector: str, params: dict[str, Any], *, dry_run: bool) -> CommandResult:
+    require_enabled(settings.opencli_mcp)
     site_name, command_name = resolve_mcp(selector)
     arguments = mcp_arguments(site_name, command_name, params)
     operation = f"{site_name}/{command_name}"
@@ -354,7 +355,7 @@ def call_feature(
         prepare_request(endpoint, paid_pairs, None, None)
         result = None
         unavailable: list[str] = []
-        if chosen in {"auto", "opencli-mcp"}:
+        if settings.opencli_mcp.enabled and chosen in {"auto", "opencli-mcp"}:
             if not alias.opencli_mcp:
                 if chosen == "opencli-mcp":
                     raise SourceError("该统一功能尚无已核验的 opencli-mcp 方案。")

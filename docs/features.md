@@ -6,28 +6,17 @@ Soota 保留自己的采集、字幕、目录、任务、费用与运行时命�
 
 对于已有标准流程，直接使用 `ingest`、`inspect` 或 `catalog`，由 Soota 按已接入的能力路由。临时查询或组合任务由 Agent 依次查阅以下入口；这是任务执行顺序，不会把任意上游返回值自动转换成 Soota 内容包。
 
-1. 先用 `soota mcp search` 查 opencli-mcp 的站点命令、说明和参数；能满足任务且标为 `read` 时，用 `soota mcp run` 执行。
-2. MCP 没有所需能力时，查 `opencli list -f json` 和具体命令的 `--help`，直接使用 OpenCLI。
-3. 两者均无法提供所需能力时，查 `soota api list/show`，通过 Soota 包装的 TikHub 接口执行，遵守费用策略。
+1. 查 `opencli list -f json` 和具体命令的 `--help`，使用 OpenCLI。
+2. OpenCLI 无法提供所需能力时，查 `soota api list/show`，通过 Soota 包装的 TikHub 接口执行，遵守费用策略。
 
-用户明确指定来源时遵从该选择。空结果、登录失败、限流或请求结果未知，不等于缺少能力，也不授权自动重试或付费。
+opencli-mcp 默认停用，不进行发现或连接；`mcp search/run` 和显式 `--provider opencli-mcp` 会在启动进程前拒绝。用户明确选择其他来源时遵从该选择。空结果、登录失败、限流或请求结果未知，不等于缺少能力，也不授权自动重试或付费。
 
 ```bash
-uv run soota mcp search "bilibili subtitle" --json
-# 根据查询到的 args 准备 params.json；本例为 {"bvid":"BV1M1421t7hT"}
-uv run soota mcp run bilibili subtitle --params-file params.json --dry-run --json
-uv run soota mcp run bilibili subtitle --params-file params.json --output ./subtitle-native.json --json
-
-# MCP 不具备所需能力时，再查看 OpenCLI
 opencli list -f json
 opencli youtube transcript --help
-
-# TikHub 通过 Soota 的封装查询和调用
 uv run soota api list --platform youtube --json
 uv run soota api show bilibili.web.fetch_one_video --json
 ```
-
-`mcp search` 查询上游实时元数据；`mcp run` 在同一会话中重新核对命令的只读声明和参数后执行。它不依赖逐条维护的映射，只开放站点读取命令，不开放通用浏览器控制或写操作。`--dry-run` 会连接 MCP 核对参数，但不执行业务命令。`--params-file` 必须是 JSON 对象，保留数字、布尔值、数组等实际类型；`--output` 将凭据脱敏后的原生结果写入新文件。返回结果仍由上游定义，不自动分页或生成 Markdown。
 
 ## Soota 保留的功能注册表
 
@@ -37,16 +26,15 @@ uv run soota features list --provider tikhub --search search --json
 uv run soota features show twitter.profile --json
 uv run soota features call twitter.profile --param username=example --dry-run --json
 uv run soota features call twitter.profile --param username=example --json
-uv run soota features show opencli-mcp.bilibili.subtitle --json
 ```
 
-`features` 保留 3 个已有 MCP 适配器、11 个统一业务入口和 TikHub 注册表。TikHub 快照选取新版后有 964 个入口：900 个内容查询、63 个辅助接口、1 个已废弃入口。辅助接口需要显式 `--allow-write`，未知价格仍停止，已废弃接口不可执行。这个选项不代表每个辅助接口都会写入。
+`features` 默认显示 11 个统一业务入口和 TikHub 注册表；停用的 MCP 项不展示。TikHub 快照选取新版后有 964 个入口：900 个内容查询、63 个辅助接口、1 个已废弃入口。辅助接口需要显式 `--allow-write`，未知价格仍停止，已废弃接口不可执行。这个选项不代表每个辅助接口都会写入。
 
-统一入口的 `plans` 说明可用来源；指定 `opencli-mcp.*` 或 `tikhub.*` ID 表示明确选择对应来源。复杂参数用 `--params-file`，TikHub 请求体用 `--body`。`features call --output NEW_FILE.json --json` 保存凭据脱敏后的原生响应；需要标准字幕、Markdown 或目录续跑时使用 `ingest` / `catalog`。
+统一入口的 `plans` 说明可用来源；指定 `tikhub.*` ID 表示明确选择 TikHub。复杂参数用 `--params-file`，TikHub 请求体用 `--body`。`features call --output NEW_FILE.json --json` 保存凭据脱敏后的原生响应；需要标准字幕、Markdown 或目录续跑时使用 `ingest` / `catalog`。
 
 ## 已核验的重叠映射
 
-默认顺序为 opencli-mcp → OpenCLI → 经授权的 TikHub。先按能力筛选：YouTube 没有已接入的 MCP 适配器，直接从 OpenCLI 开始。`--provider opencli-mcp`、`--provider opencli`、`--provider tikhub` 严格选择对应来源；`--provider auto` 明确恢复默认顺序。自动付费模式不改变来源排序；只有轮到 TikHub 时才改变付费确认方式。
+默认顺序为 OpenCLI → 经授权的 TikHub。`--provider opencli`、`--provider tikhub` 严格选择对应来源；`--provider auto` 明确恢复默认顺序。自动付费模式不改变来源排序；只有轮到 TikHub 时才改变付费确认方式。
 
 | 统一入口 | 共同输入 | 语义范围 |
 |---|---|---|
@@ -62,9 +50,9 @@ uv run soota features show opencli-mcp.bilibili.subtitle --json
 | `youtube.video.detail` | `url` | 标准视频链接 |
 | `xiaohongshu.note.detail` | `url` | 已展开官方笔记链接，含 xsec_token；输出脱敏 |
 
-仅在请求发送前确认免费来源不可用时，统一入口才考虑下一方案。执行失败、限流、登录问题、无效 JSON、断线后结果不确定都不会触发盲目重试或自动收费。其他能力通过 MCP 查询入口、OpenCLI 原生命令或 TikHub API 查询，不按同名猜测互换参数或分页。
+仅在请求发送前确认免费来源不可用时，统一入口才考虑下一方案。执行失败、限流、登录问题、无效 JSON、断线后结果不确定都不会触发盲目重试或自动收费。其他能力通过 OpenCLI 原生命令或 TikHub API 查询，不按同名猜测互换参数或分页。
 
-已有标准流程也遵循此优先级：Bilibili 元数据与字幕先试 opencli-mcp，YouTube 从 OpenCLI 开始，TikHub 保留独立实现。X 的 opencli-mcp/OpenCLI 目录都是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
+已有标准流程也遵循此优先级：Bilibili 和 YouTube 元数据与字幕都先试 OpenCLI，TikHub 保留独立实现。X 的 OpenCLI 目录是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
 
 ## 两种付费模式
 

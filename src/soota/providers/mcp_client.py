@@ -12,11 +12,14 @@ from pathlib import Path
 from typing import Any
 
 from soota.config import OpenCLIMCPConfig
-from soota.errors import ContractError, SourceError
+from soota.errors import ContractError, InputError, SourceError
 from soota.providers.mcp_contract import validate_read_command
 from soota.providers.opencli_runtime import RuntimeUnavailable
 
-VERIFIED_SERVER_VERSION = "0.0.22"
+
+def require_enabled(config: OpenCLIMCPConfig) -> None:
+    if not config.enabled:
+        raise InputError("MCP 接入已停用；请使用 OpenCLI，或按费用策略使用 TikHub。")
 
 
 class MCPToolError(SourceError):
@@ -33,7 +36,7 @@ class StdioMCPClient:
 
     @staticmethod
     def available(config: OpenCLIMCPConfig) -> bool:
-        return bool(shutil.which(config.binary or "opencli-mcp"))
+        return config.enabled and bool(shutil.which(config.binary or "opencli-mcp"))
 
     def call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         if name != "sites_search":
@@ -80,6 +83,7 @@ class StdioMCPClient:
         readonly_guard: tuple[str, str, dict[str, Any], str | None] | None = None,
         dry_run: bool = False,
     ) -> dict[str, Any]:
+        require_enabled(self.config)
         binary = self.config.binary or "opencli-mcp"
         resolved = shutil.which(binary)
         if resolved is None:
@@ -126,8 +130,9 @@ class StdioMCPClient:
             server = handshake.get("serverInfo")
             if not isinstance(server, dict) or server.get("name") != "opencli-mcp":
                 raise ContractError("连接的不是已核验的 opencli-mcp 服务。")
-            if server.get("version") != VERIFIED_SERVER_VERSION:
-                raise ContractError("opencli-mcp 版本尚未经过 Soota 契约核验。")
+            if not isinstance(server.get("version"), str) or not server["version"]:
+                raise ContractError("opencli-mcp 未提供有效的服务版本。")
+            # Accept compatible releases; each operation is checked against its live read contract.
             self._send(process, {"jsonrpc": "2.0", "method": "notifications/initialized"})
             if readonly_guard is not None:
                 site, command, args, expected_domain = readonly_guard

@@ -30,7 +30,7 @@ def daemon_status(context: str | None = None) -> dict[str, Any]:
         return value
     except httpx.ConnectError as exc:
         raise RuntimeUnavailable(
-            "OpenCLI 守护进程未运行。", hint="先在终端运行 opencli doctor 连接 Browser Bridge。"
+            "OpenCLI 守护进程未运行。", hint="运行 soota runtime connect，启动 Soota 选用的版本并连接 Browser Bridge。"
         ) from exc
     except (httpx.HTTPError, ValueError) as exc:
         raise SourceError("无法确认 OpenCLI 守护进程状态；未启动或重启任何进程。") from exc
@@ -75,7 +75,7 @@ def preflight(version: str, context: str) -> None:
     if status.get("daemonVersion") != version:
         raise SourceError(
             "OpenCLI 与正在运行的守护进程版本不同；已停止调用，避免重启其他采集任务。",
-            hint="等待已有任务结束后自行切换守护进程，或 soota runtime rollback。",
+            hint="等待已有任务结束后运行 soota runtime connect，或 soota runtime rollback。",
         )
     if status.get("profileRequired") or status.get("profileDisconnected"):
         raise InputError("指定浏览器 profile 不可用；请检查连接或选择正确账号。")
@@ -83,3 +83,37 @@ def preflight(version: str, context: str) -> None:
         raise RuntimeUnavailable("OpenCLI Browser Bridge 扩展未连接。")
     if status.get("contextId") != context:
         raise ContractError("OpenCLI 守护进程返回了不同的浏览器上下文。")
+
+
+def connect_runtime(binary: str, *, replace_idle: bool = False) -> dict[str, Any]:
+    """Prepare the selected runtime without replaying any site operation."""
+    import time
+
+    from soota.providers.process import run_process
+
+    probe = run_process([binary, "--version"], timeout=15, max_bytes=65536)
+    if probe.returncode or not probe.stdout.strip():
+        raise RuntimeUnavailable("OpenCLI 版本检查失败，未启动守护进程。")
+    version = probe.stdout.strip()
+    try:
+        status = daemon_status()
+    except RuntimeUnavailable:
+        status = None
+    if status is not None and status.get("daemonVersion") != version:
+        if not replace_idle or status.get("pending") != 0 or status.get("sessionLeases"):
+            raise SourceError("OpenCLI 守护进程版本不同或仍有会话，请等任务结束后运行 soota runtime connect。")
+    if status is None or status.get("daemonVersion") != version:
+        result = run_process([binary, "daemon", "restart"], timeout=20, max_bytes=65536)
+        if result.returncode:
+            raise RuntimeUnavailable("OpenCLI 守护进程启动失败。")
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        try:
+            status = daemon_status()
+        except RuntimeUnavailable:
+            time.sleep(0.5)
+            continue
+        if status.get("extensionConnected") and status.get("daemonVersion") == version:
+            return status
+        time.sleep(0.5)
+    raise RuntimeUnavailable("OpenCLI 已启动，但 Browser Bridge 未连接；请打开安装扩展的浏览器。")

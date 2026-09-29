@@ -28,17 +28,29 @@ versions. They are included in Soota's wheel and source distribution.
 - Package: <https://www.npmjs.com/package/@jackwener/opencli/v/1.8.3>.
 - Copyright 2025 jackwener. License: Apache-2.0, consistently declared by
   package.json and [the unmodified LICENSE](LICENSES/opencli-1.8.3-LICENSE).
-- No root NOTICE was present in the reviewed release. Soota makes no changes
-  to the upstream executable. User-installed or Soota-managed runtimes retain
+- No root NOTICE was present in the reviewed release. Soota can apply narrowly
+  matched compatibility fixes to its managed runtime (see `providers/opencli_patches.py`);
+  modified files identify Soota and retain upstream licensing. Global installations
+  are not modified. User-installed or Soota-managed runtimes retain
   their own license files; this reference copy does not describe every later release.
 
-## opencli-mcp 0.0.22 (external runtime)
+## opencli-mcp 0.0.22 (external runtime, disabled by default)
 
 - Integration: separately installed local MCP process and Chrome extension; no upstream code or runtime is bundled in Soota's Python wheel.
 - Source: <https://github.com/jackwener/opencli-mcp/tree/v0.0.22>.
 - npm package: <https://www.npmjs.com/package/opencli-mcp/v/0.0.22>.
 - Copyright 2026 jackwener. License: Apache-2.0 as declared by its source LICENSE and npm package metadata.
 - Soota calls only an audited read-only site-command allowlist through MCP stdio; the external installation retains its own license files.
+
+## SponsorBlock annotation data (optional, fetched at runtime)
+
+- Source and attribution: SponsorBlock contributors, <https://sponsor.ajay.app/>.
+- API/database license: CC BY-NC-SA 4.0, per
+  <https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License>.
+- Soota does not bundle the database. Optional promotion filtering queries annotated
+  ranges and records attribution in the output manifest. These data retain their
+  noncommercial/share-alike requirements; Soota Apache-2.0 does not replace them.
+- Missing annotations do not establish that a video is free of promotion.
 
 ## Other dependencies
 

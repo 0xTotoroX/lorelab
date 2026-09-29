@@ -36,10 +36,15 @@ class OpenCLIConfig(BaseModel):
 
 
 class OpenCLIMCPConfig(BaseModel):
+    enabled: bool = False
     binary: str | None = None
     timeout_seconds: float = Field(default=180, gt=0)
     max_output_bytes: int = Field(default=8_388_608, ge=1024)
     metadata_cache_seconds: int = Field(default=300, ge=0)
+
+
+class ContentSelectionConfig(BaseModel):
+    prefer_youtube: bool = False
 
 
 class RoutingConfig(BaseModel):
@@ -63,6 +68,7 @@ class SootaSettings(BaseModel):
     opencli: OpenCLIConfig = Field(default_factory=OpenCLIConfig)
     opencli_mcp: OpenCLIMCPConfig = Field(default_factory=OpenCLIMCPConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
+    content_selection: ContentSelectionConfig = Field(default_factory=ContentSelectionConfig)
     payment: PaymentConfig = Field(default_factory=PaymentConfig)
     asr: AsrConfig = Field(default_factory=AsrConfig)
 
@@ -117,6 +123,16 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
     except (ValueError, TypeError, ValidationError) as exc:
         raise InputError("费用策略文件无效，未执行任何请求。", hint="使用 soota policy set --mode ask 恢复。") from exc
     try:
+        selection_config = ContentSelectionConfig.model_validate(
+            {
+                **(data.get("content_selection") or {}),
+                **(
+                    {"prefer_youtube": os.environ["SOOTA_PREFER_YOUTUBE"]}
+                    if "SOOTA_PREFER_YOUTUBE" in os.environ
+                    else {}
+                ),
+            }
+        )
         routing_config = RoutingConfig.model_validate(data.get("routing") or {})
         mcp_config = OpenCLIMCPConfig.model_validate(
             {
@@ -139,6 +155,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         data_dir=data_dir,
         payment=payment_config,
         routing=routing_config,
+        content_selection=selection_config,
         tikhub=TikHubConfig(
             base_url=str((data.get("tikhub") or {}).get("base_url", "https://api.tikhub.io")),
             timeout_seconds=float((data.get("tikhub") or {}).get("timeout_seconds", 60.0)),

@@ -28,7 +28,14 @@ from soota.providers.process import run_process
 from soota.storage.cache import CacheStore
 
 CAPTION_COMMANDS = {("bilibili", "subtitle"), ("youtube", "transcript")}
-ALLOWLIST = {("twitter", "tweets"), ("bilibili", "video"), ("youtube", "video"), *CAPTION_COMMANDS}
+ALLOWLIST = {
+    ("youtube", "search"),
+    ("youtube", "channel"),
+    ("twitter", "tweets"),
+    ("bilibili", "video"),
+    ("youtube", "video"),
+    *CAPTION_COMMANDS,
+}
 
 
 def capabilities_for(source: SourceRef) -> CapabilitySet:

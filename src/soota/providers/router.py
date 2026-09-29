@@ -81,6 +81,10 @@ def inspect_item(
         ("opencli-mcp", mcp_capabilities(source).inspect, OpenCLIMCPProvider),
         ("opencli", opencli_capabilities(source).inspect, OpenCLIProvider),
     ):
+        if name == "opencli-mcp" and not settings.opencli_mcp.enabled:
+            if provider == name:
+                raise InputError("MCP 接入已停用。")
+            continue
         if provider not in {"auto", name}:
             continue
         if not capability:

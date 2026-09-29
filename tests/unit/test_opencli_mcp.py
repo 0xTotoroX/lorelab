@@ -20,6 +20,11 @@ BILI = "https://www.bilibili.com/video/BV1M1421t7hT"
 X = "https://x.com/example"
 
 
+@pytest.fixture(autouse=True)
+def experimental_mcp(settings):
+    settings.opencli_mcp.enabled = True
+
+
 @pytest.mark.parametrize("dry_run", [False, True])
 def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path, dry_run):
     fake = tmp_path / "fake-mcp"
@@ -36,7 +41,7 @@ def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path, 
                 if request.get('method') == 'initialize':
                     response = {'jsonrpc':'2.0','id':request['id'],'result':{
                         'protocolVersion':'2025-06-18',
-                        'serverInfo':{'name':'opencli-mcp','version':'0.0.22'}}}
+                        'serverInfo':{'name':'opencli-mcp','version':'0.0.25'}}}
                 elif request.get('method') == 'tools/call':
                     if request['params']['name'] == 'sites_search':
                         data = {'ok':True,'results':[{'site':'bilibili','name':'video',
@@ -62,7 +67,7 @@ def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path, 
             fake.read_text().replace("assert request['params']['name'] == 'site_run'", "raise SystemExit(9)")
         )
     fake.chmod(0o755)
-    result = StdioMCPClient(OpenCLIMCPConfig(binary=str(fake), timeout_seconds=2)).call_site_readonly(
+    result = StdioMCPClient(OpenCLIMCPConfig(enabled=True, binary=str(fake), timeout_seconds=2)).call_site_readonly(
         "bilibili", "video", {"bvid": "BV1M1421t7hT"}, dry_run=dry_run
     )
     if dry_run:
@@ -73,7 +78,7 @@ def test_stdio_client_initializes_and_decodes_one_bounded_tool_result(tmp_path, 
 
 
 def test_readonly_guard_rejects_write_override_and_changed_contract(tmp_path, monkeypatch):
-    client = StdioMCPClient(OpenCLIMCPConfig(binary="opencli-mcp"))
+    client = StdioMCPClient(OpenCLIMCPConfig(enabled=True, binary="opencli-mcp"))
     args = {"bvid": "BV1M1421t7hT"}
     with pytest.raises(ContractError, match="只读契约"):
         client._assert_read_contract(

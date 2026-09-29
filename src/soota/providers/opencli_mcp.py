@@ -20,7 +20,7 @@ from soota.models import (
     TranscriptSource,
     TranscriptStatus,
 )
-from soota.providers.mcp_client import MCPToolError, StdioMCPClient
+from soota.providers.mcp_client import MCPToolError, StdioMCPClient, require_enabled
 from soota.providers.opencli import parse_date
 from soota.storage.cache import CacheStore
 
@@ -43,6 +43,7 @@ class OpenCLIMCPProvider:
     name = "opencli-mcp"
 
     def __init__(self, settings: SootaSettings) -> None:
+        require_enabled(settings.opencli_mcp)
         self.settings = settings
         scope = hashlib.sha256(str(settings.opencli_mcp.binary or "default").encode()).hexdigest()[:16]
         self.cache = CacheStore(settings.cache_dir / "opencli-mcp" / scope)

@@ -24,7 +24,7 @@ def discovery(monkeypatch):
 def test_union_and_all_native_plans(settings):
     result = list_features(settings, limit=5000)
     features = result.data["features"]
-    assert len(features) == len(load_registry().preferred()) + len(ALIASES) + 3
+    assert len(features) == len(load_registry().preferred()) + len(ALIASES)
     assert all(row["plans"] for row in features)
     assert next(row for row in features if row["id"] == "twitter.profile")["plans"][0]["provider"] == "opencli"
     unsupported = next(row for row in features if row["id"] == "tikhub.tiktok.web.device_register")
@@ -33,13 +33,7 @@ def test_union_and_all_native_plans(settings):
     assert filtered.data["next_offset"] == 1
     assert filtered.data["features"][0]["site"] == "twitter"
     mcp_only = list_features(settings, provider="opencli-mcp", limit=5000)
-    assert {row["id"] for row in mcp_only.data["features"]} == {
-        "opencli-mcp.bilibili.video",
-        "opencli-mcp.bilibili.subtitle",
-        "opencli-mcp.twitter.tweets",
-        "bilibili.video.detail",
-    }
-    assert all(row["providers"] == ["opencli-mcp"] for row in mcp_only.data["features"])
+    assert mcp_only.data["features"] == []
 
 
 @pytest.mark.parametrize("alias", ALIASES, ids=lambda a: a.id)

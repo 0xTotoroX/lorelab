@@ -2,9 +2,9 @@
 
 给 Soota 一个链接：搜集内容、清理噪声、补全字幕，留下可追溯的 Markdown。
 
-Soota 是本地优先的内容摄取 CLI：优先使用 opencli-mcp 和 OpenCLI 的已核验免费能力，再按费用策略使用 TikHub，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令；opencli-mcp 由 Soota 内部调用，无需在 Codex 中单独注册。
+Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再按费用策略使用 TikHub，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
 
-已接入 opencli-mcp 的 Bilibili 视频详情与字幕、X 最近快照，以及 OpenCLI 的 X 最近快照、视频元数据和字幕；还提供 MCP 命令按需查询与只读调用、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -16,7 +16,7 @@ uv sync --extra dev
 uv run soota doctor --json
 ```
 
-使用 opencli-mcp 需 Node.js 22+、Chrome 和其[浏览器扩展](https://chromewebstore.google.com/detail/opencli-mcp/lnaoghmfcdnbhgcihkakfobckmfhllkg)。Soota 当前核验版本为 `0.0.22`；安装本地程序后运行 `opencli-mcp setup --clients none`，只注册浏览器连接；可用 `opencli-mcp doctor` 检查状态。扩展未连接时，已接入的能力可按路由尝试 OpenCLI。YouTube 目前没有已接入的 MCP 字幕适配器。
+OpenCLI 需要 Node.js、Chrome 和 Browser Bridge 扩展。可用 `uv run soota runtime update --json` 安装最新稳定运行时，再用 `uv run soota runtime connect --json` 启动所选版本并等待扩展连接。无需安装 opencli-mcp。
 
 TikHub API Key 只从环境变量或 macOS Keychain 读取：
 
@@ -34,7 +34,6 @@ security add-generic-password -s soota.tikhub -a api_key -w
 uv run soota doctor --json
 uv run soota updates check --json
 uv run soota platforms --json
-uv run soota mcp search "bilibili subtitle" --json
 uv run soota api list --platform bilibili --task detail --json
 uv run soota api show bilibili.web.fetch_one_video --json
 uv run soota inspect "URL" --json
@@ -46,7 +45,9 @@ uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
 ```
 
-字幕模式：`auto`、`captions-only`、`asr`、`none`。默认按能力依次尝试 opencli-mcp、OpenCLI、经授权的 TikHub；YouTube 直接从 OpenCLI 开始。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
+字幕模式：`auto`、`captions-only`、`asr`、`none`。默认按能力依次尝试 OpenCLI、经授权的 TikHub。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
+
+B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优先使用 YouTube，并默认排除已有推广标注。`--no-prefer-youtube` 关闭跨平台检查，`--keep-promotions` 保留推广。过滤保留原字幕供追溯；无标注不代表无推广。详细使用与限制见 [字幕选择与过滤](docs/subtitle-selection.md)。
 
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。
 

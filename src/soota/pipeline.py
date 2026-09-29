@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from soota.billing import PaymentGate, selected_provider
 from soota.config import SootaSettings, ensure_dirs
+from soota.counterpart import youtube_counterpart
 from soota.errors import AuthBudgetError, InputError, SourceError
 from soota.models import (
     AnalysisManifest,
@@ -33,12 +34,15 @@ from soota.providers.tikhub.capability import capabilities_for
 from soota.providers.tikhub.client import TikHubProvider
 from soota.render.analysis import load_analysis
 from soota.render.bundle import write_bundle
+from soota.render.markdown import render_transcript
 from soota.routing import recognize
 from soota.secrets import api_key_present, load_tikhub_api_key
+from soota.storage.atomic import atomic_write
 from soota.storage.cache import CacheStore
 from soota.storage.jobs import JobStore
 from soota.storage.ledger import CostLedger
 from soota.transcripts.asr import AsrEngine, resolve_engine
+from soota.transcripts.promotions import filter_promotions, parse_ranges
 from soota.transcripts.resolver import TranscriptResolver
 
 INGESTABLE_KINDS = {"video", "shortlink"}
@@ -79,7 +83,10 @@ def doctor(settings: SootaSettings) -> CommandResult:
     asr_engine = resolve_engine(settings.asr)
     data = {
         "soota_version": __version__,
-        "opencli_mcp": {"installed": StdioMCPClient.available(settings.opencli_mcp)},
+        "opencli_mcp": {
+            "enabled": settings.opencli_mcp.enabled,
+            "installed": bool(shutil.which(settings.opencli_mcp.binary or "opencli-mcp")),
+        },
         "opencli": OpenCLIRuntime(settings).status(),
         "tikhub_sdk_required": TIKHUB_SDK_VERSION,
         "tikhub_sdk_installed": tikhub_ver,
@@ -126,7 +133,7 @@ def inspect(
     validate_policy(provider, fallback, max_cost)
     source = recognize(url)
     capabilities = {
-        "opencli-mcp": mcp_capabilities(source).model_dump(),
+        **({"opencli-mcp": mcp_capabilities(source).model_dump()} if settings.opencli_mcp.enabled else {}),
         "opencli": opencli_capabilities(source).model_dump(),
         "tikhub": capabilities_for(source).model_dump(),
     }
@@ -273,14 +280,31 @@ def ingest(
     force: bool = False,
     requester: Callable[..., Any] | None = None,
     asr: AsrEngine | None = None,
+    prefer_youtube: bool | None = None,
+    exclude_promotions: bool | None = None,
+    exclude_ranges: list[str] | None = None,
 ) -> CommandResult:
+    parse_ranges(exclude_ranges or [])
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
+    if provider == "tikhub" or transcript == TranscriptMode.ASR:
+        if prefer_youtube or exclude_promotions or exclude_ranges:
+            raise InputError("跨平台字幕选择和推广过滤当前用于 auto/opencli 字幕路径；请先以 captions-only 获取。")
+        # An explicit provider/ASR choice takes priority over a saved free-caption preference.
+        prefer_youtube = exclude_promotions = False
+    else:
+        prefer_youtube = settings.content_selection.prefer_youtube if prefer_youtube is None else prefer_youtube
+        exclude_promotions = prefer_youtube if exclude_promotions is None else exclude_promotions
     if provider == "auto" and fallback is None and max_cost != 0:
         fallback = "tikhub"
     if transcript != TranscriptMode.ASR and provider != "tikhub":
         if dry_run:
-            return estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
+            result = estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
+            result.data["prefer_youtube"] = prefer_youtube
+            result.data["exclude_promotions"] = exclude_promotions
+            if prefer_youtube:
+                result.warnings.append("跨平台模式会额外进行有限的频道与视频查询；dry-run 不执行搜索。")
+            return result
         return ingest_free(
             settings,
             url,
@@ -292,6 +316,9 @@ def ingest(
             requester=requester,
             transcript=transcript,
             asr=asr,
+            prefer_youtube=prefer_youtube,
+            exclude_promotions=exclude_promotions,
+            exclude_ranges=exclude_ranges or [],
         )
     if provider in {"opencli-mcp", "opencli"} and fallback != "tikhub":
         raise SourceError(f"{provider} 尚未接入音频下载，不能直接执行 ASR；auto 模式会先获取字幕。")
@@ -404,6 +431,9 @@ def ingest_free(
     requester: Callable[..., Any] | None,
     transcript: TranscriptMode,
     asr: AsrEngine | None,
+    prefer_youtube: bool = False,
+    exclude_promotions: bool = False,
+    exclude_ranges: list[str] | None = None,
 ) -> CommandResult:
     source = recognize(url)
     records: list[RequestRecord] = []
@@ -418,7 +448,7 @@ def ingest_free(
         )
     else:
         candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider]]] = []
-        if provider in {"auto", "opencli-mcp"} and mcp_capabilities(source).captions:
+        if settings.opencli_mcp.enabled and provider in {"auto", "opencli-mcp"} and mcp_capabilities(source).captions:
             candidates.append(("opencli-mcp", OpenCLIMCPProvider))
         if provider in {"auto", "opencli"} and opencli_capabilities(source).captions:
             candidates.append(("opencli", OpenCLIProvider))
@@ -429,7 +459,13 @@ def ingest_free(
                 client = factory(settings)
                 candidate_item = client.inspect(source)
                 item = candidate_item
-                captions = client.get_captions(candidate_item)
+                captions = None
+                if prefer_youtube and name == "opencli" and source.platform == "bilibili":
+                    assert isinstance(client, OpenCLIProvider)
+                    candidate_item, captions, notes = youtube_counterpart(client, candidate_item)
+                    item = candidate_item
+                    warnings.extend(notes)
+                captions = captions or client.get_captions(candidate_item)
                 document = TranscriptDocument(
                     status=captions.status,
                     source=captions.source,
@@ -452,6 +488,8 @@ def ingest_free(
             missing_reason = "所选免费来源尚未接入该视频字幕。"
     if missing_reason:
         if fallback == "tikhub":
+            if prefer_youtube or exclude_promotions or exclude_ranges:
+                raise SourceError("免费字幕流程未完成；跨平台或过滤任务未自动转入付费路径。")
             result = ingest(
                 settings,
                 url,
@@ -474,6 +512,15 @@ def ingest_free(
             raise SourceError(missing_reason, hint="检查免费来源，或显式选择 TikHub；不会自动产生付费请求。")
         warnings.append(missing_reason + " 已保留元数据；未授权 TikHub 兜底。")
     assert item is not None
+    original_document = None
+    filter_report = None
+    if document.status == TranscriptStatus.READY and (exclude_promotions or exclude_ranges):
+        original_document = document
+        document, filter_report, notes = filter_promotions(
+            item, document, automatic=exclude_promotions, ranges=parse_ranges(exclude_ranges or [])
+        )
+        warnings.extend(notes)
+        item.provenance["promotion_filter"] = filter_report
     ready = document.status == TranscriptStatus.READY or transcript == TranscriptMode.NONE
     manifest = ContentBundleManifest(
         source=item.source,
@@ -492,7 +539,18 @@ def ingest_free(
     )
     manifest.metadata_from_item(item)
     manifest.metadata["provenance"] = item.provenance
-    folder = write_bundle((output or settings.output_dir).expanduser(), item, document, manifest, None, force=force)
+    output_root = (output or settings.output_dir).expanduser()
+    previous_manifest = output_root / item.source.platform / item.source.id / "manifest.json"
+    if previous_manifest.is_file() and not force:
+        previous = ContentBundleManifest.model_validate_json(previous_manifest.read_text())
+        old_filter = previous.metadata.get("provenance", {}).get("promotion_filter")
+        if old_filter != filter_report:
+            raise InputError("推广过滤结果变化；请使用新输出目录，或 --force 重建内容包，避免保留不匹配的旧总结。")
+    folder = write_bundle(output_root, item, document, manifest, None, force=force)
+    if original_document is not None:
+        atomic_write(folder / "transcript.original.md", render_transcript(item, original_document))
+        manifest.files["transcript.original.md"] = "transcript.original.md"
+        atomic_write(folder / "manifest.json", manifest.model_dump_json(indent=2) + "\n")
     CostLedger(settings.ledger_path).append(item.source.id, records)
     JobStore(settings.jobs_dir).create(
         {
@@ -516,6 +574,9 @@ def ingest_free(
             "content": str(folder / "content.md"),
             "transcript": str(folder / "transcript.md"),
             "provider": item.provenance["provider"],
+            "selection": item.provenance.get("selection"),
+            "youtube_check": item.provenance.get("youtube_check"),
+            "promotion_filter": filter_report,
             "transcript_status": document.status,
             "transcript_source": document.source,
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,

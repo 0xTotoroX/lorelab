@@ -17,12 +17,19 @@ def execute(action: str, version: str | None = None) -> CommandResult:
     data: dict[str, Any]
     if action == "status":
         data = runtime.status()
+    elif action == "connect":
+        from soota.providers.opencli_context import connect_runtime
+
+        binary, _ = runtime.resolve()
+        with runtime.lock(exclusive=True):
+            state = connect_runtime(binary, replace_idle=True)
+        data = {"daemon_version": state.get("daemonVersion"), "extension_connected": state.get("extensionConnected")}
     elif action == "check-update":
         metadata = package_metadata()
         data = {"current": runtime.status(), "latest": metadata["version"], "engines": metadata.get("engines")}
     elif action == "update":
-        assert version is not None
-        data = runtime.update(version)
+        selected_version = version or str(package_metadata()["version"])
+        data = runtime.update(selected_version)
     else:
         data = runtime.rollback()
     return CommandResult(
@@ -48,7 +55,9 @@ def check_update(json_output: Annotated[bool, typer.Option("--json")] = False) -
 
 @app.command()
 def update(
-    version: Annotated[str, typer.Option("--version", help="指定完整版本号，隔离安装并验证后启用")],
+    version: Annotated[
+        str | None, typer.Option("--version", help="省略时查询并安装最新稳定版；验证命令契约后启用")
+    ] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     run(json_output, execute, "update", version)
@@ -57,3 +66,9 @@ def update(
 @app.command()
 def rollback(json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
     run(json_output, execute, "rollback")
+
+
+@app.command()
+def connect(json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
+    """启动所选运行时并等待浏览器连接；不重启仍有任务或会话的服务。"""
+    run(json_output, execute, "connect")

@@ -12,13 +12,14 @@ from soota.config import SootaSettings
 from soota.errors import InputError
 from soota.features import success
 from soota.models import CommandResult
-from soota.providers.mcp_client import StdioMCPClient
+from soota.providers.mcp_client import StdioMCPClient, require_enabled
 from soota.storage.atomic import atomic_write
 
 app = typer.Typer(help="按需发现并执行上游 MCP 的只读站点命令，不建立批量映射。")
 
 
 def discover(settings: SootaSettings, query: str, limit: int) -> CommandResult:
+    require_enabled(settings.opencli_mcp)
     if not 1 <= limit <= 100:
         raise InputError("limit 必须是 1–100。")
     response = StdioMCPClient(settings.opencli_mcp).call("sites_search", {"query": query, "limit": limit})
@@ -28,6 +29,7 @@ def discover(settings: SootaSettings, query: str, limit: int) -> CommandResult:
 def run_site(
     settings: SootaSettings, site: str, command: str, params_file: Path | None, output: Path | None, dry_run: bool
 ) -> CommandResult:
+    require_enabled(settings.opencli_mcp)
     if output is not None and output.expanduser().exists() and not dry_run:
         raise InputError("输出文件已存在，请选择新路径。")
     params: dict[str, Any] = {}

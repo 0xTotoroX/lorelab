@@ -16,6 +16,7 @@ import httpx
 
 from soota.config import SootaSettings
 from soota.errors import ContractError, InputError, SourceError
+from soota.providers.opencli_patches import apply_managed_fixes
 from soota.providers.process import run_process
 from soota.storage.atomic import atomic_write
 
@@ -135,6 +136,7 @@ class OpenCLIRuntime:
         with self.lock(exclusive=True):
             destination = self.managed_binary(version).parents[2]
             if destination.exists():
+                apply_managed_fixes(destination)
                 actual = self.probe(str(self.managed_binary(version)))
             else:
                 metadata = package_metadata(version)
@@ -162,6 +164,7 @@ class OpenCLIRuntime:
                         raise SourceError(
                             "OpenCLI 隔离安装失败；当前版本未切换。", details={"exit_code": result.returncode}
                         )
+                    apply_managed_fixes(stage / "install")
                     actual = self.probe(str(stage / "install" / "node_modules" / ".bin" / "opencli"))
                     if actual != version:
                         raise ContractError("安装后的 OpenCLI 版本与请求版本不同。")
