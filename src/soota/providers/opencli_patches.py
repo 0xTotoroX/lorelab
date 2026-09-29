@@ -48,28 +48,86 @@ async function sootaNavigate(page, url) {
 """
 
 
-def apply_managed_fixes(install: Path) -> None:
+YOUTUBE_TIMEDTEXT_FILTERS = (
+    (
+        "        if (!url.includes('fmt=json3') || !url.includes('pot='))\n            return false;",
+        "        // Modified by Soota: valid JSON3 captions may omit pot.\n"
+        "        if (!url.includes('fmt=json3'))\n            return false;",
+    ),
+    (
+        "                        && url.includes('fmt=json3')\n"
+        "                        && url.includes('pot=')\n"
+        "                        && timedtextUrlMatchesVideo(url));",
+        "                        && url.includes('fmt=json3')\n"
+        "                        // Modified by Soota: pot is not required for every caption track.\n"
+        "                        && timedtextUrlMatchesVideo(url));",
+    ),
+    (
+        "          if (!url.includes('pot=')) return false;\n"
+        "          if (!timedtextUrlMatchesVideo(url)) return false;",
+        "          // Modified by Soota: accept captured JSON3 without pot; keep video identity checks.\n"
+        "          if (!timedtextUrlMatchesVideo(url)) return false;",
+    ),
+)
+
+
+def _patch_youtube(install: Path) -> str | None:
+    relative = "node_modules/@jackwener/opencli/clis/youtube/transcript.js"
+    path = install / relative
+    if not path.is_file():
+        return None
+    original = path.read_text()
+    # Patch the three known capture paths together. Do not guess when upstream drifts.
+    if all(original.count(new) == 1 for _, new in YOUTUBE_TIMEDTEXT_FILTERS):
+        return relative
+    if not all(original.count(old) == 1 for old, _ in YOUTUBE_TIMEDTEXT_FILTERS):
+        return None
+    for old, new in YOUTUBE_TIMEDTEXT_FILTERS:
+        original = original.replace(old, new, 1)
+    atomic_write(path, original)
+    return relative
+
+
+def _patch_navigation(install: Path) -> str | None:
     relative = "node_modules/@jackwener/opencli/dist/src/browser/page.js"
     path = install / relative
     if not path.is_file():
-        return
+        return None
     original = path.read_text()
     if REPLACEMENT not in original:
         # Two matching calls exist: first navigation and stale-target recovery.
         # Replace only the first, scoped to the known Page.goto implementation.
         if "    async goto(url, options) {\n        let result;\n        try {\n" + NAVIGATION not in original:
-            return
+            return None
         original = original.replace(NAVIGATION, REPLACEMENT, 1)
     if NAVIGATION_HELPER not in original:
         original += "\n" + NAVIGATION_HELPER
     atomic_write(path, original)
+    return relative
+
+
+def apply_managed_fixes(install: Path) -> None:
+    applied = {
+        name: relative
+        for name, relative in (
+            ("media-owned-tab-navigation", _patch_navigation(install)),
+            ("youtube-timedtext-optional-pot", _patch_youtube(install)),
+        )
+        if relative is not None
+    }
+    if not applied:
+        return
     atomic_write(
         install / "soota-compatibility.json",
         json.dumps(
             {
-                "patch": "media-owned-tab-navigation",
+                "patch": next(iter(applied)),
+                "patches": list(applied),
                 "modified_by": "Soota",
-                "files": [{"file": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}],
+                "files": [
+                    {"file": relative, "sha256": hashlib.sha256((install / relative).read_bytes()).hexdigest()}
+                    for relative in applied.values()
+                ],
             },
             indent=2,
         )
