@@ -8,7 +8,7 @@ Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免�
 
 ## 安装
 
-需要 Python 3.12+。音频处理需要 ffmpeg；无字幕转写路径还需要本机 `whisper` CLI（默认模型 `base`）。纯 API 查询不需要这些音频工具。
+需要 Python 3.12+。音频处理需要 ffmpeg；本地转写支持 `whisper` CLI、`faster-whisper` 和 Apple Silicon 上的 `mlx_whisper` CLI，默认模型为 `base`。MLX 的安装与配置见[本地转写引擎](docs/terminal-tutorial.md#本地转写引擎)。纯 API 查询不需要这些音频工具。
 
 ```bash
 cd /path/to/soota

@@ -20,6 +20,8 @@ class AsrConfig(BaseModel):
     model: str = "base"
     device: str = "cpu"
     whisper_bin: str = "whisper"
+    mlx_whisper_bin: str = "mlx_whisper"
+    mlx_model_path: str | None = None
 
 
 class AutoUpdateConfig(BaseModel):
@@ -206,6 +208,8 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
             model=str((data.get("asr") or {}).get("model", "base")),
             device=str((data.get("asr") or {}).get("device", "cpu")),
             whisper_bin=str((data.get("asr") or {}).get("whisper_bin", "whisper")),
+            mlx_whisper_bin=str((data.get("asr") or {}).get("mlx_whisper_bin", "mlx_whisper")),
+            mlx_model_path=(data.get("asr") or {}).get("mlx_model_path"),
         ),
     )
     from soota.providers.managed import bind_runtimes

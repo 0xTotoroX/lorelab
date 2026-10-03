@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Protocol
 
@@ -99,8 +100,61 @@ class FasterWhisperEngine:
         return assign_ids(raw)
 
 
+class MlxWhisperEngine:
+    name = "mlx-whisper"
+
+    def __init__(self, config: AsrConfig) -> None:
+        self.config = config
+
+    def transcribe(self, audio: Path, *, language: str | None) -> list[TranscriptSegment]:
+        binary = shutil.which(self.config.mlx_whisper_bin)
+        if not binary:
+            raise TranscriptError("未找到 mlx_whisper CLI。", hint="安装 mlx-whisper，并配置 asr.mlx_whisper_bin。")
+        model = self.config.mlx_model_path
+        if not model:
+            if self.config.model != "base":
+                raise TranscriptError("MLX 非 base 模型需设置 asr.mlx_model_path。")
+            model = "mlx-community/whisper-base-mlx"
+        with tempfile.TemporaryDirectory(prefix="soota-mlx-") as folder:
+            cmd = [
+                binary,
+                str(audio),
+                "--model",
+                model,
+                "--output-dir",
+                folder,
+                "--output-name",
+                "transcript",
+                "--output-format",
+                "json",
+                "--verbose",
+                "False",
+                "--task",
+                "transcribe",
+                "--fp16",
+                "True",
+                "--best-of",
+                "None",
+            ]
+            if language:
+                cmd.extend(["--language", _whisper_lang(language)])
+            result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+            output = Path(folder) / "transcript.json"
+            if result.returncode or not output.is_file():
+                raise TranscriptError(
+                    "MLX Whisper 转写失败。", hint="检查模型目录与 CLI；可设置 asr.engine=whisper-cli 回退。"
+                )
+            try:
+                payload = json.loads(output.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as exc:
+                raise TranscriptError("MLX Whisper 没有生成有效 JSON。") from exc
+            return _segments_from_whisper(payload, language)
+
+
 def resolve_engine(config: AsrConfig) -> AsrEngine:
     engine = config.engine
+    if engine == "mlx-whisper":
+        return MlxWhisperEngine(config)
     if engine == "faster-whisper":
         return FasterWhisperEngine(config)
     if engine == "whisper-cli":

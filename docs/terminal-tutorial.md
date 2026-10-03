@@ -22,6 +22,24 @@ opencli-mcp 当前默认停用，无需安装或连接。
 
 若有多个浏览器 profile，通过 `OPENCLI_PROFILE` 指定 `profile list` 中的别名或 context ID。Soota 不读取或导出浏览器密码。
 
+## 本地转写引擎
+
+Apple Silicon 可安装 `mlx-whisper==0.4.3`，在项目外的 `config.toml` 中选择 MLX：
+
+```toml
+[asr]
+engine = "mlx-whisper"
+model = "base"
+mlx_whisper_bin = "/path/to/runtime/bin/mlx_whisper"
+mlx_model_path = "/path/to/downloaded/whisper-base-mlx"
+```
+
+MLX 使用 Metal GPU 和 FP16，采用 greedy 解码，不使用原 Whisper CLI 的 beam search。`mlx_model_path` 指向含 `config.json` 和权重的模型目录；省略时 `base` 明确映射到 `mlx-community/whisper-base-mlx`，不会使用上游 CLI 的其他默认模型。其他模型需显式指定目录。运行环境和模型放在长期用户目录，不依赖实验或聊天目录。
+
+`doctor --json` 的 `asr_engine`、`asr_model` 和 `mlx_whisper_cli` 可核对选择与命令是否存在。切回原命令行引擎时将 `engine` 改为 `whisper-cli`；`auto` 沿用原来的引擎选择顺序。MLX 命令的临时 JSON 输出在读取后清理，音频与转写缓存仍按现有规则保存。
+
+引擎选择不改变 Provider 的费用策略，也不会自动补齐零预算无字幕下载与转写路径。已有转写缓存继续复用；验证新引擎时使用新的音频或缓存目录。
+
 ## 2. 零 API 费用获取最近帖子
 
 将 `USERNAME` 换成 X 用户名，不包含 `@`：

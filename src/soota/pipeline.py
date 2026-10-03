@@ -116,6 +116,7 @@ def doctor(settings: SootaSettings) -> CommandResult:
         "api_key_present": api_key_present(),
         "ffmpeg": bool(shutil.which("ffmpeg")),
         "whisper_cli": bool(shutil.which(settings.asr.whisper_bin)),
+        "mlx_whisper_cli": bool(shutil.which(settings.asr.mlx_whisper_bin)),
         "asr_engine": asr_engine.name,
         "asr_model": settings.asr.model,
         "config_path": str(settings.config_path),
@@ -130,6 +131,8 @@ def doctor(settings: SootaSettings) -> CommandResult:
         warnings.append("未找到 ffmpeg，无字幕音频抽取可能失败。")
     if not data["whisper_cli"] and asr_engine.name == "whisper-cli":
         warnings.append("未找到 whisper CLI；无字幕路径在运行 ASR 前会失败。")
+    if not data["mlx_whisper_cli"] and asr_engine.name == "mlx-whisper":
+        warnings.append("未找到 mlx_whisper CLI；检查安装或 asr.mlx_whisper_bin。")
     return CommandResult(
         ok=True,
         status="success",
