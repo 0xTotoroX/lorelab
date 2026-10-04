@@ -112,6 +112,12 @@ def selected_provider(settings: SootaSettings, explicit: str | None) -> str:
     chosen = explicit if explicit is not None else settings.routing.default_provider
     if chosen == "soota":
         chosen = "yt-dlp"
+    if chosen in settings.routing.disabled_providers:
+        raise InputError(f"{chosen} 已在来源策略中停用。")
     if chosen == "opencli-mcp" and not settings.opencli_mcp.enabled:
         raise InputError("MCP 接入已停用；请使用 auto、opencli、yt-dlp 或 tikhub。")
     return chosen
+
+
+def provider_enabled(settings: SootaSettings, name: str) -> bool:
+    return name not in settings.routing.disabled_providers and (name != "opencli-mcp" or settings.opencli_mcp.enabled)

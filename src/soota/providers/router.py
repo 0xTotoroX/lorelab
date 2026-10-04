@@ -5,7 +5,7 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import Any, Literal
 
-from soota.billing import PaymentGate, selected_provider
+from soota.billing import PaymentGate, provider_enabled, selected_provider
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, InputError, SourceError
 from soota.models import MediaItem, RequestRecord, SourceRef
@@ -93,7 +93,7 @@ def inspect_item(
 ) -> tuple[MediaItem, list[RequestRecord], list[str]]:
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
-    if provider == "auto" and fallback is None and max_cost != 0:
+    if provider == "auto" and fallback is None and max_cost != 0 and provider_enabled(settings, "tikhub"):
         fallback = "tikhub"
     warnings: list[str] = []
     records: list[RequestRecord] = []
@@ -102,9 +102,9 @@ def inspect_item(
         ("opencli", opencli_capabilities(source).inspect, OpenCLIProvider),
         ("yt-dlp", ytdlp_capabilities(source).inspect, YtDlpProvider),
     ):
-        if name == "opencli-mcp" and not settings.opencli_mcp.enabled:
+        if not provider_enabled(settings, name):
             if provider == name:
-                raise InputError("MCP 接入已停用。")
+                raise InputError(f"{name} 接入已停用。")
             continue
         if provider not in {"auto", name}:
             continue
@@ -131,6 +131,7 @@ def inspect_item(
         raise SourceError("没有匹配的免费元数据来源。", hint="可显式选择 --provider tikhub 并提供 --max-cost。")
     if not tikhub_capabilities(source).inspect:
         raise SourceError("TikHub 尚未接入该来源的统一元数据解析。")
+    selected_provider(settings, "tikhub")
     paid = TikHubProvider(
         runtime_python=settings.tikhub.runtime_python,
         cache=CacheStore(settings.cache_dir),

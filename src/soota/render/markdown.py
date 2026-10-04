@@ -16,7 +16,7 @@ def render_context(item: MediaItem, document: TranscriptDocument) -> str:
     lines = [
         f"# {item.title or item.source.id}",
         "",
-        f"source: {item.source.canonical_url}",
+        f"source: {item.provenance.get('transcript_source_url') or item.source.canonical_url}",
         f"transcript_status: {document.status.value}",
         f"transcript_source: {document.source.value if document.source else 'unknown'}",
         f"language: {document.language or 'unknown'}",

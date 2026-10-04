@@ -70,6 +70,7 @@ def estimate_catalog(
     selected = catalog_provider(
         source, provider, mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp)
     )
+    selected_provider(settings, selected)
     if fallback:
         raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
     if selected in {"opencli", "opencli-mcp"}:
@@ -248,6 +249,7 @@ def _known_ids(job: CatalogJob, store: JobStore) -> list[str]:
 def _provider(
     settings: SootaSettings, job: CatalogJob, store: JobStore, requester: Callable[..., Any] | None
 ) -> TikHubProvider | OpenCLIProvider | OpenCLIMCPProvider:
+    selected_provider(settings, job.provider)
     if job.provider == "opencli":
         bound = settings.model_copy(update={"opencli": settings.opencli.model_copy(update={"profile": job.profile})})
         return OpenCLIProvider(bound)

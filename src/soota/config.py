@@ -70,6 +70,9 @@ class AudioConfig(BaseModel):
 
 
 class RoutingConfig(BaseModel):
+    disabled_providers: set[Literal["opencli-mcp", "opencli", "yt-dlp", "tikhub", "downie", "http"]] = Field(
+        default_factory=set
+    )
     default_provider: Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub"] = "auto"
 
     @field_validator("default_provider", mode="before")

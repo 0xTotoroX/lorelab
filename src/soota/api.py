@@ -224,6 +224,9 @@ def call_endpoint(
     requester: Callable[..., Any] | None = None,
     allow_auxiliary: bool = False,
 ) -> CommandResult:
+    from soota.billing import selected_provider
+
+    selected_provider(settings, "tikhub")
     endpoint = load_registry().resolve(selector)
     if (not endpoint.callable and not allow_auxiliary) or endpoint.deprecated:
         raise SourceError("该接口不属于当前可用的内容查询接口。", hint="用 api list 查看 callable 字段。")

@@ -42,7 +42,7 @@ soota ingest "文章 URL" --want context --optional images --max-cost 0 --json
 
 保存网站已有文章正文使用 `context` 或 `markdown`；`article` 会要求 Agent 进行后续文章整理。CLI 自身不调用大模型。
 
-`--language` 要求实际字幕语言，不能用语言未知或其他语言的轨道冒充。`--min-height` 指定视频最低高度，`--max-bytes` 限制单个媒体文件大小。字幕导出支持 `srt,vtt,txt,json`；缺少时间轴时可以导出 TXT/JSON，不能生成虚构时间的 SRT/VTT。
+`--language` 要求实际字幕语言，不能用语言未知或其他语言的轨道冒充。本地字幕未提供可靠语言元数据时保留未知，不按默认偏好填成中文。`--min-height` 指定视频最低高度，`--max-bytes` 限制单个媒体文件大小。字幕导出支持 `srt,vtt,txt,json`；缺少时间轴时可以导出 TXT/JSON，不能生成虚构时间的 SRT/VTT。
 
 字幕模式沿用 `auto`、`captions-only`、`asr`、`none`：`auto` 只在确认无字幕时进入本地转写，`asr` 明确要求语音转写，`none` 不请求字幕。只取元数据可用 `inspect` 或 `--want data`；没有可复用正文且禁止取得字幕或转写时，CLI 会报告缺少目标产物。
 
@@ -112,6 +112,15 @@ soota capabilities --provider opencli --search article --json
 
 TikHub 原生读取使用 `--operation tikhub.<接口标识>` 和对应参数；接口标识及参数先查 `api list/show`。统一任务只接收已审查的读取接口，付费请求仍经过费用策略。`api call`、`features call` 保留原有查询用途。
 
+可在用户配置中停用来源：
+
+```toml
+[routing]
+disabled_providers = ["tikhub", "downie"]
+```
+
+停用来源不参与新任务获取，也不能通过原生操作或播放列表绕过门禁。`--provider local` 仅处理已有本地输入，不获取远程媒体或图片；MCP 的 `enabled=false` 仍独立生效。
+
 ## 费用与恢复
 
 统一任务内的目录枚举、各条目、字幕和音频阶段共享 `--max-cost`（USD）。每次计费请求在发送前检查并持久化预算预留；失败、中断和 `jobs resume` 不清零已预留费用。返回值 `reserved_cost_usd` 是预留估算，`actual_cost_usd` 未核实账单时保持未知。
@@ -136,7 +145,7 @@ soota jobs resume JOB_ID --max-items 40 --max-pages 6 --max-cost 0.10 --json
 | `partial` | 部分目标已保存，还有缺失产物或未完成的枚举 |
 | `blocked` / `failed` | 查看条目的 `steps`、`errors` 和任务警告，处理对应原因后恢复 |
 
-JSON 中 `items` 分别记录每项的 `bundle`、`steps`、`missing_outputs` 和产物路径。整个任务只返回一份状态文档，不将某一步成功当作全部目标完成。
+JSON 中 `items` 分别记录每项的 `bundle`、`steps`、`errors`，`items[].data.missing_outputs` 列出缺失目标，`items[].data.artifacts` 列出产物。整个任务只返回一份状态文档，不将某一步成功当作全部目标完成。
 
 ## 分析接续
 
@@ -175,6 +184,7 @@ v2 的 `manifest.json` 保留兼容来源、字幕、分析和费用字段，并
 | `context.md` | 原文输入，含稳定的字幕或正文块 ID |
 | `transcript.md` / `transcript.json` | 取得字幕时保存的时间轴和片段数据 |
 | `captions.srt` 等 | 用户请求的字幕导出格式 |
+| `transcript.original.md` | 显式过滤时保留的过滤前字幕；改变区间时从这份原文重新处理 |
 | `body.md` / `content.json` | 取得文章正文时保存的原始 Markdown 与有序正文块 |
 | `attachments/` | 视频、音频、图片等实际文件 |
 | `data.json` | 请求的数据产物 |

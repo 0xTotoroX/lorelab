@@ -126,7 +126,7 @@ class TranscriptResolver:
             return document
         audio = self.audio_provider.get_audio(item)
         item.provenance["audio_provider"] = audio.provider or self.audio_provider.name
-        media = ensure_audio(Path(audio.path))
+        media = ensure_audio(Path(audio.path), settings=self.settings)
         language = item.language or self.settings.default_language
         payload = engine.transcribe(media, language=language)
         if isinstance(payload, list):

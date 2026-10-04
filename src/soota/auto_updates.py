@@ -23,6 +23,7 @@ ONLINE_COMMANDS = {
     "ingest",
     "catalog",
     "resume_catalog",
+    "resume",
     "call_endpoint",
     "call_feature",
     "discover",
@@ -40,6 +41,25 @@ def should_update(
     values = arguments.arguments
     if values.get("dry_run") or values.get("fetch") is False:
         return False
+    if fn.__module__ == "soota.tasks.entry" and fn.__name__ == "ingest":
+        if values.get("operation") is None:
+            from soota.tasks.inputs import parse_inputs
+
+            inputs = parse_inputs(values.get("url"), values.get("inputs_file"))
+            if all(item.kind in {"file", "bundle"} for item in inputs):
+                return False
+    if fn.__module__ == "soota.tasks.runner" and fn.__name__ == "resume":
+        if values.get("analysis") is not None:
+            return False
+        from soota.storage.jobs import JobStore
+
+        record = JobStore(settings.jobs_dir).get(values["job_id"])
+        if record.get("kind") == "content-task":
+            from soota.tasks.state import load_spec
+
+            spec = load_spec(settings, values["job_id"])
+            if all(item.kind in {"file", "bundle"} for item in spec.inputs):
+                return False
     if fn.__name__ in {"discover", "run_site"} and not settings.opencli_mcp.enabled:
         return False
     return True
@@ -108,6 +128,9 @@ def automatic_update(settings: SootaSettings, *, force: bool = False) -> dict[st
                 "tikhub": TikHubRuntime(settings),
             }
             for name, _, registry in PROVIDERS:
+                if name in settings.routing.disabled_providers:
+                    report["providers"].append({"provider": name, "status": "disabled", "active_version": None})
+                    continue
                 runtime = runtimes[name]
                 row: dict[str, Any] = {"provider": name, "status": "failed"}
                 try:

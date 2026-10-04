@@ -14,6 +14,8 @@ from soota.providers.process import run_process
 
 
 def commands(settings: SootaSettings) -> list[dict[str, Any]]:
+    if "opencli" in settings.routing.disabled_providers:
+        raise RuntimeUnavailable("OpenCLI 已停用。")
     runtime = OpenCLIRuntime(settings)
     with runtime.lock():
         binary, _ = runtime.resolve()

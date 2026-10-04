@@ -9,7 +9,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from soota.config import SootaSettings
-from soota.errors import AuthBudgetError, CaptionsAbsent, CaptionUnavailable, ContractError, SourceError
+from soota.errors import AuthBudgetError, CaptionsAbsent, CaptionUnavailable, ContractError, InputError, SourceError
 from soota.models import (
     CapabilitySet,
     CaptionAcquisition,
@@ -51,6 +51,8 @@ class OpenCLIProvider:
     name = "opencli"
 
     def __init__(self, settings: SootaSettings) -> None:
+        if "opencli" in settings.routing.disabled_providers:
+            raise InputError("opencli 已在来源策略中停用。")
         self.settings = settings
         self.runtime = OpenCLIRuntime(settings)
         self.profile = resolve_profile(settings.opencli.profile)

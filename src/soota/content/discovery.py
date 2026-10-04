@@ -6,6 +6,7 @@ import re
 import shutil
 from typing import Any
 
+from soota.billing import provider_enabled
 from soota.config import SootaSettings
 from soota.content.native_bindings import CONTENT_BINDINGS, MEDIA_BINDINGS, URL_ROW_BINDINGS
 from soota.errors import SootaError
@@ -119,48 +120,60 @@ def discover_capabilities(settings: SootaSettings) -> dict[str, Any]:
     capabilities: list[dict[str, Any]] = []
     warnings: list[str] = []
     runtime = OpenCLIRuntime(settings)
-    try:
-        # Holding the shared lock keeps the version and registry on the same managed install.
-        with runtime.lock():
-            status = runtime.status()
-            rows = opencli_commands.commands(settings) if status["available"] else []
-        version = status.get("version")
+    if not provider_enabled(settings, "opencli"):
         providers.append(
             {
                 "provider": "opencli",
-                "available": status["available"],
-                "runtime_version": version,
-                "ownership": status.get("ownership"),
-                "state": "discovered" if status["available"] else "blocked",
-                "browser_checked": False,
-            }
-        )
-        capabilities.extend(_opencli_capability(row, version) for row in rows)
-    except (SootaError, OSError) as exc:
-        providers.append(
-            {
-                "provider": "opencli",
+                "enabled": False,
                 "available": False,
                 "state": "blocked",
-                "reason": "本机 OpenCLI 运行时或命令契约不可用。",
+                "reason": "来源策略已停用。",
             }
         )
-        warnings.append(f"OpenCLI 发现失败：{type(exc).__name__}；未执行站点请求。")
+    else:
+        try:
+            # Holding the shared lock keeps the version and registry on the same managed install.
+            with runtime.lock():
+                status = runtime.status()
+                rows = opencli_commands.commands(settings) if status["available"] else []
+            version = status.get("version")
+            providers.append(
+                {
+                    "provider": "opencli",
+                    "available": status["available"],
+                    "runtime_version": version,
+                    "ownership": status.get("ownership"),
+                    "state": "discovered" if status["available"] else "blocked",
+                    "browser_checked": False,
+                }
+            )
+            capabilities.extend(_opencli_capability(row, version) for row in rows)
+        except (SootaError, OSError) as exc:
+            providers.append(
+                {
+                    "provider": "opencli",
+                    "available": False,
+                    "state": "blocked",
+                    "reason": "本机 OpenCLI 运行时或命令契约不可用。",
+                }
+            )
+            warnings.append(f"OpenCLI 发现失败：{type(exc).__name__}；未执行站点请求。")
     mcp = settings.opencli_mcp
+    mcp_enabled = provider_enabled(settings, "opencli-mcp")
     mcp_installed = shutil.which(mcp.binary or mcp.runtime_binary or "opencli-mcp") is not None
     providers.append(
         {
             "provider": "opencli-mcp",
-            "enabled": mcp.enabled,
-            "available": mcp.enabled and mcp_installed,
-            "state": "discovered" if mcp.enabled and mcp_installed else "blocked",
-            "reason": "未启动 MCP；站点命令未探测。" if mcp.enabled else "MCP 当前停用，未启动进程。",
+            "enabled": mcp_enabled,
+            "available": mcp_enabled and mcp_installed,
+            "state": "discovered" if mcp_enabled and mcp_installed else "blocked",
+            "reason": "未启动 MCP；站点命令未探测。" if mcp_enabled else "MCP 当前停用，未启动进程。",
             "verification": None,
         }
     )
     registry = load_registry()
     try:
-        sdk_version = _tikhub_version(settings)
+        sdk_version = _tikhub_version(settings) if provider_enabled(settings, "tikhub") else None
     except (SootaError, OSError):
         sdk_version = None
         warnings.append("TikHub 当前运行时版本无法核实；未查询账号或发起 API 请求。")
@@ -175,7 +188,7 @@ def discover_capabilities(settings: SootaSettings) -> dict[str, Any]:
             "prices_checked": False,
         }
     )
-    for endpoint in registry.preferred():
+    for endpoint in registry.preferred() if provider_enabled(settings, "tikhub") else []:
         callable_read = sdk_version is not None and endpoint.callable and not endpoint.deprecated
         capabilities.append(
             {

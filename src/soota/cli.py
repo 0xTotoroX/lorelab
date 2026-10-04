@@ -9,7 +9,6 @@ from soota.api import platforms as platforms_cmd
 from soota.api_cli import app as api_app
 from soota.catalog import DEFAULT_MAX_PAGES
 from soota.catalog import catalog as catalog_cmd
-from soota.catalog import resume_catalog as resume_catalog_cmd
 from soota.cli_output import run as _run
 from soota.cli_output import run_settings
 from soota.features_cli import app as features_app
@@ -17,12 +16,14 @@ from soota.mcp_cli import app as mcp_app
 from soota.models import TranscriptMode
 from soota.pipeline import doctor as doctor_cmd
 from soota.pipeline import estimate as estimate_cmd
-from soota.pipeline import ingest as ingest_cmd
 from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
 from soota.policy_cli import app as policy_app
 from soota.runtime_cli import app as runtime_app
+from soota.tasks.entry import capabilities as capabilities_cmd
+from soota.tasks.entry import ingest as ingest_cmd
+from soota.tasks.runner import resume as resume_task_cmd
 from soota.updates_cli import app as updates_app
 
 app = typer.Typer(
@@ -135,8 +136,37 @@ def catalog(
 
 @app.command()
 def ingest(
-    url: Annotated[str, typer.Argument()],
-    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub")] = None,
+    url: Annotated[str | None, typer.Argument(help="链接、分享文本、本地文件或内容包")] = None,
+    want: Annotated[
+        str | None,
+        typer.Option(
+            "--want",
+            help="目标产物，逗号分隔：video/audio/transcript/context/markdown/images/data/analysis/note/outline/article",
+        ),
+    ] = None,
+    optional: Annotated[str | None, typer.Option("--optional", help="可选产物，失败不影响必需目标")] = None,
+    inputs_file: Annotated[
+        Path | None, typer.Option("--inputs-file", help="链接清单、目录 JSON 或 InputSpec 数组")
+    ] = None,
+    operation: Annotated[
+        str | None, typer.Option("--operation", help="显式原生读取操作，如 opencli.youtube.search")
+    ] = None,
+    param: Annotated[list[str] | None, typer.Option("--param")] = None,
+    params_file: Annotated[Path | None, typer.Option("--params-file")] = None,
+    expand: Annotated[bool, typer.Option("--expand", help="把已绑定的搜索结果展开为内容任务")] = False,
+    language: Annotated[str | None, typer.Option("--language", help="要求的实际字幕语言")] = None,
+    subtitle_formats: Annotated[str, typer.Option("--subtitle-format", help="srt/vtt/txt/json，可逗号组合")] = "srt",
+    input_format: Annotated[str | None, typer.Option("--input-format", help="本地字幕 wire 格式")] = None,
+    min_height: Annotated[int | None, typer.Option("--min-height", help="视频最低高度，不降清晰度交付")] = None,
+    allow_silent: Annotated[bool, typer.Option("--allow-silent", help="允许无音轨的视频")] = False,
+    max_bytes: Annotated[int, typer.Option("--max-bytes", help="单个媒体文件字节上限")] = 2 * 1024**3,
+    max_pages: Annotated[int, typer.Option("--max-pages")] = 10,
+    destination: Annotated[Path | None, typer.Option("--destination", help="另外导出到指定目录")] = None,
+    vault: Annotated[Path | None, typer.Option("--vault", help="显式 Obsidian Vault 目录")] = None,
+    subdir: Annotated[str, typer.Option("--subdir", help="Vault 内目录，不猜测分类")] = "Soota",
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/http/local/downie")
+    ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     audio_provider: Annotated[
@@ -145,7 +175,7 @@ def ingest(
     output: Annotated[Path | None, typer.Option("--output")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
     max_cost: Annotated[float | None, typer.Option("--max-cost")] = None,
-    max_items: Annotated[int | None, typer.Option("--max-items")] = 1,
+    max_items: Annotated[int | None, typer.Option("--max-items")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     force: Annotated[bool, typer.Option("--force")] = False,
     prefer_youtube: Annotated[
@@ -168,6 +198,24 @@ def ingest(
         json_output,
         ingest_cmd,
         url,
+        want=want,
+        optional=optional,
+        inputs_file=inputs_file,
+        operation=operation,
+        params=param,
+        params_file=params_file,
+        expand=expand,
+        language=language,
+        subtitle_formats=subtitle_formats,
+        input_format=input_format,
+        min_height=min_height,
+        allow_silent=allow_silent,
+        max_bytes=max_bytes,
+        max_pages=max_pages,
+        max_items=max_items,
+        destination=destination,
+        vault=vault,
+        subdir=subdir,
         provider=provider,
         fallback=fallback,
         transcript=transcript,
@@ -208,16 +256,30 @@ def jobs_resume(
     max_items: Annotated[int | None, typer.Option("--max-items", help="新的累计条数上限")] = None,
     max_pages: Annotated[int | None, typer.Option("--max-pages", help="新的累计页数上限")] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="新的总费用上限，已有预留不会清零")] = None,
+    analysis: Annotated[Path | None, typer.Option("--analysis", help="带任务身份与正文指纹的分析提交")] = None,
+    force: Annotated[bool, typer.Option("--force")] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     run_settings(
         json_output,
-        resume_catalog_cmd,
+        resume_task_cmd,
         job_id,
         max_items=max_items,
         max_pages=max_pages,
         max_cost=max_cost,
+        analysis=analysis,
+        force=force,
     )
+
+
+@app.command("capabilities")
+def capabilities(
+    search: Annotated[str | None, typer.Option("--search")] = None,
+    provider: Annotated[str | None, typer.Option("--provider")] = None,
+    limit: Annotated[int, typer.Option("--limit")] = 50,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    run_settings(json_output, capabilities_cmd, search=search, provider=provider, limit=limit)
 
 
 def main() -> None:

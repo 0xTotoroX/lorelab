@@ -1,8 +1,17 @@
 from pathlib import Path
 
+import pytest
+
 from soota.models import TranscriptMode, TranscriptSegment, TranscriptSource
 from soota.pipeline import ingest
 from tests.conftest import load_fixture
+
+
+@pytest.fixture(autouse=True)
+def fake_audio_decode_for_routing_contracts(monkeypatch):
+    # These tests use synthetic byte placeholders and fake ASR. Actual decoding
+    # and final media acceptance are covered by test_media_* and content tasks.
+    monkeypatch.setattr("soota.transcripts.resolver.ensure_audio", lambda path, **kwargs: path)
 
 
 class FakeAsr:
@@ -235,29 +244,25 @@ def test_bili_empty_inspect_still_probes_subtitle(settings, monkeypatch) -> None
     assert not any("playurl" in c for c in requester.calls)
 
 
-def test_audio_falls_back_to_ytdlp(settings, monkeypatch) -> None:
+def test_explicit_tikhub_audio_failure_does_not_change_provider(settings, monkeypatch) -> None:
+    from soota.errors import SourceError
+
     requester = _youtube_requester(missing=True)
-
-    def fake_ytdlp(url, dest):
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(b"abc")
-        return dest
-
-    monkeypatch.setattr("soota.providers.tikhub.client.fetch_audio_ytdlp", fake_ytdlp)
+    monkeypatch.setattr(
+        "soota.providers.ytdlp.YtDlpProvider.get_audio", lambda *a: pytest.fail("implicit source switch")
+    )
     monkeypatch.setattr(
         "soota.providers.tikhub.client.TikHubProvider._download",
-        lambda self, url, dest: (_ for _ in ()).throw(RuntimeError("cdn fail")),
+        lambda *args: (_ for _ in ()).throw(SourceError("cdn failure")),
     )
-    result = ingest(
-        settings,
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        provider="tikhub",
-        transcript=TranscriptMode.AUTO,
-        requester=requester,
-        asr=FakeAsr(),
-        audio_provider="tikhub",
-    )
-    assert result.data["transcript_source"] == TranscriptSource.ASR
-    assert any(r["endpoint"] == "local:yt-dlp" for r in result.data["requests"])
-    assert result.data["audio_provider"] == "yt-dlp"
-    assert result.data["audio_provider_requested"] == "tikhub"
+    with pytest.raises(SourceError, match="cdn failure"):
+        ingest(
+            settings,
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            provider="tikhub",
+            transcript=TranscriptMode.AUTO,
+            requester=requester,
+            asr=FakeAsr(),
+            audio_provider="tikhub",
+        )
+    assert not list(settings.cache_dir.rglob("streams*.json"))

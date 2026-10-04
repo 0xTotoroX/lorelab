@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from soota.billing import selected_provider
 from soota.config import SootaSettings
 from soota.errors import InputError
-from soota.models import SourceRef
+from soota.models import AudioAsset, MediaItem, RequestRecord, SourceRef
 from soota.providers.base import AudioProvider
 from soota.providers.downie import DownieProvider
 from soota.providers.ytdlp import YtDlpProvider
@@ -31,7 +32,25 @@ def selected_audio_provider(settings: SootaSettings, explicit: str | None) -> st
     return name
 
 
-def audio_provider(settings: SootaSettings, name: str, paid_factory: Callable[[], AudioProvider]) -> AudioProvider:
+class ExistingAudioProvider:
+    def __init__(self, asset: AudioAsset) -> None:
+        self.asset = asset
+        self.name = asset.provider or "local"
+        self.records: list[RequestRecord] = []
+
+    def get_audio(self, item: MediaItem) -> AudioAsset:
+        self.records.append(
+            RequestRecord(endpoint="local:shared-audio", billed=False, cache_hit=True, estimated_cost_usd=0)
+        )
+        return self.asset
+
+
+def audio_provider(
+    settings: SootaSettings, name: str, paid_factory: Callable[[], AudioProvider], *, asset: AudioAsset | None = None
+) -> AudioProvider:
+    if asset is not None:
+        return ExistingAudioProvider(asset)
+    selected_provider(settings, name)
     if name == "yt-dlp":
         return YtDlpProvider(settings)
     if name == "downie":

@@ -43,6 +43,8 @@ class OpenCLIMCPProvider:
 
     def __init__(self, settings: SootaSettings) -> None:
         require_enabled(settings.opencli_mcp)
+        if "opencli-mcp" in settings.routing.disabled_providers:
+            raise InputError("opencli-mcp 已在来源策略中停用。")
         self.settings = settings
         scope = hashlib.sha256(
             str(settings.opencli_mcp.binary or settings.opencli_mcp.runtime_binary or "default").encode()

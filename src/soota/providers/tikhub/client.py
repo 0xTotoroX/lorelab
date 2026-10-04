@@ -49,7 +49,7 @@ from soota.providers.tikhub.normalize import (
 from soota.providers.tikhub.registry import ApiEndpoint, load_registry
 from soota.secrets import load_tikhub_api_key, redact_url
 from soota.storage.cache import CacheStore
-from soota.transcripts.download import fetch_audio_ytdlp
+from soota.storage.task_budget import reserve_active_task
 
 YOUTUBE_INFO = load_registry().resolve("youtube.web.get_video_info").path
 YOUTUBE_CAPTIONS = load_registry().resolve("youtube.web.get_video_captions").path
@@ -296,33 +296,15 @@ class TikHubProvider:
             return AudioAsset(path=dest, provider=origin.get("provider", "unknown"))
         if item.source.platform == "bilibili" and not item.extras.get("cid"):
             item = self.inspect(item.source)
-        try:
-            cached = self.cache.get_json(item.source, "streams")
-            if cached:
-                self.records.append(RequestRecord(endpoint="cache:streams", billed=False, cache_hit=True))
-                payload = cached.get("raw")
-            else:
-                payload = self._audio_payload(item)
-                self.cache.put_json(item.source, "streams", {"raw": payload}, redact=False)
-            url = pick_audio_url(payload)
-            self._download(url, dest)
-            if dest.is_file() and dest.stat().st_size > 0:
-                self.cache.put_json(item.source, "audio_origin", {"provider": self.name})
-                return AudioAsset(path=dest, provider=self.name)
-            raise TranscriptError("音频下载结果为空。")
-        except AuthBudgetError:
-            raise
-        except Exception as exc:
-            self.records.append(RequestRecord(endpoint="local:yt-dlp", billed=False, note="tikhub-audio-fallback"))
-            try:
-                fetch_audio_ytdlp(item.source.canonical_url, dest)
-            except Exception as fallback_exc:
-                raise TranscriptError(
-                    "TikHub 音频失败，yt-dlp 回退也失败。",
-                    hint=str(fallback_exc),
-                ) from exc
-            self.cache.put_json(item.source, "audio_origin", {"provider": "yt-dlp"})
-            return AudioAsset(path=dest, provider="yt-dlp")
+        # Signed transport data stays in memory. A failed explicit TikHub
+        # acquisition must not silently switch to a different source.
+        payload = self._audio_payload(item)
+        url = pick_audio_url(payload)
+        self._download(url, dest)
+        if not dest.is_file() or dest.stat().st_size == 0:
+            raise TranscriptError("TikHub 音频下载结果为空，未自动换源。")
+        self.cache.put_json(item.source, "audio_origin", {"provider": self.name})
+        return AudioAsset(path=dest, provider=self.name)
 
     def _inspect_payload(self, source: SourceRef) -> Any:
         if source.platform == "youtube":
@@ -439,8 +421,7 @@ class TikHubProvider:
         )
         if self.payment_gate is not None:
             self.payment_gate.authorize(record, self.get_wallet)
-        if self.before_request is not None:
-            self.before_request(record)
+        reserve_active_task(record, self.before_request)
         self.records.append(record)
 
         def dispatch() -> Any:

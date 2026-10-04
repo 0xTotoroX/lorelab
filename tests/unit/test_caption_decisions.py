@@ -25,6 +25,14 @@ from tests.unit.test_opencli import REAL_RUN
 from tests.unit.test_resolver import FakeAsr
 from tests.unit.test_ytdlp_provider import INFO, URL, stub_process
 
+
+@pytest.fixture(autouse=True)
+def fake_audio_decode_for_routing_contracts(monkeypatch):
+    # These tests use synthetic byte placeholders and fake ASR. Actual decoding
+    # and final media acceptance are covered by test_media_* and content tasks.
+    monkeypatch.setattr("soota.transcripts.resolver.ensure_audio", lambda path, **kwargs: path)
+
+
 BILI = "https://www.bilibili.com/video/BV1xx411c7mD"
 
 

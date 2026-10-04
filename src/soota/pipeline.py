@@ -6,12 +6,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from soota.billing import PaymentGate, selected_provider
+from soota.billing import PaymentGate, provider_enabled, selected_provider
 from soota.config import SootaSettings, ensure_dirs
 from soota.counterpart import youtube_counterpart
 from soota.errors import AuthBudgetError, CaptionUnavailable, InputError, SootaError, SourceError
 from soota.models import (
     AnalysisManifest,
+    AudioAsset,
     CommandResult,
     ContentBundleManifest,
     MediaItem,
@@ -59,6 +60,7 @@ def _provider(
     requester: Callable[..., Any] | None = None,
     max_cost: float | None = None,
 ) -> TikHubProvider:
+    selected_provider(settings, "tikhub")
     return TikHubProvider(
         runtime_python=settings.tikhub.runtime_python,
         cache=cache,
@@ -346,6 +348,8 @@ def ingest(
     prefer_youtube: bool | None = None,
     exclude_promotions: bool | None = None,
     exclude_ranges: list[str] | None = None,
+    record_job: bool = True,
+    audio_asset: AudioAsset | None = None,
 ) -> CommandResult:
     parse_ranges(exclude_ranges or [])
     provider = selected_provider(settings, provider)
@@ -359,7 +363,7 @@ def ingest(
     else:
         prefer_youtube = settings.content_selection.prefer_youtube if prefer_youtube is None else prefer_youtube
         exclude_promotions = prefer_youtube if exclude_promotions is None else exclude_promotions
-    if provider == "auto" and fallback is None and max_cost != 0:
+    if provider == "auto" and fallback is None and max_cost != 0 and provider_enabled(settings, "tikhub"):
         fallback = "tikhub"
     if provider != "tikhub":
         if dry_run:
@@ -386,6 +390,8 @@ def ingest(
             prefer_youtube=prefer_youtube,
             exclude_promotions=exclude_promotions,
             exclude_ranges=exclude_ranges or [],
+            record_job=record_job,
+            audio_asset=audio_asset,
         )
     ensure_dirs(settings)
     source = recognize(url)
@@ -428,7 +434,7 @@ def ingest(
     output_root = (output or settings.output_dir).expanduser()
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester, max_cost=max_cost)
-    downloader = make_audio_provider(settings, audio_name, lambda: client)
+    downloader = make_audio_provider(settings, audio_name, lambda: client, asset=audio_asset)
     resolver = TranscriptResolver(client, cache, settings, asr=asr, audio_provider=downloader)
     try:
         item = client.inspect(source)
@@ -466,16 +472,17 @@ def ingest(
     manifest.metadata["audio_provider"] = item.provenance.get("audio_provider")
     CostLedger(settings.ledger_path).append(item.source.id, client.records)
     folder = write_bundle(output_root, item, document, manifest, None, force=force)
-    JobStore(settings.jobs_dir).create(
-        {
-            "status": "completed"
-            if document.status in {TranscriptStatus.READY, TranscriptStatus.NOT_REQUESTED}
-            else "partial",
-            "source": item.source.model_dump(),
-            "output": str(folder),
-            "transcript_status": document.status,
-        }
-    )
+    if record_job:
+        JobStore(settings.jobs_dir).create(
+            {
+                "status": "completed"
+                if document.status in {TranscriptStatus.READY, TranscriptStatus.NOT_REQUESTED}
+                else "partial",
+                "source": item.source.model_dump(),
+                "output": str(folder),
+                "transcript_status": document.status,
+            }
+        )
     status: Literal["success", "partial"] = (
         "success" if document.status in {TranscriptStatus.READY, TranscriptStatus.NOT_REQUESTED} else "partial"
     )
@@ -523,6 +530,8 @@ def ingest_free(
     prefer_youtube: bool = False,
     exclude_promotions: bool = False,
     exclude_ranges: list[str] | None = None,
+    record_job: bool = True,
+    audio_asset: AudioAsset | None = None,
 ) -> CommandResult:
     source = recognize(url)
     records: list[RequestRecord] = []
@@ -547,11 +556,23 @@ def ingest_free(
             document = TranscriptDocument(status=TranscriptStatus.NOT_REQUESTED)
     else:
         candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider] | type[YtDlpProvider]]] = []
-        if settings.opencli_mcp.enabled and provider in {"auto", "opencli-mcp"} and mcp_capabilities(source).captions:
+        if (
+            provider_enabled(settings, "opencli-mcp")
+            and provider in {"auto", "opencli-mcp"}
+            and mcp_capabilities(source).captions
+        ):
             candidates.append(("opencli-mcp", OpenCLIMCPProvider))
-        if provider in {"auto", "opencli"} and opencli_capabilities(source).captions:
+        if (
+            provider_enabled(settings, "opencli")
+            and provider in {"auto", "opencli"}
+            and opencli_capabilities(source).captions
+        ):
             candidates.append(("opencli", OpenCLIProvider))
-        if provider in {"auto", "yt-dlp"} and ytdlp_capabilities(source).captions:
+        if (
+            provider_enabled(settings, "yt-dlp")
+            and provider in {"auto", "yt-dlp"}
+            and ytdlp_capabilities(source).captions
+        ):
             candidates.append(("yt-dlp", YtDlpProvider))
         for name, factory in candidates:
             attempted.append(name)
@@ -615,6 +636,7 @@ def ingest_free(
                 requester=requester,
                 max_cost=remaining_budget(max_cost, records),
             ),
+            asset=audio_asset,
         )
         try:
             resolver = TranscriptResolver(
@@ -643,6 +665,8 @@ def ingest_free(
                 requester=requester,
                 asr=asr,
                 audio_provider=audio_provider,
+                record_job=record_job,
+                audio_asset=audio_asset,
             )
             result.warnings.insert(0, missing_reason + " 已按费用策略使用 TikHub 兜底。")
             result.data["routing"] = {
@@ -697,15 +721,16 @@ def ingest_free(
         atomic_write(folder / "transcript.original.md", render_transcript(item, original_document))
         manifest.files["transcript.original.md"] = "transcript.original.md"
         atomic_write(folder / "manifest.json", manifest.model_dump_json(indent=2) + "\n")
-    JobStore(settings.jobs_dir).create(
-        {
-            "status": "completed" if ready else "partial",
-            "source": item.source.model_dump(),
-            "output": str(folder),
-            "provider": item.provenance["provider"],
-            "transcript_status": document.status if transcript != TranscriptMode.NONE else "not_requested",
-        }
-    )
+    if record_job:
+        JobStore(settings.jobs_dir).create(
+            {
+                "status": "completed" if ready else "partial",
+                "source": item.source.model_dump(),
+                "output": str(folder),
+                "provider": item.provenance["provider"],
+                "transcript_status": document.status if transcript != TranscriptMode.NONE else "not_requested",
+            }
+        )
     return CommandResult(
         ok=ready,
         status="success" if ready else "partial",
@@ -749,6 +774,29 @@ def render(
     if not manifest_path.is_file():
         raise InputError("找不到 manifest.json。", hint="先 ingest 再 render。")
     folder = manifest_path.parent
+    if json.loads(manifest_path.read_text()).get("schema_version") == 2:
+        from pydantic import ValidationError
+
+        from soota.artifacts.analysis import AnalysisSubmission, render_analysis
+
+        try:
+            submission = AnalysisSubmission.model_validate_json(analysis.read_text())
+        except ValidationError as exc:
+            raise InputError("v2 内容包需要带 context_fingerprint 的分析提交。") from exc
+        updated = render_analysis(folder, submission, force=force)
+        return CommandResult(
+            ok=True,
+            status="success",
+            code="ok",
+            exit_code=0,
+            message="分析产物已写入，原文保持不变。",
+            data={
+                "output": str(folder),
+                "manifest": str(manifest_path),
+                "context": str(folder / "context.md"),
+                "files": updated.files,
+            },
+        )
     parsed = load_analysis(analysis)
     manifest = ContentBundleManifest.model_validate(json.loads(manifest_path.read_text(encoding="utf-8")))
     from soota.render.bundle import write_bundle_to

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from soota.config import SootaSettings
-from soota.errors import AuthBudgetError, ContractError, SourceError
+from soota.errors import AuthBudgetError, ContractError, InputError, SourceError
 from soota.models import (
     AudioAsset,
     CapabilitySet,
@@ -41,6 +41,8 @@ class YtDlpProvider:
     name = "yt-dlp"
 
     def __init__(self, settings: SootaSettings) -> None:
+        if "yt-dlp" in settings.routing.disabled_providers:
+            raise InputError("yt-dlp 已在来源策略中停用。")
         self.settings = settings
         self.config = settings.local
         scope = hashlib.sha256(

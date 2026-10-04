@@ -52,8 +52,11 @@ def _looks_signed(url: str) -> bool:
 
 def redact_any(value: Any) -> Any:
     if isinstance(value, str):
-        if "://" in value and _looks_signed(value):
-            return redact_url(value)
+        # A native text field can contain several paragraphs and URLs. Mask
+        # each transport URL without truncating everything after its query.
+        value = re.sub(
+            r"https?://[^\s<>\"')]+", lambda match: redact_url(match[0]) if _looks_signed(match[0]) else match[0], value
+        )
         return redact_text(value)
     if isinstance(value, dict):
         out: dict[str, Any] = {}
