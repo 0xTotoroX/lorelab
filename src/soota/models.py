@@ -25,7 +25,9 @@ class TranscriptSource(StrEnum):
 class TranscriptStatus(StrEnum):
     READY = "ready"
     MISSING = "missing"
+    UNKNOWN = "unknown"
     PENDING = "pending"
+    NOT_REQUESTED = "not_requested"
 
 
 class AnalysisStatus(StrEnum):
@@ -96,12 +98,14 @@ class CaptionResult(BaseModel):
     language: str | None = None
     tracks: list[CaptionTrack] = Field(default_factory=list)
     segments: list[TranscriptSegment] = Field(default_factory=list)
+    reason: str | None = None
 
 
 class AudioAsset(BaseModel):
     path: Path
     mime: str | None = None
     duration_seconds: float | None = None
+    provider: str | None = None
 
 
 class KeyPoint(BaseModel):

@@ -64,6 +64,11 @@ class LocalProviderConfig(BaseModel):
     cache_seconds: int = Field(default=300, ge=0)
 
 
+class AudioConfig(BaseModel):
+    provider: Literal["yt-dlp", "downie", "tikhub"] = "yt-dlp"
+    timeout_seconds: float = Field(default=900, gt=0)
+
+
 class RoutingConfig(BaseModel):
     default_provider: Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub"] = "auto"
 
@@ -90,6 +95,7 @@ class SootaSettings(BaseModel):
     opencli: OpenCLIConfig = Field(default_factory=OpenCLIConfig)
     opencli_mcp: OpenCLIMCPConfig = Field(default_factory=OpenCLIMCPConfig)
     local: LocalProviderConfig = Field(default_factory=LocalProviderConfig)
+    audio: AudioConfig = Field(default_factory=AudioConfig)
     routing: RoutingConfig = Field(default_factory=RoutingConfig)
     content_selection: ContentSelectionConfig = Field(default_factory=ContentSelectionConfig)
     payment: PaymentConfig = Field(default_factory=PaymentConfig)
@@ -164,6 +170,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
             }
         )
         routing_config = RoutingConfig.model_validate(data.get("routing") or {})
+        audio_config = AudioConfig.model_validate(data.get("audio") or {})
         mcp_config = OpenCLIMCPConfig.model_validate(
             {
                 **(data.get("opencli_mcp") or {}),
@@ -186,6 +193,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         payment=payment_config,
         updates=updates_config,
         routing=routing_config,
+        audio=audio_config,
         content_selection=selection_config,
         tikhub=TikHubConfig(
             base_url=str((data.get("tikhub") or {}).get("base_url", "https://api.tikhub.io")),

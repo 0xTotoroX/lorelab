@@ -16,7 +16,7 @@ def render_transcript(item: MediaItem, document: TranscriptDocument) -> str:
     lines = [
         f"# {title} — 转写",
         "",
-        f"- 来源: {document.source or 'missing'}",
+        f"- 来源: {document.source or document.status.value}",
         f"- 语言: {document.language or '-'}",
         f"- 片段: {len(document.segments)}",
         "",
@@ -54,7 +54,8 @@ def render_content(
         f"- 创作者: {item.creator or '-'}",
         f"- 发布: {item.published_at.isoformat() if item.published_at else '-'}",
         f"- 时长: {item.duration_seconds if item.duration_seconds is not None else '-'} 秒",
-        f"- 字幕: {document.source or 'missing'} / {document.language or '-'} / {len(document.segments)} 段",
+        f"- 字幕: {document.source or document.status.value} / {document.language or '-'} / "
+        f"{len(document.segments)} 段",
         "",
     ]
     if analysis is None:

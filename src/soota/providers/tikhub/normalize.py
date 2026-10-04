@@ -159,11 +159,13 @@ def youtube_caption_content(
 ) -> CaptionResult:
     data = unwrap(payload)
     status = str(data.get("status") or "")
+    if status in {"failed", "error"}:
+        return CaptionResult(status=TranscriptStatus.UNKNOWN, reason="upstream_failed")
     if status in {"processing", "queued", "active"}:
         return CaptionResult(status=TranscriptStatus.PENDING, language=language, source=source_kind)
     tracks, _ = youtube_caption_tracks(payload)
     if data.get("captions") == [] and not data.get("content"):
-        return CaptionResult(status=TranscriptStatus.MISSING, tracks=tracks)
+        return CaptionResult(status=TranscriptStatus.MISSING, tracks=tracks, reason="empty_track_list")
     content = data.get("content")
     fmt = str(data.get("format") or "srt").lower()
     if isinstance(content, str) and content.strip():
@@ -171,6 +173,8 @@ def youtube_caption_content(
             segments = parse_json3(content, language=language, source=source_kind)
         else:
             segments = parse_srt(content, language=language, source=source_kind)
+        if not segments:
+            return CaptionResult(status=TranscriptStatus.UNKNOWN, tracks=tracks, reason="empty_caption_body")
         return CaptionResult(
             status=TranscriptStatus.READY,
             source=source_kind,
@@ -246,6 +250,17 @@ def bilibili_caption_tracks(payload: Any) -> list[dict[str, Any]]:
             continue
         filtered.append(item)
     return filtered
+
+
+def bilibili_empty_tracks_confirmed(payload: Any) -> bool:
+    data = unwrap(payload)
+    # A server-side empty result without visibility information can hide login-only AI captions.
+    if data.get("need_login_subtitle") is not False:
+        return False
+    subtitle = data.get("subtitle", data)
+    if not isinstance(subtitle, dict):
+        return False
+    return subtitle.get("subtitles") == [] or subtitle.get("list") == []
 
 
 def track_kind_from_bili(item: dict[str, Any]) -> TranscriptSource:

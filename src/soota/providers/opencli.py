@@ -10,7 +10,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from soota.config import SootaSettings
-from soota.errors import AuthBudgetError, CaptionUnavailable, ContractError, SourceError
+from soota.errors import AuthBudgetError, CaptionsAbsent, CaptionUnavailable, ContractError, SourceError
 from soota.models import (
     CapabilitySet,
     CaptionResult,
@@ -98,6 +98,7 @@ class OpenCLIProvider:
                     "rate limit",
                     "captcha",
                     "login_required",
+                    "auth_required",
                     "unauthorized",
                     "forbidden",
                 )
@@ -105,7 +106,9 @@ class OpenCLIProvider:
                 raise AuthBudgetError("OpenCLI 登录、限流或访问限制，需要处理浏览器状态后再试；不会切换付费来源。")
             code = re.search(r"(?m)^\s*code:\s*['\"]?([A-Z_]+)", result.stderr)
             if result.returncode == 66 and code and code[1] == "EMPTY_RESULT" and (site, command) in CAPTION_COMMANDS:
-                return []
+                if site == "bilibili" and "此视频没有发现外挂或智能字幕。" in result.stderr:
+                    raise CaptionsAbsent("B 站已返回空字幕轨道列表。")
+                raise CaptionUnavailable("OpenCLI 返回空字幕结果，但尚不能确认视频没有字幕轨道。")
             bridge_missing = any(phrase in message for phrase in ("extension not connected", "daemon not running"))
             if result.returncode == 69 and code and code[1] == "BROWSER_CONNECT" and bridge_missing:
                 raise RuntimeUnavailable(
@@ -119,7 +122,7 @@ class OpenCLIProvider:
             if (site, command) == ("youtube", "transcript") and "caption url returned empty response" in message:
                 raise CaptionUnavailable(
                     "OpenCLI 字幕地址返回空响应，采集未完成。",
-                    hint="auto 模式可继续 soota 免费兜底；TikHub 仍受费用策略控制。",
+                    hint="auto 模式可继续 yt-dlp 免费兜底；TikHub 仍受费用策略控制。",
                 )
             raise SourceError("OpenCLI 采集失败，未自动重试或切换来源。", details={"exit_code": result.returncode})
         try:
@@ -181,7 +184,10 @@ class OpenCLIProvider:
         args = [target, "--lang", language]
         if source.platform == "youtube":
             args += ["--mode", "raw"]
-        rows = self._run(source.platform, command, args)
+        try:
+            rows = self._run(source.platform, command, args)
+        except CaptionsAbsent:
+            return CaptionResult(status=TranscriptStatus.MISSING, reason="empty_track_list")
         result = normalize_captions(source.platform, rows)
         # Upstream omits actual track language/kind and may choose a different language.
         if result.status == TranscriptStatus.READY:
@@ -271,7 +277,7 @@ def normalize_video(source: SourceRef, rows: list[dict[str, Any]]) -> MediaItem:
 
 def normalize_captions(platform: str, rows: list[dict[str, Any]]) -> CaptionResult:
     if not rows:
-        return CaptionResult(status=TranscriptStatus.MISSING)
+        return CaptionResult(status=TranscriptStatus.UNKNOWN, reason="empty_response")
     keys = ("from", "to", "content") if platform == "bilibili" else ("start", "end", "text")
     segments: list[TranscriptSegment] = []
     for row in rows:
@@ -294,7 +300,7 @@ def normalize_captions(platform: str, rows: list[dict[str, Any]]) -> CaptionResu
                 )
             )
     return CaptionResult(
-        status=TranscriptStatus.READY if segments else TranscriptStatus.MISSING,
+        status=TranscriptStatus.READY if segments else TranscriptStatus.UNKNOWN,
         source=TranscriptSource.UNKNOWN if segments else None,
         segments=segments,
     )

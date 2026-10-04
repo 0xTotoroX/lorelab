@@ -2,7 +2,18 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from soota.models import AudioAsset, CapabilitySet, CaptionResult, CatalogPage, MediaItem, SourceRef
+from soota.models import AudioAsset, CapabilitySet, CaptionResult, CatalogPage, MediaItem, RequestRecord, SourceRef
+
+
+class AudioProvider(Protocol):
+    name: str
+    records: list[RequestRecord]
+
+    def get_audio(self, item: MediaItem) -> AudioAsset: ...
+
+
+class CaptionProvider(Protocol):
+    def get_captions(self, item: MediaItem) -> CaptionResult: ...
 
 
 class Provider(Protocol):

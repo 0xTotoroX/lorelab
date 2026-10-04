@@ -60,3 +60,7 @@ class ContractError(SootaError):
 
 class CaptionUnavailable(SourceError):
     """Known acquisition failure eligible for another free caption provider."""
+
+
+class CaptionsAbsent(SourceError):
+    """The current source explicitly reports an empty caption track list."""

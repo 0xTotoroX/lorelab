@@ -10,7 +10,7 @@ Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp
 | B站同作者同一期 YouTube 字幕优先 | 可选 `--prefer-youtube`，有频道和同一期视频依据才替换 | 未接入 |
 | X 用户最近帖子 | 最多 200 条快照，完整性未知 | 统一目录解析尚未接入，可用 `api call` 获取原始响应 |
 | YouTube 频道 / Bilibili UP 主目录 | 未接入可续跑分页 | 保留分页、预算、检查点与续跑 |
-| 音频、本地 ASR 流程 | 未接入音频下载 | 显式 ASR 或已授权的 auto 兜底 |
+| 音频、本地 ASR 流程 | 音频独立选择 yt-dlp（默认）或 Downie（显式） | 显式音频来源；受费用策略控制 |
 
 同一 Provider 内先查缓存。显式 `--provider` 严格选择指定来源，除非同时指定已支持的 fallback。字幕跨平台选择及推广过滤见 [字幕选择与过滤](subtitle-selection.md)。
 
@@ -20,23 +20,86 @@ Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp
 
 使用 `--provider yt-dlp` 显式选择。旧 `--provider soota`、旧默认来源配置和未过期的 YouTube 缓存仍可读取；新输出统一标记 `yt-dlp`。Soota 程序名和 `SOOTA_YTDLP_*` 环境变量不变。
 
-支持 YouTube/Bilibili 单视频元数据和字幕，通过外部 yt-dlp 执行。`inspect`、`ingest`、`youtube.video.detail` 和 `bilibili.video.detail` 按能力使用它；没有接入目录、音频下载或其他平台。B 站当前使用默认分 P。`official` 表示网站的非自动字幕轨道，不保证作者上传前未使用 AI。
+支持 YouTube/Bilibili 单视频元数据和字幕，通过外部 yt-dlp 执行。`inspect`、`ingest`、`youtube.video.detail` 和 `bilibili.video.detail` 按能力使用它；同时支持转写用的音频下载；没有接入目录或其他平台。B 站当前使用默认分 P。`official` 表示网站的非自动字幕轨道，不保证作者上传前未使用 AI。
 
 B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会报错停止，不冒充“没有字幕”，也不触发付费兜底。
 
 字幕优先匹配请求语言，其次同语系；同一语言匹配级别优先非自动轨道。没有匹配语言时选择其他现有轨道，输出记录实际语言和轨道类型。不保存签名字幕 URL、请求头或 Cookie；临时 JSON3（YouTube）或 SRT（B 站）下载后转换为标准内容包并删除。缓存按程序路径、浏览器选择和请求语言的散列隔离，保留 300 秒；同一 profile 切换账号后需使用新的缓存目录。
 
-`SOOTA_YTDLP_BINARY` 指定程序，默认 PATH 中的 `yt-dlp`；`SOOTA_YTDLP_COOKIES_BROWSER` 使用 yt-dlp 的浏览器/profile 语法，默认 `chrome`，空字符串关闭 Cookie 读取。若提示 B 站字幕需要登录，先核对实际读取的 Chrome profile；`chrome` 自动选择的 profile 不一定是当前登录 B 站的 profile。个人选择仅从环境变量注入。Provider 算法随 Soota 更新；外部 yt-dlp 由其原安装工具维护，`updates apply` 不升级它。
+`SOOTA_YTDLP_BINARY` 指定程序，默认 PATH 中的 `yt-dlp`；`SOOTA_YTDLP_COOKIES_BROWSER` 使用 yt-dlp 的浏览器/profile 语法，默认 `chrome`，空字符串关闭 Cookie 读取。若提示 B 站字幕需要登录，先核对实际读取的 Chrome profile；`chrome` 自动选择的 profile 不一定是当前登录 B 站的 profile。个人选择仅从环境变量注入。Provider 适配随 Soota 更新；外部 yt-dlp 由其原安装工具维护，Downie 由应用自身更新。`updates apply` 不升级这两者。
 
 ## 路由和费用
 
-`inspect` 按能力先用 OpenCLI；免费来源不可用时可按费用策略转入 TikHub，默认逐次询问付费。`--provider opencli`、`--provider yt-dlp` 或 `--provider tikhub` 严格选择一个来源；`--fallback tikhub` 只在支持的单视频流程中生效。`policy set --mode auto` 只改变轮到 TikHub 时的付费授权，不改来源顺序。可在 `config.toml` 的 `[routing]` 中显式设置 `default_provider`；旧付费策略文件中耦合的 `default_provider` 会在加载时忽略。缓存可零预算读取，`--max-cost` 是附加上限。
+`--provider` 选择元数据和字幕来源：`auto` 按 OpenCLI → yt-dlp → 经授权 TikHub 选择，也可显式指定一个来源。只有来源不可用、状态未知或已识别为可兜底的字幕获取失败，才会尝试下一来源。登录、验证码、权限、限流、超时和响应契约错误仍会停止，不盲目重试。
 
-免费来源缺少能力、程序不存在或 Bridge 确认未连接时，才允许已授权的兜底；已确认没有可用字幕时也可按授权使用 TikHub。YouTube 的已知 `Caption URL returned empty response` 会在 auto 模式继续 yt-dlp；两层免费来源均无可用结果后，仍需经过 TikHub 费用策略。显式 OpenCLI 不自动转到 yt-dlp。登录、验证码、权限、限流、超时、适配器加载失败、响应契约变化、profile 错误及 daemon 版本冲突都会停止，不切换来源、不在 Soota 层自动重试。上游程序本身可能有内部重试，Soota 的总超时限制其运行时间。
+字幕结果与后续动作：
 
-所有受控请求在发出前检查预算。`--max-cost 0` 即使遇到标价为 0 的 billed 接口也会拒绝；未知价格也会拒绝。TikHub 单价来自现有受控快照；预算是请求费用预估，不是服务端账单限额。`actual_cost_usd` 不冒充实际账单。
+| 状态 | 含义 | `--transcript auto` 的动作 |
+| --- | --- | --- |
+| `ready` | 已取得有效字幕片段 | 保存字幕 |
+| `missing` | 当前成功探测确认没有字幕轨道 | 结束字幕查询，下载音频并本地转写 |
+| `unknown` | 空响应、探测信息缺失或已有轨道但未取得可用正文 | 尝试允许的下一来源；最终仍未知时返回 partial |
+| `pending` | 上游任务仍在处理 | 返回未完成，不转写、不继续字幕兜底 |
+| `not_requested` | `--transcript none` 未请求字幕 | 仅保存元数据 |
 
-默认 `ingest` 的 `auto` 和 `captions-only` 在 Bilibili 和 YouTube 都先试 OpenCLI。有字幕就直接保存，不查询 TikHub 钱包。YouTube/Bilibili 在 OpenCLI 不可用或字幕缺失时继续尝试 yt-dlp。免费来源明确没有字幕时可继续下一来源；登录、限流、契约变化、请求后断线或超时都会停止。auto 模式缺少字幕时按付款策略尝试 TikHub；零预算或严格免费来源模式保留元数据并返回 partial。`--transcript asr` 仍走具备音频能力的 TikHub 路径。目录费用受同一付费策略控制；不同来源不能互换分页游标，所以 `catalog --fallback` 拒绝执行。
+`captions-only` 遇到 `missing` 也结束查询，但不下载音频或转写。`asr` 跳过字幕查询，获取元数据后直接进入音频流程。自动转写只依据当前字幕探测结果，不根据上传者是否勾选过字幕选项推断。`transcript_status=unknown` 与 `transcript_source=unknown` 不同：后者可以是已取得字幕，但不知道它由人工还是 AI 制作。
+
+以下是单视频 `--provider auto --transcript auto` 的主流程，省略缓存及可选的跨平台选择：
+
+```mermaid
+flowchart TD
+    A[视频链接] --> O[OpenCLI 字幕]
+    O -->|取得字幕| R[保存内容包]
+    O -->|确认无字幕| D[选择音频来源]
+    O -->|未知或允许兜底的失败| Y[yt-dlp 字幕]
+    Y -->|取得字幕| R
+    Y -->|确认无字幕| D
+    Y -->|未知或不可用| T[TikHub 字幕：受费用策略控制]
+    T -->|取得字幕| R
+    T -->|确认无字幕| D
+    T -->|仍未知或处理中| P[返回未完成]
+    D --> U[yt-dlp：默认]
+    D --> W[Downie：明确选择]
+    D --> K[TikHub 音频：明确选择并检查费用]
+    K -.既有下载失败兜底.-> U
+    U --> L[本地 Whisper 转写]
+    W --> C[完成标记与音轨校验]
+    C --> L
+    K --> L
+    L --> R
+```
+
+图中允许切换的错误不包括登录、限流、权限、超时或格式契约异常。MCP 默认停用。开启 `--prefer-youtube` 时，先按已有依据选择跨平台对照视频；不同平台不共享“无字幕”的判断。
+
+`--audio-provider` 独立选择转写用的音频来源：默认 `yt-dlp`；`downie` 只在明确选择或用户配置时使用；`tikhub` 仍经过付费授权。显式音频来源之间没有新增自动切换；TikHub 原有的媒体下载失败后 yt-dlp 回退保留。结果中 `audio_provider_requested` 是所选来源，`audio_provider` 是实际取得音频的来源，旧音频缓存不能核实时保留 `unknown`。
+
+所有付费请求共用本次 `--max-cost` 上限，后续音频阶段扣除已发生的元数据费用。`--max-cost 0` 禁止计费接口，但允许免费音频下载和本地计算。`estimate` 在选择 TikHub 音频时单列确认无字幕后才触发的 `conditional_audio` 费用，不把整次任务说成零费用。单价为受控快照中的预估，不冒充实际账单；`ask` 每次确认，`auto` 按已配置的余额门槛授权。
+
+### Downie 可选音频接入
+
+需要 macOS、已安装的 Downie 4、ffmpeg 和 ffprobe。此接法下载媒体后由 Soota 提取音轨，可能先下载视频；不承担字幕存在性判断，也不替代本地转写引擎。
+
+一次性设置：在 Downie 的 Settings → Postprocessing 中选择 Custom，将 [完成脚本](../src/soota/providers/downie_complete.sh) 的内容粘贴到 Edit Custom Script。已有自定义脚本时应先保留并合并原逻辑，不能直接覆盖。脚本只处理带 `request.json` 的 `soota-downie-*` 任务目录，其他目录直接退出。该脚本机制来自 [Downie 官方后处理说明](https://software.charliemonroe.net/help/downie/?article=postprocessing)。
+
+```bash
+# 确认没有字幕时，使用 Downie 获取媒体并在本地转写
+soota ingest "视频 URL" --transcript auto --audio-provider downie --max-cost 0 --json
+
+# 明确跳过字幕查询，直接获取音频并转写
+soota ingest "视频 URL" --transcript asr --audio-provider yt-dlp --max-cost 0 --json
+```
+
+Soota 通过官方 `downie://` 链接指定本次输出目录，保持 Custom 后处理模式，不覆盖为 Audio Only。Downie 调用完成脚本后，Soota 才检查音轨并开始转写。`open` 命令返回或文件出现都不作为完成依据。
+
+可在用户配置中设置音频默认值；这些设置不会改变字幕来源的顺序：
+
+```toml
+[audio]
+provider = "yt-dlp"
+timeout_seconds = 900
+```
+
+默认等待上限为 900 秒，可通过 `[audio].timeout_seconds` 修改。未收到标记时返回 `download_pending`，不会取消 Downie 队列，也不会重复提交。重新运行会等待原任务；需要先在 Downie 中处理登录、下载错误或脚本设置。若前面已由 TikHub 确认无字幕，未完成任务保存该决定，恢复时不再次付费查询字幕。普通旧 `missing` 缓存不具备这种恢复语义。
 
 ## 最近快照、缓存和账号
 
@@ -108,7 +171,11 @@ uv run soota runtime rollback --json
 | `providers/mcp_client.py` | 本地 stdio MCP 会话、响应大小与超时控制 |
 | `providers/opencli_mcp.py` | opencli-mcp 只读命令白名单、结果规范化和缓存 |
 | `providers/soota.py` | 旧 Python Provider 导入的兼容入口 |
-| `providers/ytdlp.py` | yt-dlp 双平台元数据、字幕选择、缓存与 JSON3/SRT 规范化 |
+| `providers/ytdlp.py` | 双平台元数据、字幕探测、JSON3/SRT 规范化和音频下载 |
+| `providers/audio.py` | 音频来源选择与条件费用预估 |
+| `providers/downie.py` | Downie 任务提交、恢复、完成标记与音轨提取 |
+| `providers/downie_complete.sh` | Downie 下载完成后的受限目录回调 |
+| `transcripts/resolver.py` | 字幕状态决策、本地 ASR 与未完成音频任务恢复 |
 | `providers/opencli.py` | 只读命令白名单、输出规范化、缓存与快照 |
 | `providers/opencli_context.py` | 浏览器上下文绑定与 daemon 版本门禁 |
 | `providers/process.py` | 无 shell 的 argv 调用、输出上限、超时和取消 |

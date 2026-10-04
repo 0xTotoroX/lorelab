@@ -107,7 +107,11 @@ uv run soota ingest "B站视频 URL" --no-prefer-youtube --max-cost 0 --json
 
 开启时默认过滤已标注的推广。没有标注或身份无法确认时会明确报告，详见 [字幕选择与过滤](subtitle-selection.md)。
 
-安装好 yt-dlp 后，YouTube/Bilibili 自动尝试 OpenCLI → yt-dlp。可单独使用yt-dlp 方案：
+`--transcript auto` 确认没有字幕轨道后直接下载音频并本地转写；`captions-only` 不转写，`asr` 跳过字幕查询，`none` 只获取元数据。空响应、登录失败和未知状态不会被当成确认无字幕。
+
+音频默认用 yt-dlp。可显式添加 `--audio-provider downie`，或选择经费用授权的 `tikhub`；Downie 不参与字幕查询。Downie 必须先设置下载完成脚本，具体步骤及流程图见 [Provider 路由](providers.md#downie-可选音频接入)。`download_pending` 表示继续检查原 Downie 任务，不能重复提交下载。
+
+安装好 yt-dlp 后，YouTube/Bilibili 自动尝试 OpenCLI → yt-dlp。可单独使用 yt-dlp 方案：
 
 ```bash
 uv run soota ingest "YouTube 或 B站视频 URL" --provider yt-dlp --transcript captions-only --max-cost 0 --json

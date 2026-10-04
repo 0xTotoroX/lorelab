@@ -2,7 +2,7 @@
 
 给 Soota 一个链接：搜集内容、清理噪声、补全字幕，留下可追溯的 Markdown。
 
-Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再由 `yt-dlp` Provider 获取 YouTube/Bilibili 字幕，最后按费用策略使用 TikHub，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
+Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再由 `yt-dlp` Provider 获取 YouTube/Bilibili 字幕，字幕获取失败且符合兜底条件时按费用策略使用 TikHub；确认无字幕则直接下载音频、本地转写，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
 
 已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，三个外部 Provider 的默认自动更新，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
@@ -18,7 +18,9 @@ uv run soota doctor --json
 
 OpenCLI 需要 Node.js、Chrome 和 Browser Bridge 扩展。可用 `uv run soota runtime update --json` 安装最新稳定运行时，再用 `uv run soota runtime connect --json` 启动所选版本并等待扩展连接。无需安装 opencli-mcp。
 
-`yt-dlp` Provider 需要 PATH 中可用的 `yt-dlp`。默认读取 Chrome 登录态；`SOOTA_YTDLP_COOKIES_BROWSER` 可指定 yt-dlp 浏览器/profile，设为空可关闭 Cookie 读取，`SOOTA_YTDLP_BINARY` 可指定程序路径。仅下载字幕，不下载视频。可显式使用 `soota ingest "视频 URL" --provider yt-dlp --transcript captions-only --max-cost 0 --json`，支持 YouTube 和 B 站。yt-dlp 由原安装工具维护，不在三个外部 Provider 的自动更新范围内。
+`yt-dlp` Provider 需要 PATH 中可用的 `yt-dlp`。默认读取 Chrome 登录态；`SOOTA_YTDLP_COOKIES_BROWSER` 可指定 yt-dlp 浏览器/profile，设为空可关闭 Cookie 读取，`SOOTA_YTDLP_BINARY` 可指定程序路径。`captions-only` 只下载字幕；`auto` 确认无字幕时会下载音频并本地转写。可显式使用 `soota ingest "视频 URL" --provider yt-dlp --transcript captions-only --max-cost 0 --json`，支持 YouTube 和 B 站。yt-dlp 由原安装工具维护，不在三个外部 Provider 的自动更新范围内。
+
+音频来源默认是 yt-dlp，可用 `--audio-provider downie` 明确选择本机 Downie，或 `--audio-provider tikhub` 选择付费音频接口。Downie 的一次性完成回调设置及当前 CLI 流程图见 [Provider 路由](docs/providers.md#路由和费用)。
 
 TikHub API Key 只从环境变量或 macOS Keychain 读取：
 

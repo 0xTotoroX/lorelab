@@ -67,6 +67,20 @@ class RequestBudget:
         self.spent += cost
 
 
+def remaining_budget(cap: float | None, records: list[RequestRecord]) -> float | None:
+    if cap is None:
+        return None
+    remaining = Decimal(str(cap))
+    for record in records:
+        if record.billed and not record.cache_hit:
+            if record.estimated_cost_usd is None:
+                raise AuthBudgetError("前序请求费用未知，停止后续付费请求。")
+            remaining -= Decimal(str(record.estimated_cost_usd))
+    if remaining < 0:
+        raise AuthBudgetError("前序请求已超过本次费用上限，停止后续付费请求。")
+    return float(remaining)
+
+
 def inspect_item(
     settings: SootaSettings,
     source: SourceRef,
@@ -75,6 +89,7 @@ def inspect_item(
     fallback: str | None = None,
     max_cost: float | None = None,
     requester: Callable[..., Any] | None = None,
+    caption_metadata: bool = True,
 ) -> tuple[MediaItem, list[RequestRecord], list[str]]:
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
@@ -100,7 +115,11 @@ def inspect_item(
         cheap: OpenCLIMCPProvider | OpenCLIProvider | YtDlpProvider | None = None
         try:
             cheap = factory(settings)
-            item = cheap.inspect(source)
+            item = (
+                cheap.inspect(source, include_captions=False)
+                if isinstance(cheap, YtDlpProvider) and not caption_metadata
+                else cheap.inspect(source)
+            )
             return item, [*records, *cheap.records], warnings
         except RuntimeUnavailable as exc:
             if provider != "auto" and fallback != "tikhub":

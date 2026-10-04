@@ -112,7 +112,7 @@ class OpenCLIMCPProvider:
             response = self._run("bilibili", "subtitle", {"bvid": source.id, "lang": language})
         except MCPToolError as exc:
             if exc.upstream_code == "empty_result":
-                return CaptionResult(status=TranscriptStatus.MISSING)
+                return CaptionResult(status=TranscriptStatus.UNKNOWN, reason="empty_response")
             raise
         rows = response.get("rows")
         if not isinstance(rows, list):
@@ -211,7 +211,7 @@ def normalize_captions(rows: list[Any]) -> CaptionResult:
                 )
             )
     return CaptionResult(
-        status=TranscriptStatus.READY if segments else TranscriptStatus.MISSING,
+        status=TranscriptStatus.READY if segments else TranscriptStatus.UNKNOWN,
         source=TranscriptSource.UNKNOWN if segments else None,
         language=None,
         segments=segments,

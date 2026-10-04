@@ -55,6 +55,7 @@ def test_captions_preferred_and_no_asr(settings, tmp_path) -> None:
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
     )
     assert result.exit_code == 0
     assert result.data["transcript_source"] == TranscriptSource.OFFICIAL
@@ -93,6 +94,7 @@ def test_missing_captions_runs_asr(settings, monkeypatch) -> None:
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
     )
     assert result.data["transcript_source"] == TranscriptSource.ASR
     assert any("streams" in c for c in requester.calls)
@@ -105,6 +107,7 @@ def test_second_run_is_cache_hit(settings) -> None:
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
         max_cost=0.1,
         provider="tikhub",
     )
@@ -115,6 +118,7 @@ def test_second_run_is_cache_hit(settings) -> None:
         "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
         max_cost=0.1,
         provider="tikhub",
     )
@@ -184,6 +188,7 @@ def test_bili_inspect_tracks_skip_paid_subtitle(settings, monkeypatch) -> None:
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
     )
     assert result.data["transcript_source"] == TranscriptSource.OFFICIAL
     assert not any("subtitle" in c for c in requester.calls)
@@ -221,9 +226,11 @@ def test_bili_empty_inspect_still_probes_subtitle(settings, monkeypatch) -> None
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
     )
     assert any("fetch_video_subtitle" in c for c in requester.calls)
-    assert result.data["transcript_source"] == TranscriptSource.ASR
+    assert result.data["transcript_status"] == "unknown"
+    assert not any("playurl" in c for c in requester.calls)
 
 
 def test_audio_falls_back_to_ytdlp(settings, monkeypatch) -> None:
@@ -246,6 +253,9 @@ def test_audio_falls_back_to_ytdlp(settings, monkeypatch) -> None:
         transcript=TranscriptMode.AUTO,
         requester=requester,
         asr=FakeAsr(),
+        audio_provider="tikhub",
     )
     assert result.data["transcript_source"] == TranscriptSource.ASR
     assert any(r["endpoint"] == "local:yt-dlp" for r in result.data["requests"])
+    assert result.data["audio_provider"] == "yt-dlp"
+    assert result.data["audio_provider_requested"] == "tikhub"

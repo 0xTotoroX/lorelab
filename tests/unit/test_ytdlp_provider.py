@@ -130,7 +130,7 @@ def test_restrictions_are_sanitized(settings, monkeypatch):
 
 def test_missing_captions_is_partial_and_no_negative_cache(settings, monkeypatch):
     stub_process(monkeypatch, info={**INFO, "subtitles": {}, "automatic_captions": {}})
-    result = ingest(settings, URL, provider="yt-dlp", max_cost=0)
+    result = ingest(settings, URL, provider="yt-dlp", transcript=TranscriptMode.CAPTIONS_ONLY, max_cost=0)
     assert result.exit_code == 2
     provider = YtDlpProvider(settings)
     assert provider.cache.get_json(recognize(URL), "captions") is None
@@ -146,8 +146,9 @@ def test_language_selection_respects_requested_language_then_official_track():
 def test_unsupported_catalog_and_audio_are_not_silently_paid(settings):
     with pytest.raises(SourceError):
         catalog_provider(recognize("https://www.youtube.com/@Example"), "yt-dlp")
-    with pytest.raises(SourceError):
-        estimate(settings, URL, provider="yt-dlp", transcript=TranscriptMode.ASR)
+    asr_plan = estimate(settings, URL, provider="yt-dlp", transcript=TranscriptMode.ASR)
+    assert asr_plan.data["estimated_cost_usd"] == 0
+    assert asr_plan.data["audio_provider"] == "yt-dlp"
     result = estimate(settings, URL, provider="yt-dlp")
     assert result.data["provider"] == "yt-dlp" and result.data["estimated_cost_usd"] == 0
 
@@ -204,7 +205,11 @@ def test_counterpart_can_use_soota_and_preserves_original_identity(settings, mon
     info = {**INFO, "id": media("youtube").source.id}
     stub_process(monkeypatch, info=info)
     fallback = YtDlpProvider(settings)
-    item, captions, _ = youtube_counterpart(Client(missing=True), original, fallback)
+    client = Client(missing=True)
+    from soota.models import CaptionResult, TranscriptStatus
+
+    monkeypatch.setattr(client, "get_captions", lambda item: CaptionResult(status=TranscriptStatus.UNKNOWN))
+    item, captions, _ = youtube_counterpart(client, original, fallback)
     assert captions and captions.language == "zh"
     assert item.provenance["provider"] == "yt-dlp"
     assert item.provenance["selection"]["requested_source"]["id"] == original.source.id
@@ -221,6 +226,7 @@ def test_zero_budget_with_both_free_unavailable_never_constructs_paid_provider(s
     monkeypatch.setattr("soota.pipeline._provider", lambda *a, **k: pytest.fail("paid provider constructed"))
     with pytest.raises(SourceError):
         ingest(settings, URL, max_cost=0)
+
 
 BILI_URL = "https://www.bilibili.com/video/BV1xx411c7mD"
 BILI_INFO = {
@@ -280,7 +286,7 @@ def test_bili_auto_routing_uses_ytdlp_before_paid_provider(settings, monkeypatch
     monkeypatch.setattr(OpenCLIProvider, "inspect", lambda self, source: MediaItem(source=source))
     from soota.models import CaptionResult, TranscriptStatus
 
-    monkeypatch.setattr(OpenCLIProvider, "get_captions", lambda *a: CaptionResult(status=TranscriptStatus.MISSING))
+    monkeypatch.setattr(OpenCLIProvider, "get_captions", lambda *a: CaptionResult(status=TranscriptStatus.UNKNOWN))
     monkeypatch.setattr("soota.pipeline._provider", lambda *a, **k: pytest.fail("paid provider constructed"))
     result = ingest(settings, BILI_URL, max_cost=0)
     assert result.ok and result.data["routing"]["attempted"] == ["opencli", "yt-dlp"]
@@ -296,7 +302,7 @@ def test_bili_login_warning_stops_without_paid_fallback(settings, monkeypatch):
 
 def test_danmaku_alone_is_not_a_transcript(settings, monkeypatch):
     calls = stub_bili(monkeypatch, info={**BILI_INFO, "subtitles": {"danmaku": [{"ext": "xml"}]}})
-    result = ingest(settings, BILI_URL, provider="yt-dlp", max_cost=0)
+    result = ingest(settings, BILI_URL, provider="yt-dlp", transcript=TranscriptMode.CAPTIONS_ONLY, max_cost=0)
     assert result.exit_code == 2 and len(calls) == 1
 
 
@@ -335,13 +341,13 @@ def test_bili_feature_alias_uses_ytdlp(settings, monkeypatch):
 def test_legacy_cache_is_read_without_relabeling_existing_files(settings, monkeypatch):
     import time
 
-    from soota.models import CaptionResult, TranscriptStatus
-
     monkeypatch.setattr("soota.providers.ytdlp.run_process", lambda *a, **k: pytest.fail("unexpected request"))
     provider = YtDlpProvider(settings)
     source = recognize(URL)
-    item = MediaItem(source=source, provenance={"provider": "soota"})
-    caption = CaptionResult(status=TranscriptStatus.READY, source=TranscriptSource.OFFICIAL, language="zh")
+    item = MediaItem(source=source, provenance={"provider": "soota", "caption_tracks": {"official": ["zh"]}})
+    from soota.providers.ytdlp import parse_json3
+
+    caption = parse_json3(BODY, "zh", TranscriptSource.OFFICIAL)
     for name, value in (("inspect", item), ("captions", caption)):
         provider.legacy_cache.put_json(
             source, name, {"timestamp": time.time(), "result": value.model_dump(mode="json")}
@@ -358,3 +364,24 @@ def test_bili_av_link_resolves_to_stable_bv_identity(settings, monkeypatch):
     result = ingest(settings, url, provider="yt-dlp", max_cost=0)
     assert result.ok
     assert json.loads(Path(result.data["manifest"]).read_text())["source"]["id"] == recognize(BILI_URL).id
+
+
+def test_audio_download_skips_captions_and_reuses_only_completed_file(settings, monkeypatch):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        template = argv[argv.index("-o") + 1]
+        Path(template.replace("%(ext)s", "m4a")).write_bytes(b"audio")
+        return ProcessResult(0, "", "")
+
+    monkeypatch.setattr("soota.providers.ytdlp.shutil.which", lambda _: "/test/binary")
+    monkeypatch.setattr("soota.providers.ytdlp.run_process", run)
+    provider = YtDlpProvider(settings)
+    item = MediaItem(source=recognize(URL))
+    result = provider.get_audio(item)
+    assert result.path.read_bytes() == b"audio" and result.provider == "yt-dlp"
+    assert "--skip-download" not in calls[0] and "--no-write-subs" in calls[0]
+    assert calls[0][-2:] == ["--", item.source.canonical_url]
+    provider.get_audio(item)
+    assert len(calls) == 1 and provider.records[-1].cache_hit

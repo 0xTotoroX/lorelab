@@ -155,15 +155,15 @@ def _youtube_counterpart(
     except (CaptionUnavailable, RuntimeUnavailable):
         if caption_fallback is None:
             raise
-        captions = CaptionResult(status=TranscriptStatus.MISSING)
-    if captions.status != TranscriptStatus.READY and caption_fallback is not None:
+        captions = CaptionResult(status=TranscriptStatus.UNKNOWN)
+    if captions.status == TranscriptStatus.UNKNOWN and caption_fallback is not None:
         local_item = caption_fallback.inspect(chosen.source)
         captions = caption_fallback.get_captions(local_item)
         if captions.status == TranscriptStatus.READY:
             local_item.provenance["selection"] = chosen.provenance["selection"]
             chosen = local_item
     if captions.status != TranscriptStatus.READY or not captions.segments:
-        report["status"] = "youtube_captions_missing"
+        report["status"] = "youtube_captions_" + captions.status.value
         return original, None, ["已找到同一期 YouTube 视频，但没有可用字幕，保留 B站来源。"]
     chosen.provenance["youtube_check"] = {**report, "status": "selected"}
     return chosen, captions, ["已匹配唯一同名频道与同一期视频，采用 YouTube 字幕和时间轴；匹配依据已记录。"]

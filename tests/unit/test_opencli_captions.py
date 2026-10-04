@@ -151,7 +151,7 @@ def test_explicit_tikhub_skips_opencli(settings, monkeypatch):
     assert result.ok and result.data["transcript_source"] != TranscriptSource.UNKNOWN
 
 
-def test_authorized_caption_fallback_runs_only_after_opencli_missing(settings, monkeypatch):
+def test_authorized_caption_fallback_runs_only_after_opencli_unknown(settings, monkeypatch):
     from tests.unit.test_resolver import _youtube_requester
 
     events = []

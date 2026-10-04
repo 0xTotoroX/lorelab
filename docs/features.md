@@ -53,7 +53,9 @@ uv run soota features call twitter.profile --param username=example --json
 
 仅在请求发送前确认免费来源不可用时，统一入口才考虑下一方案。执行失败、限流、登录问题、无效 JSON、断线后结果不确定都不会触发盲目重试或自动收费。其他能力通过 OpenCLI 原生命令或 TikHub API 查询，不按同名猜测互换参数或分页。
 
-已有标准流程也遵循此优先级：Bilibili 和 YouTube 元数据与字幕都先试 OpenCLI，YouTube 可由 soota 免费兜底，TikHub 保留独立实现。X 的 OpenCLI 目录是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
+确认没有字幕轨道时不继续查下一字幕来源：`auto` 直接本地转写，`captions-only` 返回无字幕；`--audio-provider yt-dlp/downie/tikhub` 独立选择音频来源，默认 yt-dlp。
+
+已有标准流程也遵循此优先级：Bilibili 和 YouTube 元数据与字幕都先试 OpenCLI，字幕获取未知时可由 yt-dlp 免费兜底，TikHub 保留独立实现。X 的 OpenCLI 目录是最近快照，YouTube/Bilibili 的可续跑目录使用 TikHub；不能交换游标。其他上游命令并不自动等于 Soota 的可续跑历史目录。
 
 ## 两种付费模式
 

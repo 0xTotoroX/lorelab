@@ -21,15 +21,18 @@ from soota.models import (
     TranscriptDocument,
     TranscriptManifest,
     TranscriptMode,
+    TranscriptSource,
     TranscriptStatus,
 )
+from soota.providers.audio import audio_provider as make_audio_provider
+from soota.providers.audio import conditional_audio_estimate, selected_audio_provider
 from soota.providers.mcp_client import StdioMCPClient
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli import capabilities_for as opencli_capabilities
 from soota.providers.opencli_mcp import OpenCLIMCPProvider
 from soota.providers.opencli_mcp import capabilities_for as mcp_capabilities
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
-from soota.providers.router import RequestBudget, inspect_item, validate_policy
+from soota.providers.router import RequestBudget, inspect_item, remaining_budget, validate_policy
 from soota.providers.tikhub.capability import capabilities_for
 from soota.providers.tikhub.client import TikHubProvider
 from soota.providers.ytdlp import YtDlpProvider
@@ -45,7 +48,7 @@ from soota.storage.jobs import JobStore
 from soota.storage.ledger import CostLedger
 from soota.transcripts.asr import AsrEngine, resolve_engine
 from soota.transcripts.promotions import filter_promotions, parse_ranges
-from soota.transcripts.resolver import TranscriptResolver
+from soota.transcripts.resolver import TranscriptResolver, resumes_audio
 
 INGESTABLE_KINDS = {"video", "shortlink"}
 
@@ -105,7 +108,14 @@ def doctor(settings: SootaSettings) -> CommandResult:
         "opencli": OpenCLIRuntime(settings).status(),
         "yt-dlp": {
             "yt_dlp_installed": bool(shutil.which(settings.local.binary)),
-            "capabilities": ["youtube.video", "youtube.captions", "bilibili.video", "bilibili.captions"],
+            "capabilities": [
+                "youtube.video",
+                "youtube.captions",
+                "youtube.audio",
+                "bilibili.video",
+                "bilibili.captions",
+                "bilibili.audio",
+            ],
         },
         "tikhub_sdk_required": TIKHUB_SDK_VERSION,
         "tikhub_sdk_bundled": bundled_version,
@@ -118,6 +128,7 @@ def doctor(settings: SootaSettings) -> CommandResult:
         "whisper_cli": bool(shutil.which(settings.asr.whisper_bin)),
         "mlx_whisper_cli": bool(shutil.which(settings.asr.mlx_whisper_bin)),
         "asr_engine": asr_engine.name,
+        "audio_provider": settings.audio.provider,
         "asr_model": settings.asr.model,
         "config_path": str(settings.config_path),
         "cache_dir": str(settings.cache_dir),
@@ -188,11 +199,13 @@ def estimate(
     mode: str = "ingest",
     provider: str | None = None,
     transcript: TranscriptMode = TranscriptMode.AUTO,
+    audio_provider: str | None = None,
     max_items: int = 100,
     max_pages: int = 10,
     requester: Callable[..., Any] | None = None,
 ) -> CommandResult:
     provider = selected_provider(settings, provider)
+    audio_name = selected_audio_provider(settings, audio_provider)
     if mode == "catalog":
         from soota.catalog import estimate_catalog
 
@@ -206,17 +219,27 @@ def estimate(
     )
     opencli = provider in {"auto", "opencli"} and opencli_capabilities(source).inspect
     local = provider in {"auto", "yt-dlp"} and ytdlp_capabilities(source).inspect
-    if provider != "tikhub" and transcript != TranscriptMode.ASR and (mcp or opencli or local):
+    if (
+        provider != "tikhub"
+        and (transcript != TranscriptMode.ASR or audio_name != "tikhub")
+        and (mcp or opencli or local)
+    ):
         free_name = "opencli-mcp" if mcp else "opencli" if opencli else "yt-dlp"
+        conditional_audio = (
+            conditional_audio_estimate(source) if transcript == TranscriptMode.AUTO and audio_name == "tikhub" else None
+        )
         return CommandResult(
             ok=True,
             status="success",
             code="ok",
             exit_code=0,
-            message="免费来源摄取预估完成；未联网。",
+            message="采集预估完成；未联网。条件音频费用仅在确认无字幕后适用。",
             data={
                 "provider": free_name,
-                "estimated_cost_usd": 0,
+                "audio_provider": audio_name,
+                "estimated_cost_usd": conditional_audio["estimated_cost_usd"] if conditional_audio else 0,
+                "caption_estimated_cost_usd": 0,
+                "conditional_audio": conditional_audio,
                 "request_count": 1 if transcript == TranscriptMode.NONE else 2,
                 "source": source.model_dump(),
                 "endpoints": [f"{free_name}:{source.platform}/video"]
@@ -224,19 +247,31 @@ def estimate(
                     []
                     if transcript == TranscriptMode.NONE
                     else [
-                        f"{free_name}:{source.platform}/"
+                        f"{audio_name}:{source.platform}/audio"
+                        if transcript == TranscriptMode.ASR
+                        else f"{free_name}:{source.platform}/"
                         + ("subtitle" if source.platform == "bilibili" else "transcript")
                     ]
                 ),
             },
         )
-    if provider in {"opencli-mcp", "opencli", "yt-dlp"}:
+    if provider in {"opencli-mcp", "opencli", "yt-dlp"} and not (
+        transcript == TranscriptMode.ASR and audio_name == "tikhub"
+    ):
         raise SourceError(f"{provider} 尚未接入该来源或音频下载；可显式选择 TikHub。")
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester)
     need_captions = transcript in {TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY}
-    need_audio = transcript in {TranscriptMode.AUTO, TranscriptMode.ASR}
-    if cache.has(source, "transcript"):
+    need_audio = transcript in {TranscriptMode.AUTO, TranscriptMode.ASR} and audio_name == "tikhub"
+    saved_transcript = cache.get_json(source, "transcript") or {}
+    if resumes_audio(saved_transcript, transcript, audio_name):
+        need_captions = False
+    if (
+        saved_transcript.get("status") == TranscriptStatus.READY
+        and saved_transcript.get("segments")
+        and saved_transcript.get("source") != TranscriptSource.ASR
+        and transcript != TranscriptMode.ASR
+    ):
         endpoints: list[str] = []
     else:
         endpoints = client.estimate_requests(source, need_captions=need_captions, need_audio=need_audio)
@@ -251,7 +286,7 @@ def estimate(
                     "/api/v1/bilibili/web/fetch_one_video_v3",
                 }
             ]
-        if cache.has(source, "captions"):
+        if (cache.get_json(source, "captions") or {}).get("status") == TranscriptStatus.READY:
             endpoints = [e for e in endpoints if "caption" not in e and "subtitle" not in e]
         if cache.has(source, "audio") or cache.audio_path(source).is_file():
             endpoints = [e for e in endpoints if "stream" not in e and "playurl" not in e]
@@ -299,6 +334,7 @@ def ingest(
     url: str,
     *,
     transcript: TranscriptMode = TranscriptMode.AUTO,
+    audio_provider: str | None = None,
     provider: str | None = None,
     fallback: str | None = None,
     output: Path | None = None,
@@ -313,6 +349,7 @@ def ingest(
 ) -> CommandResult:
     parse_ranges(exclude_ranges or [])
     provider = selected_provider(settings, provider)
+    audio_name = selected_audio_provider(settings, audio_provider)
     validate_policy(provider, fallback, max_cost)
     if provider == "tikhub" or transcript == TranscriptMode.ASR:
         if prefer_youtube or exclude_promotions or exclude_ranges:
@@ -324,9 +361,11 @@ def ingest(
         exclude_promotions = prefer_youtube if exclude_promotions is None else exclude_promotions
     if provider == "auto" and fallback is None and max_cost != 0:
         fallback = "tikhub"
-    if transcript != TranscriptMode.ASR and provider != "tikhub":
+    if provider != "tikhub":
         if dry_run:
-            result = estimate(settings, url, transcript=transcript, provider=provider, requester=requester)
+            result = estimate(
+                settings, url, transcript=transcript, provider=provider, requester=requester, audio_provider=audio_name
+            )
             result.data["prefer_youtube"] = prefer_youtube
             result.data["exclude_promotions"] = exclude_promotions
             if prefer_youtube:
@@ -343,12 +382,11 @@ def ingest(
             requester=requester,
             transcript=transcript,
             asr=asr,
+            audio_provider=audio_name,
             prefer_youtube=prefer_youtube,
             exclude_promotions=exclude_promotions,
             exclude_ranges=exclude_ranges or [],
         )
-    if provider in {"opencli-mcp", "opencli", "yt-dlp"} and fallback != "tikhub":
-        raise SourceError(f"{provider} 尚未接入音频下载，不能直接执行 ASR；auto 模式会先获取字幕。")
     ensure_dirs(settings)
     source = recognize(url)
     if source.kind not in INGESTABLE_KINDS:
@@ -356,7 +394,15 @@ def ingest(
     caps = capabilities_for(source)
     if not caps.inspect:
         raise SourceError("该来源不支持摄取。")
-    guessed = estimate(settings, url, mode="ingest", transcript=transcript, provider="tikhub", requester=requester)
+    guessed = estimate(
+        settings,
+        url,
+        mode="ingest",
+        transcript=transcript,
+        provider="tikhub",
+        requester=requester,
+        audio_provider=audio_name,
+    )
     estimated = guessed.data.get("estimated_cost_usd")
     if max_cost is not None:
         over = estimated is None or float(estimated) > max_cost
@@ -382,14 +428,19 @@ def ingest(
     output_root = (output or settings.output_dir).expanduser()
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester, max_cost=max_cost)
-    resolver = TranscriptResolver(client, cache, settings, asr=asr)
+    downloader = make_audio_provider(settings, audio_name, lambda: client)
+    resolver = TranscriptResolver(client, cache, settings, asr=asr, audio_provider=downloader)
     try:
         item = client.inspect(source)
         document = resolver.resolve(item, transcript)
     except Exception:
+        if downloader is not client:
+            client.records.extend(downloader.records)
         if client.records:
             CostLedger(settings.ledger_path).append(source.id, client.records)
         raise
+    if downloader is not client:
+        client.records.extend(downloader.records)
     billed = [r for r in client.records if r.billed and not r.cache_hit]
     cost = sum(r.estimated_cost_usd or 0.0 for r in billed)
     manifest = ContentBundleManifest(
@@ -412,24 +463,29 @@ def ingest(
         ),
     )
     manifest.metadata_from_item(item)
+    manifest.metadata["audio_provider"] = item.provenance.get("audio_provider")
     folder = write_bundle(output_root, item, document, manifest, None, force=force)
     CostLedger(settings.ledger_path).append(item.source.id, client.records)
     JobStore(settings.jobs_dir).create(
         {
-            "status": "completed" if document.status is TranscriptStatus.READY else "partial",
+            "status": "completed"
+            if document.status in {TranscriptStatus.READY, TranscriptStatus.NOT_REQUESTED}
+            else "partial",
             "source": item.source.model_dump(),
             "output": str(folder),
             "transcript_status": document.status,
         }
     )
-    status: Literal["success", "partial"] = "success" if document.status is TranscriptStatus.READY else "partial"
-    code = "ok" if status == "success" else "transcript_missing"
+    status: Literal["success", "partial"] = (
+        "success" if document.status in {TranscriptStatus.READY, TranscriptStatus.NOT_REQUESTED} else "partial"
+    )
+    code = "ok" if status == "success" else "transcript_" + document.status.value
     return CommandResult(
         ok=status == "success",
         status=status,
         code=code,
         exit_code=0 if status == "success" else 2,
-        message="摄取完成。" if status == "success" else "已保存元数据，字幕仍缺失。",
+        message="摄取完成。" if status == "success" else f"已保存元数据，字幕状态为 {document.status.value}。",
         data={
             "output": str(folder),
             "manifest": str(folder / "manifest.json"),
@@ -438,6 +494,8 @@ def ingest(
             "source": item.source.model_dump(),
             "transcript_status": document.status,
             "transcript_source": document.source,
+            "audio_provider": item.provenance.get("audio_provider"),
+            "audio_provider_requested": audio_name,
             "cache_hit": manifest.processing.cache_hit,
             "request_count": manifest.processing.request_count,
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,
@@ -458,6 +516,7 @@ def ingest_free(
     requester: Callable[..., Any] | None,
     transcript: TranscriptMode,
     asr: AsrEngine | None,
+    audio_provider: str = "yt-dlp",
     prefer_youtube: bool = False,
     exclude_promotions: bool = False,
     exclude_ranges: list[str] | None = None,
@@ -465,14 +524,24 @@ def ingest_free(
     source = recognize(url)
     records: list[RequestRecord] = []
     warnings: list[str] = []
-    document = TranscriptDocument(status=TranscriptStatus.MISSING)
+    document = TranscriptDocument(status=TranscriptStatus.UNKNOWN)
     item: MediaItem | None = None
     missing_reason: str | None = None
     attempted: list[str] = []
-    if transcript == TranscriptMode.NONE:
+    confirmed_absent = False
+    if transcript in {TranscriptMode.NONE, TranscriptMode.ASR}:
         item, records, warnings = inspect_item(
-            settings, source, provider=provider, fallback=fallback, max_cost=max_cost, requester=requester
+            settings,
+            source,
+            provider=provider,
+            fallback=fallback,
+            max_cost=max_cost,
+            requester=requester,
+            caption_metadata=False,
         )
+        attempted.append(str(item.provenance.get("provider", provider)))
+        if transcript == TranscriptMode.NONE:
+            document = TranscriptDocument(status=TranscriptStatus.NOT_REQUESTED)
     else:
         candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider] | type[YtDlpProvider]]] = []
         if settings.opencli_mcp.enabled and provider in {"auto", "opencli-mcp"} and mcp_capabilities(source).captions:
@@ -508,7 +577,12 @@ def ingest_free(
                     if captions.language is None or captions.source is None or captions.source.value == "unknown":
                         warnings.append(f"{name} 未标明实际字幕语言及人工/自动轨道类型，已保留为未知。")
                     break
-                missing_reason = f"{name} 没有返回可用字幕。"
+                confirmed_absent = captions.status == TranscriptStatus.MISSING
+                item.provenance["caption_status"] = captions.status.value
+                item.provenance["caption_reason"] = captions.reason
+                missing_reason = f"{name} 已确认没有字幕轨道。" if confirmed_absent else f"{name} 未能确定字幕可用性。"
+                if confirmed_absent or captions.status == TranscriptStatus.PENDING:
+                    break
             except CaptionUnavailable:
                 if provider != "auto":
                     raise
@@ -527,8 +601,32 @@ def ingest_free(
                     attempted.append("yt-dlp")
         if not candidates:
             missing_reason = "所选免费来源尚未接入该视频字幕。"
-    if missing_reason:
-        if fallback == "tikhub":
+    if transcript == TranscriptMode.ASR or confirmed_absent and transcript == TranscriptMode.AUTO:
+        assert item is not None
+        downloader = make_audio_provider(
+            settings,
+            audio_provider,
+            lambda: _provider(
+                settings,
+                CacheStore(settings.cache_dir),
+                requester=requester,
+                max_cost=remaining_budget(max_cost, records),
+            ),
+        )
+        try:
+            resolver = TranscriptResolver(
+                None, CacheStore(settings.cache_dir), settings, asr=asr, audio_provider=downloader
+            )
+            document = resolver.run_asr(item)
+        except Exception:
+            CostLedger(settings.ledger_path).append(item.source.id, [*records, *downloader.records])
+            raise
+        records.extend(downloader.records)
+        item.provenance["audio_provider_requested"] = audio_provider
+        item.provenance["asr_engine"] = (asr or resolve_engine(settings.asr)).name
+        missing_reason = None
+    if missing_reason and not confirmed_absent:
+        if fallback == "tikhub" and document.status != TranscriptStatus.PENDING:
             if prefer_youtube or exclude_promotions or exclude_ranges:
                 raise SourceError("免费字幕流程未完成；跨平台或过滤任务未自动转入付费路径。")
             result = ingest(
@@ -541,6 +639,7 @@ def ingest_free(
                 force=force,
                 requester=requester,
                 asr=asr,
+                audio_provider=audio_provider,
             )
             result.warnings.insert(0, missing_reason + " 已按费用策略使用 TikHub 兜底。")
             result.data["routing"] = {
@@ -551,7 +650,9 @@ def ingest_free(
             return result
         if item is None:
             raise SourceError(missing_reason, hint="检查免费来源，或显式选择 TikHub；不会自动产生付费请求。")
-        warnings.append(missing_reason + " 已保留元数据；未授权 TikHub 兜底。")
+        warnings.append(missing_reason + " 已保留元数据；未执行本地转写。")
+    elif confirmed_absent and transcript == TranscriptMode.CAPTIONS_ONLY:
+        warnings.append("已确认没有字幕轨道；captions-only 不下载音频、不转写，也不查询下一字幕来源。")
     assert item is not None
     original_document = None
     filter_report = None
@@ -605,9 +706,9 @@ def ingest_free(
     return CommandResult(
         ok=ready,
         status="success" if ready else "partial",
-        code="ok" if ready else "transcript_missing",
+        code="ok" if ready else "transcript_" + document.status.value,
         exit_code=0 if ready else 2,
-        message="内容包已保存。" if ready else "已保存元数据，字幕仍缺失。",
+        message="内容包已保存。" if ready else f"已保存元数据，字幕状态为 {document.status.value}。",
         warnings=warnings,
         data={
             "output": str(folder),
@@ -621,6 +722,9 @@ def ingest_free(
             "promotion_filter": filter_report,
             "transcript_status": document.status,
             "transcript_source": document.source,
+            "audio_provider": item.provenance.get("audio_provider"),
+            "audio_provider_requested": audio_provider,
+            "asr_engine": item.provenance.get("asr_engine"),
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,
             "cache_hit": manifest.processing.cache_hit,
             "request_count": manifest.processing.request_count,

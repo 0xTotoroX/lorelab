@@ -21,7 +21,7 @@
       "type": "object",
       "required": ["status"],
       "properties": {
-        "status": { "enum": ["ready", "missing", "pending"] },
+        "status": { "enum": ["ready", "missing", "unknown", "pending", "not_requested"] },
         "source": { "enum": ["official", "auto", "asr", "unknown", null] },
         "language": { "type": ["string", "null"] },
         "path": { "type": ["string", "null"] },

@@ -19,6 +19,7 @@ def block_browser_commands(monkeypatch):
 
     monkeypatch.setattr("soota.providers.opencli.OpenCLIProvider._run", blocked)
     monkeypatch.setattr("soota.providers.ytdlp.run_process", blocked)
+    monkeypatch.setattr("soota.providers.downie.run_process", blocked)
     monkeypatch.setenv("SOOTA_AUTO_UPDATE", "false")
     monkeypatch.setenv("OPENCLI_PROFILE", "test-context")
     monkeypatch.setattr("soota.providers.opencli_context.profile_config", lambda: {})

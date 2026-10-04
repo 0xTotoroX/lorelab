@@ -87,7 +87,7 @@ def test_bilibili_info_can_use_free_credit(settings, monkeypatch) -> None:
     assert wallet["sufficient"] is True
 
 
-def test_estimate_keeps_latest_api_audio_when_ytdlp_present(settings, monkeypatch) -> None:
+def test_estimate_uses_free_audio_by_default(settings, monkeypatch) -> None:
     monkeypatch.setattr(
         "soota.providers.tikhub.client.TikHubProvider.get_wallet",
         lambda self: {"balance": 5.0, "free_credit": 2.0},
@@ -99,14 +99,16 @@ def test_estimate_keeps_latest_api_audio_when_ytdlp_present(settings, monkeypatc
     result = estimate(settings, "https://www.bilibili.com/video/BV1M1421t7hT", provider="tikhub")
     endpoints = result.data["endpoints"]
     assert "/api/v1/bilibili/web/fetch_one_video_v3" in endpoints
-    assert "/api/v1/bilibili/web/fetch_video_playurl" in endpoints
+    assert "/api/v1/bilibili/web/fetch_video_playurl" not in endpoints
 
 
-def test_estimate_keeps_audio_when_ytdlp_missing(settings, monkeypatch) -> None:
+def test_estimate_keeps_explicit_tikhub_audio_when_ytdlp_missing(settings, monkeypatch) -> None:
     monkeypatch.setattr(
         "soota.providers.tikhub.client.TikHubProvider.get_wallet",
         lambda self: {"balance": 5.0, "free_credit": 2.0},
     )
     monkeypatch.setattr("shutil.which", lambda name: None)
-    result = estimate(settings, "https://www.bilibili.com/video/BV1EXAM00000", provider="tikhub")
+    result = estimate(
+        settings, "https://www.bilibili.com/video/BV1EXAM00000", provider="tikhub", audio_provider="tikhub"
+    )
     assert any("playurl" in e for e in result.data["endpoints"])

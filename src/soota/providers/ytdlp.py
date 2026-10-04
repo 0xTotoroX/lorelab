@@ -12,6 +12,7 @@ from typing import Any
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, SourceError
 from soota.models import (
+    AudioAsset,
     CapabilitySet,
     CaptionResult,
     MediaItem,
@@ -30,7 +31,7 @@ from soota.transcripts.captions import parse_srt
 
 def capabilities_for(source: SourceRef) -> CapabilitySet:
     supported = source.platform in {"youtube", "bilibili"} and source.kind == "video"
-    return CapabilitySet(inspect=supported, captions=supported)
+    return CapabilitySet(inspect=supported, captions=supported, audio=supported)
 
 
 class YtDlpProvider:
@@ -56,7 +57,6 @@ class YtDlpProvider:
             binary,
             "--ignore-config",
             "--no-playlist",
-            "--skip-download",
             "--no-progress",
             "--socket-timeout",
             "20",
@@ -65,6 +65,8 @@ class YtDlpProvider:
             "--extractor-retries",
             "0",
         ]
+        if operation != "audio":
+            argv.append("--skip-download")
         if self.config.cookies_browser:
             argv += ["--cookies-from-browser", self.config.cookies_browser]
         self.records.append(
@@ -73,7 +75,7 @@ class YtDlpProvider:
         try:
             result = run_process(
                 argv + args + ["--", source.canonical_url],
-                timeout=self.config.timeout_seconds,
+                timeout=self.settings.audio.timeout_seconds if operation == "audio" else self.config.timeout_seconds,
                 max_bytes=self.config.max_output_bytes,
             )
         except FileNotFoundError as exc:
@@ -100,7 +102,7 @@ class YtDlpProvider:
             return dict(cached["result"])
         return None
 
-    def inspect(self, source: SourceRef) -> MediaItem:
+    def inspect(self, source: SourceRef, *, include_captions: bool = True) -> MediaItem:
         if not capabilities_for(source).inspect:
             raise SourceError("yt-dlp Provider 当前接入 YouTube/Bilibili 单视频元数据和字幕。")
         cached = self._cached(source, "inspect")
@@ -109,8 +111,20 @@ class YtDlpProvider:
             if item.source.cache_identity != source.cache_identity:
                 raise ContractError("yt-dlp 缓存来源不匹配。")
             item.provenance["provider"] = self.name
-            return item
-        raw = self._run(source, ["--dump-single-json", "--simulate", "--write-subs", "--write-auto-subs"], "video")
+            old_tracks = item.provenance.get("caption_tracks", {})
+            if any(old_tracks.get(kind) for kind in ("official", "auto")):
+                item.provenance.setdefault("caption_availability", "present")
+            if (
+                not include_captions
+                or item.provenance.get("caption_probe_complete")
+                or (item.provenance.get("caption_availability") == "present")
+            ):
+                return item
+        args = ["--dump-single-json", "--simulate"]
+        args += (
+            ["--write-subs", "--write-auto-subs"] if include_captions else ["--no-write-subs", "--no-write-auto-subs"]
+        )
+        raw = self._run(source, args, "video")
         try:
             info = json.loads(raw)
             if not isinstance(info, dict):
@@ -126,10 +140,17 @@ class YtDlpProvider:
                 raise ValueError("source mismatch")
             # Store only selected metadata and track names, never signed URLs or headers.
             tracks: dict[str, list[str]] = {"official": [], "auto": []}
+            actual_tracks = 0
+            complete = include_captions and isinstance(info.get("subtitles"), dict)
             extension = "srt" if source.platform == "bilibili" else "json3"
             for kind, key in (("official", "subtitles"), ("auto", "automatic_captions")):
+                if source.platform == "youtube" and not isinstance(info.get(key), dict):
+                    complete = False
                 for lang, formats in (info.get(key) or {}).items():
-                    if lang in {"live_chat", "danmaku"} or not any(f.get("ext") == extension for f in formats):
+                    if lang in {"live_chat", "danmaku"}:
+                        continue
+                    actual_tracks += 1
+                    if not any(f.get("ext") == extension for f in formats):
                         continue
                     actual_kind = "auto" if source.platform == "bilibili" and lang.startswith("ai-") else kind
                     tracks[actual_kind].append(lang)
@@ -139,7 +160,13 @@ class YtDlpProvider:
                 creator=info.get("channel") or info.get("uploader"),
                 duration_seconds=int(info["duration"]) if info.get("duration") is not None else None,
                 language=info.get("language"),
-                provenance={"provider": self.name, "engine": "yt-dlp", "caption_tracks": tracks},
+                provenance={
+                    "provider": self.name,
+                    "engine": "yt-dlp",
+                    "caption_tracks": tracks,
+                    "caption_availability": "present" if actual_tracks else "absent" if complete else "unknown",
+                    "caption_probe_complete": complete,
+                },
             )
         except (ValueError, TypeError, AttributeError, KeyError, OverflowError) as exc:
             raise ContractError("yt-dlp 元数据格式无效或来源不匹配。") from exc
@@ -150,12 +177,16 @@ class YtDlpProvider:
         if not capabilities_for(item.source).captions:
             raise SourceError("yt-dlp Provider 当前接入 YouTube/Bilibili 字幕。")
         cached = self._cached(item.source, "captions")
-        if cached:
+        if cached and cached.get("status") == TranscriptStatus.READY and cached.get("segments"):
             return CaptionResult.model_validate(cached)
         tracks = item.provenance.get("caption_tracks", {})
         selected = select_track(tracks, self.settings.default_language)
         if selected is None:
-            return CaptionResult(status=TranscriptStatus.MISSING)
+            absent = item.provenance.get("caption_availability") == "absent"
+            return CaptionResult(
+                status=TranscriptStatus.MISSING if absent else TranscriptStatus.UNKNOWN,
+                reason="empty_track_list" if absent else "no_supported_track",
+            )
         language, kind = selected
         bili = item.source.platform == "bilibili"
         extension = "srt" if bili else "json3"
@@ -198,6 +229,37 @@ class YtDlpProvider:
             item.source, "captions", {"timestamp": time.time(), "result": result.model_dump(mode="json")}
         )
         return result
+
+    def get_audio(self, item: MediaItem) -> AudioAsset:
+        if not capabilities_for(item.source).audio:
+            raise SourceError("yt-dlp 音频获取仅接入 YouTube/Bilibili 单视频。")
+        dest = self.cache.audio_path(item.source)
+        if dest.is_file() and dest.stat().st_size:
+            self.records.append(RequestRecord(endpoint="yt-dlp:cache:audio", billed=False, cache_hit=True))
+            return AudioAsset(path=dest, provider=self.name)
+        if shutil.which("ffmpeg") is None:
+            raise RuntimeUnavailable("yt-dlp 音频提取需要 ffmpeg。")
+        with tempfile.TemporaryDirectory(prefix="audio-", dir=dest.parent) as directory:
+            self._run(
+                item.source,
+                [
+                    "-f",
+                    "bestaudio/best",
+                    "--extract-audio",
+                    "--audio-format",
+                    "m4a",
+                    "--no-write-subs",
+                    "--no-write-auto-subs",
+                    "-o",
+                    str(Path(directory) / "audio.%(ext)s"),
+                ],
+                "audio",
+            )
+            produced = Path(directory) / "audio.m4a"
+            if not produced.is_file() or not produced.stat().st_size:
+                raise SourceError("yt-dlp 未生成有效音频文件。")
+            produced.replace(dest)
+        return AudioAsset(path=dest, provider=self.name)
 
 
 def select_track(tracks: dict[str, Any], preferred: str) -> tuple[str, TranscriptSource] | None:
