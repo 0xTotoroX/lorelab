@@ -17,6 +17,13 @@
         "canonical_url": { "type": "string" }
       }
     },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "status": { "enum": ["not_requested", "pending", "ready", "invalid", "stale"] },
+        "path": { "type": ["string", "null"] }
+      }
+    },
     "transcript": {
       "type": "object",
       "required": ["status"],

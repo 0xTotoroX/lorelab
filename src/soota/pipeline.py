@@ -12,7 +12,6 @@ from soota.counterpart import youtube_counterpart
 from soota.errors import AuthBudgetError, CaptionUnavailable, InputError, SootaError, SourceError
 from soota.models import (
     AnalysisManifest,
-    AnalysisStatus,
     CommandResult,
     ContentBundleManifest,
     MediaItem,
@@ -451,7 +450,7 @@ def ingest(
             language=document.language,
             segments=len(document.segments),
         ),
-        analysis=AnalysisManifest(status=AnalysisStatus.PENDING, path="content.md"),
+        analysis=AnalysisManifest(),
         processing=ProcessingManifest(
             provider="tikhub",
             cache_hit=all(r.cache_hit or not r.billed for r in client.records) and bool(client.records),
@@ -464,8 +463,8 @@ def ingest(
     )
     manifest.metadata_from_item(item)
     manifest.metadata["audio_provider"] = item.provenance.get("audio_provider")
-    folder = write_bundle(output_root, item, document, manifest, None, force=force)
     CostLedger(settings.ledger_path).append(item.source.id, client.records)
+    folder = write_bundle(output_root, item, document, manifest, None, force=force)
     JobStore(settings.jobs_dir).create(
         {
             "status": "completed"
@@ -486,11 +485,14 @@ def ingest(
         code=code,
         exit_code=0 if status == "success" else 2,
         message="摄取完成。" if status == "success" else f"已保存元数据，字幕状态为 {document.status.value}。",
+        warnings=manifest.processing.warnings,
         data={
             "output": str(folder),
             "manifest": str(folder / "manifest.json"),
             "transcript": str(folder / "transcript.md"),
-            "content": str(folder / "content.md"),
+            "context": str(folder / "context.md"),
+            "content": str(folder / "context.md"),
+            "analysis": manifest.analysis.model_dump(mode="json"),
             "source": item.source.model_dump(),
             "transcript_status": document.status,
             "transcript_source": document.source,
@@ -682,6 +684,7 @@ def ingest_free(
     manifest.metadata_from_item(item)
     manifest.metadata["provenance"] = item.provenance
     output_root = (output or settings.output_dir).expanduser()
+    CostLedger(settings.ledger_path).append(item.source.id, records)
     previous_manifest = output_root / item.source.platform / item.source.id / "manifest.json"
     if previous_manifest.is_file() and not force:
         previous = ContentBundleManifest.model_validate_json(previous_manifest.read_text())
@@ -693,7 +696,6 @@ def ingest_free(
         atomic_write(folder / "transcript.original.md", render_transcript(item, original_document))
         manifest.files["transcript.original.md"] = "transcript.original.md"
         atomic_write(folder / "manifest.json", manifest.model_dump_json(indent=2) + "\n")
-    CostLedger(settings.ledger_path).append(item.source.id, records)
     JobStore(settings.jobs_dir).create(
         {
             "status": "completed" if ready else "partial",
@@ -709,11 +711,13 @@ def ingest_free(
         code="ok" if ready else "transcript_" + document.status.value,
         exit_code=0 if ready else 2,
         message="内容包已保存。" if ready else f"已保存元数据，字幕状态为 {document.status.value}。",
-        warnings=warnings,
+        warnings=manifest.processing.warnings,
         data={
             "output": str(folder),
             "manifest": str(folder / "manifest.json"),
-            "content": str(folder / "content.md"),
+            "context": str(folder / "context.md"),
+            "content": str(folder / "context.md"),
+            "analysis": manifest.analysis.model_dump(mode="json"),
             "transcript": str(folder / "transcript.md"),
             "provider": item.provenance["provider"],
             "routing": {"attempted": attempted},
@@ -744,14 +748,7 @@ def render(
     if not manifest_path.is_file():
         raise InputError("找不到 manifest.json。", hint="先 ingest 再 render。")
     folder = manifest_path.parent
-    existing_content = folder / "content.md"
-    previous = existing_content.read_bytes() if existing_content.is_file() else None
-    try:
-        parsed = load_analysis(analysis)
-    except Exception:
-        if previous is not None:
-            existing_content.write_bytes(previous)
-        raise
+    parsed = load_analysis(analysis)
     manifest = ContentBundleManifest.model_validate(json.loads(manifest_path.read_text(encoding="utf-8")))
     from soota.render.bundle import write_bundle_to
 
@@ -771,76 +768,25 @@ def render(
         language=meta.get("language"),
     )
     document = _document_from_transcript_md(folder / "transcript.md", manifest)
-    write_bundle_to(folder, item, document, manifest, parsed, force=True)
+    write_bundle_to(folder, item, document, manifest, parsed, force=force)
     return CommandResult(
         ok=True,
         status="success",
         code="ok",
         exit_code=0,
         message="已渲染 content.md。",
-        data={"content": str(folder / "content.md"), "manifest": str(manifest_path)},
+        data={
+            "content": str(folder / "content.md"),
+            "context": str(folder / "context.md") if (folder / "context.md").is_file() else None,
+            "manifest": str(manifest_path),
+        },
     )
 
 
 def _document_from_transcript_md(path: Path, manifest: ContentBundleManifest) -> TranscriptDocument:
-    from soota.models import TranscriptDocument, TranscriptSegment, TranscriptSource
+    from soota.transcripts.captions import parse_transcript_markdown
 
-    segments: list[TranscriptSegment] = []
-    if path.is_file():
-        text = path.read_text(encoding="utf-8")
-        current_id = None
-        current_time = "00:00:00-00:00:00"
-        buf: list[str] = []
-        for line in text.splitlines():
-            if line.startswith("## seg-"):
-                if current_id:
-                    start, end = _parse_heading_time(current_time)
-                    segments.append(
-                        TranscriptSegment(
-                            segment_id=current_id,
-                            start_ms=start,
-                            end_ms=end,
-                            text=" ".join(buf).strip(),
-                            language=manifest.transcript.language,
-                            source=manifest.transcript.source or TranscriptSource.OFFICIAL,
-                        )
-                    )
-                header = line[3:].strip()
-                current_id = header.split("·")[0].strip()
-                current_time = header.split("·", 1)[1].strip() if "·" in header else "00:00:00-00:00:00"
-                buf = []
-            elif line.startswith("<a id="):
-                continue
-            elif current_id:
-                buf.append(line)
-        if current_id:
-            start, end = _parse_heading_time(current_time)
-            segments.append(
-                TranscriptSegment(
-                    segment_id=current_id,
-                    start_ms=start,
-                    end_ms=end,
-                    text=" ".join(buf).strip(),
-                    language=manifest.transcript.language,
-                    source=manifest.transcript.source or TranscriptSource.OFFICIAL,
-                )
-            )
-    return TranscriptDocument(
-        status=manifest.transcript.status,
-        source=manifest.transcript.source,
-        language=manifest.transcript.language,
-        segments=segments,
-    )
-
-
-def _parse_heading_time(value: str) -> tuple[int, int]:
-    from soota.transcripts.captions import clock_to_ms
-
-    left, right = (value.split("-", 1) + ["00:00:00"])[:2]
-    try:
-        return clock_to_ms(left.strip() + ".000"), clock_to_ms(right.strip() + ".000")
-    except Exception:
-        return 0, 0
+    return parse_transcript_markdown(path.read_text(encoding="utf-8"), manifest.transcript)
 
 
 def list_jobs(settings: SootaSettings) -> CommandResult:

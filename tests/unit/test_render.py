@@ -46,6 +46,7 @@ def test_invalid_analysis_does_not_clobber(settings) -> None:
         asr=FakeAsr(),
     )
     folder = Path(result.data["output"])
+    (folder / "content.md").write_text("用户已经编辑的文章", encoding="utf-8")
     original = (folder / "content.md").read_text(encoding="utf-8")
     bad = folder / "bad.json"
     bad.write_text("{not json", encoding="utf-8")

@@ -1,6 +1,6 @@
 # Soota
 
-给 Soota 一个链接：搜集内容、清理噪声、补全字幕，留下可追溯的 Markdown。
+给 Soota 一个链接：获取字幕或转写，保存可追溯的 context 正文。
 
 Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再由 `yt-dlp` Provider 获取 YouTube/Bilibili 字幕，字幕获取失败且符合兜底条件时按费用策略使用 TikHub；确认无字幕则直接下载音频、本地转写，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
 
@@ -98,7 +98,7 @@ uv run soota catalog "频道或 UP 主 URL" --incremental --max-cost 0.004 --jso
 
 ```text
 output/{platform}/{source_id}/
-├── content.md
+├── context.md
 ├── transcript.md
 └── manifest.json
 
@@ -108,7 +108,7 @@ output/catalogs/{job_id}/
 ```
 
 单条视频有字幕时不下载媒体、不跑 ASR；已缓存的视频阶段再次运行不再付费请求 TikHub。目录新快照会重新读取页面；`jobs resume` 复用已保存的页面和未消费条目。
-`content.md` 的「正文」是合并后的可读文本，不含密集时间戳；时间轴只留在 `transcript.md`。TikHub 音频失败时回退本机 `yt-dlp`，不循环重试计费接口。
+`context.md` 是给 Agent 的原文输入，保留片段顺序、重复与断句，不做语义处理。`transcript.md` 保留时间轴。默认不生成文章；分析请求直接使用 context，明确要求详细阅读时才由 Agent 整理文章。`content.md` 是可选的阅读／分析输出，`render` 只负责排版，不调用大模型。字幕格式能力表及优先级见 [字幕格式与 context](docs/subtitle-formats.md)。TikHub 音频失败时回退本机 `yt-dlp`，不循环重试计费接口。
 
 ## 质量
 

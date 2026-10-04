@@ -11,6 +11,25 @@ def evidence_link(segment: TranscriptSegment) -> str:
     )
 
 
+def render_context(item: MediaItem, document: TranscriptDocument) -> str:
+    """Serialize source text in cue order without rewriting or merging it."""
+    lines = [
+        f"# {item.title or item.source.id}",
+        "",
+        f"source: {item.source.canonical_url}",
+        f"transcript_status: {document.status.value}",
+        f"transcript_source: {document.source.value if document.source else 'unknown'}",
+        f"language: {document.language or 'unknown'}",
+        "",
+    ]
+    lines.extend(f"[{segment.segment_id}] {segment.text}" for segment in document.segments)
+    return "\n".join(lines) + "\n"
+
+
+def _timestamp(ms: int) -> str:
+    return f"{ms_to_clock(ms)}.{max(0, ms) % 1000:03d}"
+
+
 def render_transcript(item: MediaItem, document: TranscriptDocument) -> str:
     title = item.title or item.source.id
     lines = [
@@ -28,7 +47,7 @@ def render_transcript(item: MediaItem, document: TranscriptDocument) -> str:
     for segment in document.segments:
         lines.extend(
             [
-                f"## {segment.segment_id} · {ms_to_clock(segment.start_ms)}-{ms_to_clock(segment.end_ms)}",
+                f"## {segment.segment_id} · {_timestamp(segment.start_ms)}-{_timestamp(segment.end_ms)}",
                 "",
                 f'<a id="{segment.segment_id}"></a>',
                 "",
@@ -45,6 +64,8 @@ def render_content(
     manifest: ContentBundleManifest,
     analysis: Analysis | None,
 ) -> str:
+    if analysis is None:
+        return render_context(item, document)
     title = item.title or item.source.id
     lines = [
         f"# {title}",
@@ -58,21 +79,6 @@ def render_content(
         f"{len(document.segments)} 段",
         "",
     ]
-    if analysis is None:
-        lines.extend(_body_section(document))
-        lines.extend(
-            [
-                "## 摘要",
-                "",
-                "_尚未生成分析。使用 `soota render` 写入结构化 Analysis。_",
-                "",
-                "## 处理说明",
-                "",
-            ]
-        )
-        lines.extend(_processing(manifest, document))
-        return "\n".join(lines) + "\n"
-
     lines.extend(["## 摘要", "", analysis.summary.strip() or "_空摘要_", ""])
     if analysis.key_points:
         lines.extend(["## 核心观点", ""])

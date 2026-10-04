@@ -53,6 +53,11 @@ class StorageError(SootaError):
     exit_code = 7
 
 
+class SourcePreserved(SootaError):
+    code = "source_preserved"
+    exit_code = 2
+
+
 class ContractError(SootaError):
     code = "contract"
     exit_code = 8

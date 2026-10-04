@@ -193,7 +193,9 @@ def test_bili_inspect_tracks_skip_paid_subtitle(settings, monkeypatch) -> None:
     assert result.data["transcript_source"] == TranscriptSource.OFFICIAL
     assert not any("subtitle" in c for c in requester.calls)
     content = Path(result.data["content"]).read_text(encoding="utf-8")
-    assert "## 正文" in content
+    assert "[seg-000001] 你好" in content
+    assert "[seg-000002] 世界" in content
+    assert "## 摘要" not in content
     assert "你好世界" in content or "你好" in content
 
 

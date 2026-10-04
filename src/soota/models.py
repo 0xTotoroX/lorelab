@@ -31,9 +31,11 @@ class TranscriptStatus(StrEnum):
 
 
 class AnalysisStatus(StrEnum):
+    NOT_REQUESTED = "not_requested"
     READY = "ready"
     PENDING = "pending"
     INVALID = "invalid"
+    STALE = "stale"
 
 
 class SourceRef(BaseModel):
@@ -146,7 +148,7 @@ class TranscriptManifest(BaseModel):
 
 
 class AnalysisManifest(BaseModel):
-    status: AnalysisStatus = AnalysisStatus.PENDING
+    status: AnalysisStatus = AnalysisStatus.NOT_REQUESTED
     path: str | None = None
 
 

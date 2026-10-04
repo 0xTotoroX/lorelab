@@ -4,14 +4,61 @@ import json
 import re
 from typing import Any
 
-from soota.errors import ContractError
-from soota.models import TranscriptSegment, TranscriptSource, TranscriptStatus
+from soota.errors import ContractError, InputError
+from soota.models import TranscriptDocument, TranscriptManifest, TranscriptSegment, TranscriptSource, TranscriptStatus
 
 _SRT_BLOCK = re.compile(
     r"(\d+)\s*\n(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*\n(.*?)(?=\n\n|\Z)",
     re.S,
 )
 _CLOCK = re.compile(r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})")
+
+
+def parse_transcript_markdown(text: str, manifest: TranscriptManifest) -> TranscriptDocument:
+    segments: list[TranscriptSegment] = []
+    current_id: str | None = None
+    current_time = "00:00:00-00:00:00"
+    buf: list[str] = []
+
+    def append_segment() -> None:
+        if current_id is None:
+            return
+        try:
+            left, right = current_time.split("-", 1)
+            stamps = [stamp.strip() for stamp in (left, right)]
+            stamps = [stamp + ".000" if len(stamp) == 8 else stamp for stamp in stamps]
+            start, end = clock_to_ms(stamps[0]), clock_to_ms(stamps[1])
+        except (ValueError, ContractError) as exc:
+            raise InputError("源字幕时间轴无效，未处理正文。") from exc
+        segments.append(
+            TranscriptSegment(
+                segment_id=current_id,
+                start_ms=start,
+                end_ms=end,
+                text="\n".join(buf).strip(),
+                language=manifest.language,
+                source=manifest.source or TranscriptSource.UNKNOWN,
+            )
+        )
+
+    for line in text.splitlines():
+        if line.startswith("## seg-"):
+            append_segment()
+            header = line[3:].strip()
+            current_id = header.split("·")[0].strip()
+            current_time = header.split("·", 1)[1].strip() if "·" in header else "00:00:00-00:00:00"
+            buf = []
+        elif line.startswith("<a id="):
+            continue
+        elif current_id:
+            buf.append(line)
+    append_segment()
+    return TranscriptDocument(
+        status=manifest.status,
+        source=manifest.source,
+        language=manifest.language,
+        segments=segments,
+    )
 
 
 def clock_to_ms(value: str) -> int:

@@ -194,6 +194,12 @@ export OPENCLI_PROFILE="PROFILE_ALIAS"
 
 个人关注名单和执行规则是结构化资料，应保存在项目外的私人文件中；环境变量只保存需要传递的路径或配置值，不把整份名单塞入环境变量。当前 Soota 尚没有名单管理、定时追踪或规则执行命令，不会自动读取名单文件。
 
-Obsidian 中的 `AGENTS.md` 可引用本地处理规则和 prompt，约定文章整理、分析格式、分类、引用和落盘位置。Soota Skill 指导 Agent 在处理前读取这些文件，并在每次执行时读取所选 prompt 的最新内容；CLI 不解释这些文件。个人名单、规则正文、私人知识库路径与账号资料不写入共享 Skill。面向阅读的来源名称可自定义，命令标识和 CLI 管理的内容包路径仍遵循原有契约。
+Obsidian 中的 `AGENTS.md` 可引用本地处理规则和 prompt，约定文章整理、分析格式、分类、引用和落盘位置。Soota Skill 指导 Agent 在处理前读取这些文件，并在明确要求分析或文章处理时读取所选 prompt 的最新内容；CLI 不解释这些文件。个人名单、规则正文、私人知识库路径与账号资料不写入共享 Skill。面向阅读的来源名称可自定义，命令标识和 CLI 管理的内容包路径仍遵循原有契约。
 
 项目外不等于不会上传：知识库、用户配置或云盘若另外开启同步，需要在各自的同步/Git 配置中排除私人名单、状态和采集结果。Git 忽略规则不会清除已经提交过的历史内容。
+
+## Context 与可选文章
+
+视频 ingest 默认输出 `context.md`、`transcript.md` 和 `manifest.json`，不调用模型润色，也不生成阅读文章。JSON 的 `data.context` 是正文路径；旧 `data.content` 在 ingest 中指向同一路径。目录命令不受此变更影响。
+
+只要求采集时到 context 结束。要求分析／总结时，Agent 直接使用 context；明确要求详细文章阅读时才整理完整文章。标准 Analysis JSON 可用 `soota render` 排版为 `content.md`，已有文件需明确 `--force` 才替换，源 context 与字幕保持不变。格式能力与优先级见 [字幕格式与 context](subtitle-formats.md)。
