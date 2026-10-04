@@ -6,6 +6,7 @@ from soota.providers.tikhub.normalize import (
     youtube_media,
 )
 from soota.secrets import redact_any
+from soota.transcripts.conversion import convert_captions
 from tests.conftest import load_fixture
 
 
@@ -21,7 +22,7 @@ def test_youtube_caption_and_missing() -> None:
         language="en",
         source_kind=TranscriptSource.OFFICIAL,
     )
-    assert ready.segments[0].text.startswith("Never")
+    assert convert_captions(ready).segments[0].text.startswith("Never")
     missing = youtube_caption_content(
         load_fixture("youtube_captions_missing.json"),
         language=None,

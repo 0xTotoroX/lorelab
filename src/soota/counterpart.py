@@ -12,6 +12,7 @@ from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
 from soota.providers.ytdlp import YtDlpProvider
 from soota.routing import recognize
+from soota.transcripts.acquisition import acquire_captions
 
 
 def normalized(value: str) -> str:
@@ -151,14 +152,14 @@ def _youtube_counterpart(
     chosen = matches[0]
     report["stage"] = "youtube_captions"
     try:
-        captions = client.get_captions(chosen)
+        captions = acquire_captions(client, chosen)
     except (CaptionUnavailable, RuntimeUnavailable):
         if caption_fallback is None:
             raise
         captions = CaptionResult(status=TranscriptStatus.UNKNOWN)
     if captions.status == TranscriptStatus.UNKNOWN and caption_fallback is not None:
         local_item = caption_fallback.inspect(chosen.source)
-        captions = caption_fallback.get_captions(local_item)
+        captions = acquire_captions(caption_fallback, local_item)
         if captions.status == TranscriptStatus.READY:
             local_item.provenance["selection"] = chosen.provenance["selection"]
             chosen = local_item

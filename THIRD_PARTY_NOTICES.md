@@ -58,6 +58,13 @@ versions. They are included in Soota's wheel and source distribution.
 - Integration: optional separately installed executable used by the built-in `soota` Provider for YouTube metadata and captions. No upstream source or runtime is bundled or modified.
 - Upstream source is primarily Unlicense; distributed binaries and dependencies may carry additional licenses. The external installation retains its own license materials.
 
+## webvtt-py 0.5.1
+
+- Integration: Python dependency used for WebVTT cue parsing; no upstream source is copied or modified.
+- Source: <https://github.com/glut23/webvtt-py>.
+- License: MIT, copyright 2016 Alejandro Mendez; [unmodified distribution license](LICENSES/webvtt-py-0.5.1-LICENSE).
+- Soota checks cue coverage and reads full millisecond timestamps and raw cue text before removing supported markup.
+
 ## Other dependencies
 
 The dependencies listed in `pyproject.toml` and their transitive dependencies

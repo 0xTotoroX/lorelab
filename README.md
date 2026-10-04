@@ -4,7 +4,7 @@
 
 Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再由 `yt-dlp` Provider 获取 YouTube/Bilibili 字幕，字幕获取失败且符合兜底条件时按费用策略使用 TikHub；确认无字幕则直接下载音频、本地转写，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
 
-已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，三个外部 Provider 的默认自动更新，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构](docs/providers.md)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，三个外部 Provider 的默认自动更新，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构与处理流程](docs/providers.md#处理流程与职责)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -108,7 +108,7 @@ output/catalogs/{job_id}/
 ```
 
 单条视频有字幕时不下载媒体、不跑 ASR；已缓存的视频阶段再次运行不再付费请求 TikHub。目录新快照会重新读取页面；`jobs resume` 复用已保存的页面和未消费条目。
-`context.md` 是给 Agent 的原文输入，保留片段顺序、重复与断句，不做语义处理。`transcript.md` 保留时间轴。默认不生成文章；分析请求直接使用 context，明确要求详细阅读时才由 Agent 整理文章。`content.md` 是可选的阅读／分析输出，`render` 只负责排版，不调用大模型。字幕格式能力表及优先级见 [字幕格式与 context](docs/subtitle-formats.md)。TikHub 音频失败时回退本机 `yt-dlp`，不循环重试计费接口。
+`context.md` 是给 Agent 的原文输入，保留片段顺序、重复与断句，不做语义处理。`transcript.md` 保留来源时间轴，缺失时明确标记未知。默认不生成文章；分析请求直接使用 context，明确要求详细阅读时才由 Agent 整理文章。`content.md` 是可选的阅读／分析输出，`render` 只负责排版，不调用大模型。统一转换层支持 SRT、VTT、TTML、SRV/XML、已知字幕 JSON、Whisper TSV/JSONL 和无时间 TXT；不同 Provider 共享解析入口。字幕格式能力表、限制及获取优先级见 [字幕格式与 context](docs/subtitle-formats.md)。TikHub 音频失败时回退本机 `yt-dlp`，不循环重试计费接口。
 
 ## 质量
 

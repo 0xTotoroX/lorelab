@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from soota.models import AudioAsset, CapabilitySet, CaptionResult, CatalogPage, MediaItem, RequestRecord, SourceRef
+from soota.models import AudioAsset, CapabilitySet, CaptionAcquisition, CatalogPage, MediaItem, RequestRecord, SourceRef
 
 
 class AudioProvider(Protocol):
@@ -13,7 +13,9 @@ class AudioProvider(Protocol):
 
 
 class CaptionProvider(Protocol):
-    def get_captions(self, item: MediaItem) -> CaptionResult: ...
+    def get_captions(self, item: MediaItem) -> CaptionAcquisition: ...
+
+    def cache_captions(self, item: MediaItem, result: CaptionAcquisition) -> None: ...
 
 
 class Provider(Protocol):
@@ -27,7 +29,9 @@ class Provider(Protocol):
 
     def list_items(self, source: SourceRef, cursor: str | None = None, *, page_size: int = 100) -> CatalogPage: ...
 
-    def get_captions(self, item: MediaItem) -> CaptionResult: ...
+    def get_captions(self, item: MediaItem) -> CaptionAcquisition: ...
+
+    def cache_captions(self, item: MediaItem, result: CaptionAcquisition) -> None: ...
 
     def get_audio(self, item: MediaItem) -> AudioAsset: ...
 

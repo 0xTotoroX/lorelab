@@ -85,6 +85,11 @@ def filter_promotions(
         report["attribution"] = ATTRIBUTION
     kept = []
     for segment in document.segments:
+        if segment.start_ms is None or segment.end_ms is None:
+            if selected:
+                raise InputError("字幕没有完整时间轴，不能按时间范围过滤。")
+            kept.append(segment)
+            continue
         if any(segment.start_ms < end * 1000 and segment.end_ms > start * 1000 for start, end in selected):
             report["removed_segment_ids"].append(segment.segment_id)
         else:

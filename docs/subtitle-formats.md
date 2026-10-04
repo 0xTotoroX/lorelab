@@ -7,7 +7,7 @@
 | 工具／来源 | 工具可提供的字幕表示或输出格式 | Soota 当前使用 |
 | --- | --- | --- |
 | OpenCLI：YouTube、Bilibili | JSON、YAML、CSV、Markdown 表格、终端表格，均为提取后片段的序列化输出 | 逐段 JSON；YouTube 使用 `--mode raw` |
-| yt-dlp：YouTube | JSON3、SRV1、SRV2、SRV3、TTML、SRT、VTT | JSON3 |
+| yt-dlp：YouTube | JSON3、SRV1、SRV2、SRV3、TTML、SRT、VTT | 按所选轨道可用格式取一份，首选 JSON3 |
 | yt-dlp：Bilibili 普通视频 | 将 B站字幕 JSON 转为 SRT；另有弹幕 XML | SRT，排除弹幕 |
 | TikHub：YouTube | JSON3、XML、SRT、TXT | SRT |
 | TikHub：Bilibili | 字幕信息 JSON，以及字幕地址指向的 B站原生 JSON | 字幕 `body` JSON |
@@ -31,14 +31,43 @@ OpenCLI 的 JSON 是它自己的行结构，不是 YouTube JSON3。它的 raw �
 | 4 | SRT | 正文和起止时间简单明确，附加信息通常较少 |
 | 5 | 纯 TXT | 适合直接读文字，但时间轴和片段结构通常已丢失 |
 
-这是采集格式的选择原则；当前实际使用的格式仍以上表最后一列为准，没有新增全格式自动回退或统一导出功能。`.json` 后缀本身没有优先权，必须是已知字幕结构。若 VTT/XML 比某个被裁剪的 JSON 保留更多相关信息，应优先更完整的结果。文件格式与人工／AI 字幕质量、原语言／翻译轨道是不同的选择维度。
+这是采集格式的选择原则，不是转换器的处理顺序。yt-dlp 在获取前按所选轨道可用格式选择一份；转换层只处理实际取得的正文，失败时明确报错，不重复拉取其他格式。其他工具的请求格式仍以上表最后一列为准。`.json` 后缀本身没有优先权，必须是已知字幕结构。若 VTT/XML 比某个被裁剪的 JSON 保留更多相关信息，应优先更完整的结果。文件格式与人工／AI 字幕质量、原语言／翻译轨道是不同的选择维度。
+
+## 统一转换层
+
+整体黑盒流程及职责归属维护在 [处理流程与职责](providers.md#处理流程与职责)，本节维护实际解析能力。格式标识描述正文结构，与 Provider 名称无关；同样的 SRT/VTT 不论由谁获取都调用同一个解析器。
+
+| 输入格式标识 | 当前支持范围 |
+| --- | --- |
+| `srt` | 字幕编号、毫秒时间、CRLF/BOM、多行正文、常见文字样式标签及实体 |
+| `vtt` | 有／无 cue ID、毫秒时间、cue 设置、NOTE/STYLE/REGION、文字样式与内联时间标签；保留正文换行 |
+| `ttml`、`dfxp` | 媒体时间轴、并行容器、嵌套 body/div/p、继承的 begin/end/dur、父级结束范围、时钟／小时／分钟／秒／毫秒／frame／tick、frameRateMultiplier、subFrameRate、br 与正文空白 |
+| `srv1` | `transcript/text`，start/dur 为秒 |
+| `srv2` | `timedtext/text`，t/d 为毫秒 |
+| `srv3` | `timedtext/body/p`，t/d 为毫秒；读取 s 文本，保留有正文的 append 事件，忽略无正文窗口控制 |
+| `xml` | 按以上已知 XML 结构识别 SRV 或 TTML；未知 XML、弹幕及 HTML 报错 |
+| `json3` | YouTube events/segs；保留每个文字事件的顺序、重复与换行，不做滚动字幕去重 |
+| `bilibili-json` | B站 body/from/to/content |
+| `opencli-youtube`、`opencli-bilibili`、`opencli-mcp` | 各自明确的逐段 JSON 字段结构；保留未知的实际语言与轨道来源 |
+| `whisper-json`、`whisper-jsonl` | Whisper/MLX/faster-whisper 识别片段；JSONL 每行一个片段，start/end 为秒 |
+| `tsv` | Whisper start/end/text 三列，时间为毫秒 |
+| `txt` | 完整原文；无时间轴，绝不填造时间 |
+| `soota-segments` | 旧缓存及旧 ASR 扩展的已规范化片段兼容入口 |
+
+这是文字与时间提取器，不是字幕视觉渲染器：不还原字体、位置、窗口滚动或动画。TTML 的 clock/smpte 时间基准、seq 容器、重复时序和段内动态 span 时间明确报不支持，避免输出错误的时间轴。SRV3 的段内 s 偏移不单独生成词级字幕。源文件缺少结束时间时保留未知结束时间；TXT 在 `transcript.md` 标记“无时间轴”，无法按时间范围过滤。
+
+转换入口 `transcripts/conversion.py::parse_payload` 只接收格式与正文；`convert_captions` 处理获取状态。新增 Provider 使用已支持格式时只需返回 `CaptionAcquisition`，无需复制解析逻辑；新增格式时修改 `transcripts/formats/` 的对应 reader 与注册表，并补充格式契约测试。未知或损坏格式报 `ContractError`，不冒充没有字幕，也不据此触发 ASR 或付费回退。空正文按对应格式契约返回未知状态或格式错误，始终不记为无轨道。
+
+VTT 使用 [webvtt-py](https://github.com/glut23/webvtt-py)，并校验其未覆盖的坏字幕块，防止静默漏掉正文。TTML 使用标准库 XML 解析并依据 [W3C TTML](https://www.w3.org/TR/ttml1/) 实现以上媒体时间子集；核对过的 [pycaption](https://github.com/pbs/pycaption/blob/main/pycaption/dfxp/reader.py) 和 [pysubs2](https://github.com/tkarabela/pysubs2/blob/master/pysubs2/formats/ttml.py) 不能直接满足本项目的父级时间继承与 frame/tick 组合需求。SRV 结构参考 [RustyPipe](https://docs.rs/rustypipe/latest/src/rustypipe/model/mod.rs.html) 与 [YTSubConverter](https://github.com/arcusmaximus/YTSubConverter/blob/master/YTSubConverter.Shared/Formats/YttDocument.cs)。
+
+工具输出的 YAML、CSV、Markdown 表格或终端表格是其自身行数据的展示方式；OpenCLI 获取端统一请求 JSON，不把这些展示输出冒充新的原生字幕格式。这里没有增加任意本地文件导入命令。
 
 ## 默认交付 context
 
 `ingest` 默认保存：
 
 - `context.md`：面向 Agent 的正文。按规范化字幕片段的原顺序输出，保留片段 ID、原文、重复和断句；不合并段落、不修辞、不纠错、不补写，也不插入摘要占位。
-- `transcript.md`：保留片段 ID 和毫秒时间轴，供引用核对。精度以来源为限，旧秒格式不能恢复此前已丢失的小数信息。
+- `transcript.md`：保留片段 ID 和来源实际存在的毫秒时间轴，供引用核对；没有时间时明确标记未知。精度以来源为限，旧秒格式不能恢复此前已丢失的小数信息。
 - `manifest.json`：来源、字幕状态、处理记录和文件索引；未请求分析时标记 `analysis.status=not_requested`。
 
 已有的明确过滤选项在 context 生成之前生效；启用推广过滤时仍保留 `transcript.original.md`。context 忠实于交给 Soota 的规范化片段，不承诺恢复上游已经删掉的字段。

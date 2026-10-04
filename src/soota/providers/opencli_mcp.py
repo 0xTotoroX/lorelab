@@ -4,19 +4,18 @@ import hashlib
 import math
 import time
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, InputError, SourceError
 from soota.models import (
     CapabilitySet,
-    CaptionResult,
+    CaptionAcquisition,
+    CaptionPayload,
     CatalogPage,
     MediaItem,
     RequestRecord,
     SourceRef,
-    TranscriptSegment,
     TranscriptSource,
     TranscriptStatus,
 )
@@ -92,7 +91,7 @@ class OpenCLIMCPProvider:
         self.cache.put_json(source, "inspect", {"timestamp": time.time(), "item": item.model_dump(mode="json")})
         return item
 
-    def get_captions(self, item: MediaItem) -> CaptionResult:
+    def get_captions(self, item: MediaItem) -> CaptionAcquisition:
         source = item.source
         if not capabilities_for(source).captions:
             raise SourceError("opencli-mcp 尚未接入该来源的字幕。")
@@ -100,31 +99,44 @@ class OpenCLIMCPProvider:
         artifact = "captions-" + hashlib.sha256(language.encode()).hexdigest()[:12]
         cached = self.cache.get_json(source, artifact)
         if cached and 0 <= time.time() - cached.get("timestamp", 0) < self.settings.opencli_mcp.metadata_cache_seconds:
-            result = CaptionResult.model_validate(cached["result"])
-            if result.status == TranscriptStatus.READY and result.segments:
+            result = CaptionAcquisition.model_validate(cached["result"])
+            if result.status == TranscriptStatus.READY and result.payload is not None:
                 self.records.append(
                     RequestRecord(
                         endpoint="opencli-mcp:cache:captions", billed=False, cache_hit=True, estimated_cost_usd=0
                     )
                 )
-                return result
+                return result.model_copy(update={"cache_hit": True})
         try:
             response = self._run("bilibili", "subtitle", {"bvid": source.id, "lang": language})
         except MCPToolError as exc:
             if exc.upstream_code == "empty_result":
-                return CaptionResult(status=TranscriptStatus.UNKNOWN, reason="empty_response")
+                return CaptionAcquisition(status=TranscriptStatus.UNKNOWN, reason="empty_response")
             raise
         rows = response.get("rows")
         if not isinstance(rows, list):
             raise ContractError("opencli-mcp 字幕响应缺少 rows。")
-        result = normalize_captions(rows)
-        if result.status == TranscriptStatus.READY:
-            self.cache.put_json(
-                source,
-                artifact,
-                {"timestamp": time.time(), "result": result.model_dump(mode="json"), "requested_language": language},
-            )
+        result = CaptionAcquisition(
+            status=TranscriptStatus.READY if rows else TranscriptStatus.UNKNOWN,
+            source=TranscriptSource.UNKNOWN if rows else None,
+            payload=CaptionPayload(format="opencli-mcp", body=rows) if rows else None,
+            reason=None if rows else "empty_response",
+        )
         return result
+
+    def cache_captions(self, item: MediaItem, result: CaptionAcquisition) -> None:
+        language = self.settings.default_language
+        artifact = "captions-" + hashlib.sha256(language.encode()).hexdigest()[:12]
+        self.cache.put_json(
+            item.source,
+            artifact,
+            {
+                "timestamp": time.time(),
+                "requested_language": language,
+                "result": result.model_dump(mode="json"),
+            },
+            redact=False,
+        )
 
     def list_items(self, source: SourceRef, cursor: str | None = None, *, page_size: int = 100) -> CatalogPage:
         if not capabilities_for(source).catalog:
@@ -184,35 +196,4 @@ def normalize_video(source: SourceRef, row: dict[str, Any]) -> MediaItem:
         published_at=parse_date(row.get("published")),
         duration_seconds=int(duration) if duration is not None else None,
         extras={key: str(row[key]) for key in ("aid", "category", "url") if row.get(key) is not None},
-    )
-
-
-def normalize_captions(rows: list[Any]) -> CaptionResult:
-    segments: list[TranscriptSegment] = []
-    for row in rows:
-        if not isinstance(row, dict) or not isinstance(row.get("content"), str):
-            raise ContractError("opencli-mcp 字幕正文契约不匹配。")
-        try:
-            start = Decimal(str(row["from_s"]))
-            end = Decimal(str(row["to_s"]))
-        except (KeyError, InvalidOperation) as exc:
-            raise ContractError("opencli-mcp 字幕时间戳契约不匹配。") from exc
-        if not start.is_finite() or not end.is_finite() or start < 0 or end < start:
-            raise ContractError("opencli-mcp 字幕时间范围无效。")
-        if row["content"].strip():
-            segments.append(
-                TranscriptSegment(
-                    segment_id=f"seg-{len(segments) + 1:06d}",
-                    start_ms=int(start * 1000),
-                    end_ms=int(end * 1000),
-                    text=row["content"].strip(),
-                    language=None,
-                    source=TranscriptSource.UNKNOWN,
-                )
-            )
-    return CaptionResult(
-        status=TranscriptStatus.READY if segments else TranscriptStatus.UNKNOWN,
-        source=TranscriptSource.UNKNOWN if segments else None,
-        language=None,
-        segments=segments,
     )

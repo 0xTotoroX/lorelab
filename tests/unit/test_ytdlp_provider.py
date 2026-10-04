@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from soota.errors import AuthBudgetError, CaptionUnavailable, ContractError, SourceError
-from soota.models import MediaItem, TranscriptMode, TranscriptSource
+from soota.models import CaptionPayload, CaptionResult, MediaItem, TranscriptMode, TranscriptSource
 from soota.pipeline import estimate, ingest
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
@@ -13,6 +13,7 @@ from soota.providers.process import ProcessResult
 from soota.providers.router import catalog_provider, inspect_item
 from soota.providers.ytdlp import YtDlpProvider, select_track
 from soota.routing import recognize
+from soota.transcripts.conversion import convert_captions, parse_payload
 
 URL = "https://www.youtube.com/watch?v=--Example01&t=16s"
 INFO = {
@@ -111,7 +112,7 @@ def test_bad_caption_payload_is_not_cached_as_missing(settings, monkeypatch, bod
     provider = YtDlpProvider(settings)
     item = provider.inspect(recognize(URL))
     with pytest.raises(ContractError):
-        provider.get_captions(item)
+        convert_captions(provider.get_captions(item))
     assert provider.cache.get_json(item.source, "captions") is None
 
 
@@ -266,8 +267,8 @@ def test_bili_ai_subtitle_download_preserves_source_and_timestamps(settings, mon
     assert result.ok and result.data["provider"] == "yt-dlp"
     assert manifest["transcript"]["source"] == "auto"
     assert manifest["transcript"]["language"] == "ai-zh"
-    doc = YtDlpProvider(settings).get_captions(MediaItem(source=recognize(BILI_URL)))
-    assert [(s.start_ms, s.end_ms, s.text) for s in doc.segments] == [(1200, 2300, "第一行 第二行")]
+    doc = convert_captions(YtDlpProvider(settings).get_captions(MediaItem(source=recognize(BILI_URL))))
+    assert [(s.start_ms, s.end_ms, s.text) for s in doc.segments] == [(1200, 2300, "第一行\n第二行")]
     assert "--write-subs" in calls[1] and "--no-write-auto-subs" in calls[1]
     assert re.fullmatch(calls[1][calls[1].index("--sub-langs") + 1], "ai-zh")
     assert "--simulate" in calls[0] and all("--skip-download" in call for call in calls)
@@ -313,7 +314,7 @@ def test_bili_wrong_part_and_invalid_srt_are_rejected(settings, monkeypatch):
     stub_bili(monkeypatch, body="not a subtitle")
     provider = YtDlpProvider(settings)
     with pytest.raises(ContractError):
-        provider.get_captions(provider.inspect(recognize(BILI_URL)))
+        convert_captions(provider.get_captions(provider.inspect(recognize(BILI_URL))))
     assert provider.cache.get_json(recognize(BILI_URL), "captions") is None
 
 
@@ -345,9 +346,14 @@ def test_legacy_cache_is_read_without_relabeling_existing_files(settings, monkey
     provider = YtDlpProvider(settings)
     source = recognize(URL)
     item = MediaItem(source=source, provenance={"provider": "soota", "caption_tracks": {"official": ["zh"]}})
-    from soota.providers.ytdlp import parse_json3
-
-    caption = parse_json3(BODY, "zh", TranscriptSource.OFFICIAL)
+    caption = CaptionResult(
+        status="ready",
+        language="zh",
+        source=TranscriptSource.OFFICIAL,
+        segments=parse_payload(
+            CaptionPayload(format="json3", body=BODY), language="zh", source=TranscriptSource.OFFICIAL
+        ),
+    )
     for name, value in (("inspect", item), ("captions", caption)):
         provider.legacy_cache.put_json(
             source, name, {"timestamp": time.time(), "result": value.model_dump(mode="json")}
@@ -385,3 +391,64 @@ def test_audio_download_skips_captions_and_reuses_only_completed_file(settings, 
     assert calls[0][-2:] == ["--", item.source.canonical_url]
     provider.get_audio(item)
     assert len(calls) == 1 and provider.records[-1].cache_hit
+
+
+@pytest.mark.parametrize(
+    "formats,chosen,body",
+    [
+        (["srt", "vtt"], "vtt", "WEBVTT\n\n00:00.123 --> 00:01.234\n获取格式测试"),
+        (["ttml"], "ttml", '<tt><body><p begin=".123s" dur="1.111s">获取格式测试</p></body></tt>'),
+        (["srv3"], "srv3", '<timedtext><body><p t="123" d="1111">获取格式测试</p></body></timedtext>'),
+    ],
+)
+def test_available_formats_are_selected_before_shared_conversion(settings, monkeypatch, formats, chosen, body):
+    calls = []
+
+    def run(argv, **kwargs):
+        calls.append(argv)
+        if "--dump-single-json" in argv:
+            info = {**INFO, "subtitles": {"zh": [{"ext": f} for f in formats]}, "automatic_captions": {}}
+            return ProcessResult(0, json.dumps(info), "")
+        assert argv[argv.index("--sub-format") + 1] == chosen
+        template = argv[argv.index("-o") + 1]
+        Path(template.replace("%(ext)s", f"zh.{chosen}")).write_text(body)
+        return ProcessResult(0, "", "")
+
+    monkeypatch.setattr("soota.providers.ytdlp.shutil.which", lambda _: "/test/yt-dlp")
+    monkeypatch.setattr("soota.providers.ytdlp.run_process", run)
+    result = ingest(settings, URL, provider="yt-dlp", transcript=TranscriptMode.CAPTIONS_ONLY, max_cost=0)
+    assert result.ok
+    assert "获取格式测试" in Path(result.data["context"]).read_text()
+    assert "00:00:00.123-00:00:01.234" in Path(result.data["transcript"]).read_text()
+    assert len(calls) == 2
+
+
+def test_old_metadata_with_filtered_tracks_is_refreshed(settings, monkeypatch):
+    import time
+
+    calls = stub_process(monkeypatch)
+    provider = YtDlpProvider(settings)
+    source = recognize(URL)
+    old = MediaItem(
+        source=source,
+        provenance={
+            "caption_probe_complete": True,
+            "caption_availability": "present",
+            "caption_tracks": {"official": [], "auto": []},
+        },
+    )
+    provider.cache.put_json(source, "inspect", {"timestamp": time.time(), "result": old.model_dump(mode="json")})
+    assert provider.inspect(source).provenance["caption_formats"]["official"]["zh"] == ["json3"]
+    assert len(calls) == 1
+
+
+def test_invalid_caption_encoding_is_a_contract_error(settings, monkeypatch):
+    provider = YtDlpProvider(settings)
+    item = MediaItem(source=recognize(URL), provenance={"caption_tracks": {"official": ["zh"]}})
+
+    def run(source, args, operation):
+        Path(args[args.index("-o") + 1].replace("%(ext)s", "zh.json3")).write_bytes(b"\xff\xfeinvalid")
+
+    monkeypatch.setattr(provider, "_run", run)
+    with pytest.raises(ContractError, match="UTF-8"):
+        provider.get_captions(item)

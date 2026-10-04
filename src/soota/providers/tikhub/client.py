@@ -16,7 +16,8 @@ from soota.errors import AuthBudgetError, ContractError, SootaError, SourceError
 from soota.models import (
     AudioAsset,
     CapabilitySet,
-    CaptionResult,
+    CaptionAcquisition,
+    CaptionPayload,
     CaptionTrack,
     CatalogPage,
     MediaItem,
@@ -48,7 +49,6 @@ from soota.providers.tikhub.normalize import (
 from soota.providers.tikhub.registry import ApiEndpoint, load_registry
 from soota.secrets import load_tikhub_api_key, redact_url
 from soota.storage.cache import CacheStore
-from soota.transcripts.captions import parse_bilibili_body
 from soota.transcripts.download import fetch_audio_ytdlp
 
 YOUTUBE_INFO = load_registry().resolve("youtube.web.get_video_info").path
@@ -270,18 +270,23 @@ class TikHubProvider:
             self.cache.put_json(item.source, "inspect", {"item": item.model_dump(mode="json"), "raw": payload})
         return item
 
-    def get_captions(self, item: MediaItem) -> CaptionResult:
+    def get_captions(self, item: MediaItem) -> CaptionAcquisition:
         cached = self.cache.get_json(item.source, "captions")
-        if cached and cached.get("status") == TranscriptStatus.READY and cached.get("segments"):
+        if (
+            cached
+            and cached.get("status") == TranscriptStatus.READY
+            and (cached.get("payload") or cached.get("segments"))
+        ):
             self.records.append(RequestRecord(endpoint="cache:captions", billed=False, cache_hit=True))
-            return CaptionResult.model_validate(cached)
+            return CaptionAcquisition.model_validate(cached).model_copy(update={"cache_hit": True})
         if item.source.platform == "youtube":
             result = self._youtube_captions(item)
         else:
             result = self._bilibili_captions(item)
-        if result.status == TranscriptStatus.READY and result.segments:
-            self.cache.put_json(item.source, "captions", result.model_dump(mode="json"))
         return result
+
+    def cache_captions(self, item: MediaItem, result: CaptionAcquisition) -> None:
+        self.cache.put_json(item.source, "captions", result.model_dump(mode="json"), redact=False)
 
     def get_audio(self, item: MediaItem) -> AudioAsset:
         dest = self.cache.audio_path(item.source)
@@ -324,7 +329,7 @@ class TikHubProvider:
             return self._call(YOUTUBE_INFO, {"video_id": source.id, "need_format": True}, billed=True)
         return self._call(BILI_ONE_V3, {"url": source.canonical_url or source.url}, billed=True)
 
-    def _youtube_captions(self, item: MediaItem) -> CaptionResult:
+    def _youtube_captions(self, item: MediaItem) -> CaptionAcquisition:
         listed = self._call(
             YOUTUBE_CAPTIONS,
             {"video_id": item.source.id, "format": "srt"},
@@ -339,7 +344,7 @@ class TikHubProvider:
             return content
         track = prefer_language(tracks or content.tracks, self.preferred_language)
         if track is None:
-            return CaptionResult(status=content.status, tracks=tracks, reason=content.reason)
+            return CaptionAcquisition(status=content.status, tracks=tracks, reason=content.reason)
         fetched = self._call(
             YOUTUBE_CAPTIONS,
             {
@@ -373,7 +378,7 @@ class TikHubProvider:
                 raise TranscriptError("YouTube 字幕异步任务失败。", hint="稍后重试同一视频，不要换 endpoint 死磕。")
         raise TranscriptError("YouTube 字幕异步任务超时。", hint="可稍后再 ingest；result 接口不计费。")
 
-    def _bilibili_captions(self, item: MediaItem) -> CaptionResult:
+    def _bilibili_captions(self, item: MediaItem) -> CaptionAcquisition:
         inspect_cached = self.cache.get_json(item.source, "inspect") or {}
         inspect_raw = inspect_cached.get("raw") if isinstance(inspect_cached, dict) else None
         tracks_raw = bilibili_caption_tracks(inspect_raw) if inspect_raw is not None else []
@@ -391,7 +396,7 @@ class TikHubProvider:
                 tracks_raw = bilibili_caption_tracks(payload)
         if not tracks_raw:
             absent = payload is not None and bilibili_empty_tracks_confirmed(payload)
-            return CaptionResult(
+            return CaptionAcquisition(
                 status=TranscriptStatus.MISSING if absent else TranscriptStatus.UNKNOWN,
                 reason="empty_track_list" if absent else "track_visibility_unknown",
             )
@@ -404,15 +409,12 @@ class TikHubProvider:
             url = "https:" + url
         body = self._get_json(url)
         self.records.append(RequestRecord(endpoint="cdn:bilibili-subtitle", billed=False, note=redact_url(url)))
-        segments = parse_bilibili_body(body, language=language, source=kind)
-        if not segments:
-            return CaptionResult(status=TranscriptStatus.UNKNOWN, language=language, reason="empty_caption_body")
-        return CaptionResult(
+        return CaptionAcquisition(
             status=TranscriptStatus.READY,
             source=kind,
             language=language,
             tracks=[CaptionTrack(language=language, kind=kind)],
-            segments=segments,
+            payload=CaptionPayload(format="bilibili-json", body=body),
         )
 
     def _audio_payload(self, item: MediaItem) -> Any:

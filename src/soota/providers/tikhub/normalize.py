@@ -5,14 +5,14 @@ from typing import Any
 
 from soota.errors import ContractError
 from soota.models import (
-    CaptionResult,
+    CaptionAcquisition,
+    CaptionPayload,
     CaptionTrack,
     MediaItem,
     SourceRef,
     TranscriptSource,
     TranscriptStatus,
 )
-from soota.transcripts.captions import parse_json3, parse_srt
 
 PREFERRED_LANGS = ("zh-Hans", "zh-CN", "zh", "zh-Hant", "zh-TW", "en", "en-US", "en-GB")
 
@@ -156,34 +156,28 @@ def youtube_caption_content(
     *,
     language: str | None,
     source_kind: TranscriptSource,
-) -> CaptionResult:
+) -> CaptionAcquisition:
     data = unwrap(payload)
     status = str(data.get("status") or "")
     if status in {"failed", "error"}:
-        return CaptionResult(status=TranscriptStatus.UNKNOWN, reason="upstream_failed")
+        return CaptionAcquisition(status=TranscriptStatus.UNKNOWN, reason="upstream_failed")
     if status in {"processing", "queued", "active"}:
-        return CaptionResult(status=TranscriptStatus.PENDING, language=language, source=source_kind)
+        return CaptionAcquisition(status=TranscriptStatus.PENDING, language=language, source=source_kind)
     tracks, _ = youtube_caption_tracks(payload)
     if data.get("captions") == [] and not data.get("content"):
-        return CaptionResult(status=TranscriptStatus.MISSING, tracks=tracks, reason="empty_track_list")
+        return CaptionAcquisition(status=TranscriptStatus.MISSING, tracks=tracks, reason="empty_track_list")
     content = data.get("content")
     fmt = str(data.get("format") or "srt").lower()
     if isinstance(content, str) and content.strip():
-        if fmt == "json3" or content.lstrip().startswith("{"):
-            segments = parse_json3(content, language=language, source=source_kind)
-        else:
-            segments = parse_srt(content, language=language, source=source_kind)
-        if not segments:
-            return CaptionResult(status=TranscriptStatus.UNKNOWN, tracks=tracks, reason="empty_caption_body")
-        return CaptionResult(
+        return CaptionAcquisition(
             status=TranscriptStatus.READY,
             source=source_kind,
             language=language,
             tracks=tracks,
-            segments=segments,
+            payload=CaptionPayload(format=fmt, body=content),
         )
     if tracks and not content:
-        return CaptionResult(status=TranscriptStatus.PENDING, tracks=tracks, language=language)
+        return CaptionAcquisition(status=TranscriptStatus.PENDING, tracks=tracks, language=language)
     raise ContractError(
         "YouTube 字幕响应无法识别为列表或内容。",
         hint="检查 get_video_captions 的 data 字段。",

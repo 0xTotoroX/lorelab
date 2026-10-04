@@ -5,7 +5,6 @@ import json
 import re
 import time
 from datetime import UTC, datetime
-from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -13,12 +12,12 @@ from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, CaptionsAbsent, CaptionUnavailable, ContractError, SourceError
 from soota.models import (
     CapabilitySet,
-    CaptionResult,
+    CaptionAcquisition,
+    CaptionPayload,
     CatalogPage,
     MediaItem,
     RequestRecord,
     SourceRef,
-    TranscriptSegment,
     TranscriptSource,
     TranscriptStatus,
 )
@@ -165,7 +164,7 @@ class OpenCLIProvider:
             raise SourceError("OpenCLI 目录只接入 X 最近帖子快照。")
         return source
 
-    def get_captions(self, item: MediaItem) -> CaptionResult:
+    def get_captions(self, item: MediaItem) -> CaptionAcquisition:
         source = item.source
         if not capabilities_for(source).captions:
             raise SourceError("该来源尚未接入 OpenCLI 字幕。")
@@ -173,12 +172,12 @@ class OpenCLIProvider:
         artifact = "captions-" + hashlib.sha256(language.encode()).hexdigest()[:12]
         cached = self.cache.get_json(source, artifact)
         if cached and 0 <= time.time() - cached.get("timestamp", 0) < self.settings.opencli.metadata_cache_seconds:
-            result = CaptionResult.model_validate(cached["result"])
-            if result.status == TranscriptStatus.READY and result.segments:
+            result = CaptionAcquisition.model_validate(cached["result"])
+            if result.status == TranscriptStatus.READY and result.payload is not None:
                 self.records.append(
                     RequestRecord(endpoint="opencli:cache:captions", billed=False, cache_hit=True, estimated_cost_usd=0)
                 )
-                return result
+                return result.model_copy(update={"cache_hit": True})
         command = "subtitle" if source.platform == "bilibili" else "transcript"
         target = source.canonical_url if source.platform == "youtube" else source.id
         args = [target, "--lang", language]
@@ -187,21 +186,29 @@ class OpenCLIProvider:
         try:
             rows = self._run(source.platform, command, args)
         except CaptionsAbsent:
-            return CaptionResult(status=TranscriptStatus.MISSING, reason="empty_track_list")
-        result = normalize_captions(source.platform, rows)
-        # Upstream omits actual track language/kind and may choose a different language.
-        if result.status == TranscriptStatus.READY:
-            self.cache.put_json(
-                source,
-                artifact,
-                {
-                    "timestamp": time.time(),
-                    "provenance": self.provenance(),
-                    "requested_language": language,
-                    "result": result.model_dump(mode="json"),
-                },
-            )
+            return CaptionAcquisition(status=TranscriptStatus.MISSING, reason="empty_track_list")
+        result = CaptionAcquisition(
+            status=TranscriptStatus.READY if rows else TranscriptStatus.UNKNOWN,
+            source=TranscriptSource.UNKNOWN if rows else None,
+            payload=CaptionPayload(format=f"opencli-{source.platform}", body=rows) if rows else None,
+            reason=None if rows else "empty_response",
+        )
         return result
+
+    def cache_captions(self, item: MediaItem, result: CaptionAcquisition) -> None:
+        language = self.settings.default_language
+        artifact = "captions-" + hashlib.sha256(language.encode()).hexdigest()[:12]
+        self.cache.put_json(
+            item.source,
+            artifact,
+            {
+                "timestamp": time.time(),
+                "provenance": self.provenance(),
+                "requested_language": language,
+                "result": result.model_dump(mode="json"),
+            },
+            redact=False,
+        )
 
     def list_items(self, source: SourceRef, cursor: str | None = None, *, page_size: int = 100) -> CatalogPage:
         self.resolve_catalog_source(source)
@@ -272,35 +279,4 @@ def normalize_video(source: SourceRef, rows: list[dict[str, Any]]) -> MediaItem:
         published_at=parse_date(fields.get("publishDate" if source.platform == "youtube" else "publish_time")),
         duration_seconds=int(duration[1]) if duration else None,
         extras={str(key): str(value) for key, value in fields.items() if value is not None},
-    )
-
-
-def normalize_captions(platform: str, rows: list[dict[str, Any]]) -> CaptionResult:
-    if not rows:
-        return CaptionResult(status=TranscriptStatus.UNKNOWN, reason="empty_response")
-    keys = ("from", "to", "content") if platform == "bilibili" else ("start", "end", "text")
-    segments: list[TranscriptSegment] = []
-    for row in rows:
-        times = [row.get(key) for key in keys[:2]]
-        text = row.get(keys[2])
-        if any(not isinstance(value, str) or not re.fullmatch(r"\d+(?:\.\d+)?s", value) for value in times):
-            raise ContractError("OpenCLI 字幕时间戳契约不匹配。")
-        start, end = [int(Decimal(str(value)[:-1]) * 1000) for value in times]
-        if end < start or not isinstance(text, str):
-            raise ContractError("OpenCLI 字幕时间范围或正文无效。")
-        if text.strip():
-            segments.append(
-                TranscriptSegment(
-                    segment_id=f"seg-{len(segments) + 1:06d}",
-                    start_ms=start,
-                    end_ms=end,
-                    text=text.strip(),
-                    language=None,
-                    source=TranscriptSource.UNKNOWN,
-                )
-            )
-    return CaptionResult(
-        status=TranscriptStatus.READY if segments else TranscriptStatus.UNKNOWN,
-        source=TranscriptSource.UNKNOWN if segments else None,
-        segments=segments,
     )

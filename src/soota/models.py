@@ -5,7 +5,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, FiniteFloat
+from pydantic import BaseModel, Field, FiniteFloat, model_validator
 
 
 class TranscriptMode(StrEnum):
@@ -79,8 +79,8 @@ class CaptionTrack(BaseModel):
 
 class TranscriptSegment(BaseModel):
     segment_id: str
-    start_ms: int
-    end_ms: int
+    start_ms: int | None
+    end_ms: int | None
     text: str
     language: str | None = None
     source: TranscriptSource
@@ -92,6 +92,34 @@ class TranscriptDocument(BaseModel):
     language: str | None = None
     segments: list[TranscriptSegment] = Field(default_factory=list)
     cache_hit: bool = False
+
+
+class CaptionPayload(BaseModel):
+    """Acquired body plus its wire schema; no normalized subtitle segments."""
+
+    format: str
+    body: Any
+
+
+class CaptionAcquisition(BaseModel):
+    """READY means a body was acquired; conversion still has to validate it."""
+
+    status: TranscriptStatus
+    source: TranscriptSource | None = None
+    language: str | None = None
+    tracks: list[CaptionTrack] = Field(default_factory=list)
+    payload: CaptionPayload | None = None
+    cache_hit: bool = Field(default=False, exclude=True)
+    reason: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_legacy_cache(cls, value: Any) -> Any:
+        # Old caches already contain normalized data. Keep it as an explicit
+        # input schema so the conversion boundary still validates the body.
+        if isinstance(value, dict) and "payload" not in value and value.get("segments"):
+            return {**value, "payload": {"format": "soota-segments", "body": value["segments"]}}
+        return value
 
 
 class CaptionResult(BaseModel):

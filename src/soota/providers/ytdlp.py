@@ -14,11 +14,11 @@ from soota.errors import AuthBudgetError, ContractError, SourceError
 from soota.models import (
     AudioAsset,
     CapabilitySet,
-    CaptionResult,
+    CaptionAcquisition,
+    CaptionPayload,
     MediaItem,
     RequestRecord,
     SourceRef,
-    TranscriptSegment,
     TranscriptSource,
     TranscriptStatus,
 )
@@ -26,7 +26,8 @@ from soota.providers.opencli_runtime import RuntimeUnavailable
 from soota.providers.process import run_process
 from soota.routing import recognize
 from soota.storage.cache import CacheStore
-from soota.transcripts.captions import parse_srt
+
+CAPTION_FORMAT_PREFERENCE = ("json3", "vtt", "ttml", "srv3", "srv2", "srv1", "srt", "xml", "txt")
 
 
 def capabilities_for(source: SourceRef) -> CapabilitySet:
@@ -114,7 +115,13 @@ class YtDlpProvider:
             old_tracks = item.provenance.get("caption_tracks", {})
             if any(old_tracks.get(kind) for kind in ("official", "auto")):
                 item.provenance.setdefault("caption_availability", "present")
-            if (
+            legacy_filtered = (
+                include_captions
+                and item.provenance.get("caption_availability") == "present"
+                and not any(old_tracks.get(k) for k in ("official", "auto"))
+                and "caption_formats" not in item.provenance
+            )
+            if not legacy_filtered and (
                 not include_captions
                 or item.provenance.get("caption_probe_complete")
                 or (item.provenance.get("caption_availability") == "present")
@@ -140,9 +147,9 @@ class YtDlpProvider:
                 raise ValueError("source mismatch")
             # Store only selected metadata and track names, never signed URLs or headers.
             tracks: dict[str, list[str]] = {"official": [], "auto": []}
+            available: dict[str, dict[str, list[str]]] = {"official": {}, "auto": {}}
             actual_tracks = 0
             complete = include_captions and isinstance(info.get("subtitles"), dict)
-            extension = "srt" if source.platform == "bilibili" else "json3"
             for kind, key in (("official", "subtitles"), ("auto", "automatic_captions")):
                 if source.platform == "youtube" and not isinstance(info.get(key), dict):
                     complete = False
@@ -150,10 +157,12 @@ class YtDlpProvider:
                     if lang in {"live_chat", "danmaku"}:
                         continue
                     actual_tracks += 1
-                    if not any(f.get("ext") == extension for f in formats):
+                    supported = [f for f in CAPTION_FORMAT_PREFERENCE if any(v.get("ext") == f for v in formats)]
+                    if not supported:
                         continue
                     actual_kind = "auto" if source.platform == "bilibili" and lang.startswith("ai-") else kind
                     tracks[actual_kind].append(lang)
+                    available[actual_kind][lang] = supported
             item = MediaItem(
                 source=source,
                 title=info.get("title"),
@@ -164,6 +173,7 @@ class YtDlpProvider:
                     "provider": self.name,
                     "engine": "yt-dlp",
                     "caption_tracks": tracks,
+                    "caption_formats": available,
                     "caption_availability": "present" if actual_tracks else "absent" if complete else "unknown",
                     "caption_probe_complete": complete,
                 },
@@ -173,23 +183,29 @@ class YtDlpProvider:
         self.cache.put_json(source, "inspect", {"timestamp": time.time(), "result": item.model_dump(mode="json")})
         return item
 
-    def get_captions(self, item: MediaItem) -> CaptionResult:
+    def get_captions(self, item: MediaItem) -> CaptionAcquisition:
         if not capabilities_for(item.source).captions:
             raise SourceError("yt-dlp Provider 当前接入 YouTube/Bilibili 字幕。")
         cached = self._cached(item.source, "captions")
-        if cached and cached.get("status") == TranscriptStatus.READY and cached.get("segments"):
-            return CaptionResult.model_validate(cached)
+        if (
+            cached
+            and cached.get("status") == TranscriptStatus.READY
+            and (cached.get("payload") or cached.get("segments"))
+        ):
+            return CaptionAcquisition.model_validate(cached).model_copy(update={"cache_hit": True})
         tracks = item.provenance.get("caption_tracks", {})
         selected = select_track(tracks, self.settings.default_language)
         if selected is None:
             absent = item.provenance.get("caption_availability") == "absent"
-            return CaptionResult(
+            return CaptionAcquisition(
                 status=TranscriptStatus.MISSING if absent else TranscriptStatus.UNKNOWN,
                 reason="empty_track_list" if absent else "no_supported_track",
             )
         language, kind = selected
         bili = item.source.platform == "bilibili"
-        extension = "srt" if bili else "json3"
+        formats = item.provenance.get("caption_formats", {}).get(kind.value, {}).get(language)
+        extension = next((fmt for fmt in CAPTION_FORMAT_PREFERENCE if fmt in formats), None) if formats else None
+        extension = extension or ("srt" if bili else "json3")
         # Bilibili AI tracks are exposed by yt-dlp as ordinary subtitles.
         ordinary = bili or kind == TranscriptSource.OFFICIAL
         with tempfile.TemporaryDirectory(prefix="soota-captions-") as directory:
@@ -213,22 +229,21 @@ class YtDlpProvider:
             if files[0].stat().st_size > self.config.max_output_bytes:
                 raise SourceError("yt-dlp 字幕文件超过大小上限。")
             try:
-                text = files[0].read_text(encoding="utf-8")
-                if bili:
-                    segments = parse_srt(text, language=language, source=kind)
-                    if not segments or any(s.end_ms < s.start_ms for s in segments):
-                        raise ValueError("empty or invalid subtitle body")
-                    result = CaptionResult(
-                        status=TranscriptStatus.READY, language=language, source=kind, segments=segments
-                    )
-                else:
-                    result = parse_json3(json.loads(text), language, kind)
-            except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as exc:
-                raise ContractError(f"yt-dlp 字幕不是有效的 {extension.upper()}。") from exc
-        self.cache.put_json(
-            item.source, "captions", {"timestamp": time.time(), "result": result.model_dump(mode="json")}
-        )
+                text = files[0].read_text(encoding="utf-8-sig")
+            except UnicodeError as exc:
+                raise ContractError("yt-dlp 字幕不是有效 UTF-8 文本。") from exc
+            result = CaptionAcquisition(
+                status=TranscriptStatus.READY,
+                language=language,
+                source=kind,
+                payload=CaptionPayload(format=extension, body=text),
+            )
         return result
+
+    def cache_captions(self, item: MediaItem, result: CaptionAcquisition) -> None:
+        self.cache.put_json(
+            item.source, "captions", {"timestamp": time.time(), "result": result.model_dump(mode="json")}, redact=False
+        )
 
     def get_audio(self, item: MediaItem) -> AudioAsset:
         if not capabilities_for(item.source).audio:
@@ -274,28 +289,3 @@ def select_track(tracks: dict[str, Any], preferred: str) -> tuple[str, Transcrip
         return match, kind != TranscriptSource.OFFICIAL, lang
 
     return min(candidates, key=rank)
-
-
-def parse_json3(data: dict[str, Any], language: str, kind: TranscriptSource) -> CaptionResult:
-    segments: list[TranscriptSegment] = []
-    for event in data["events"]:
-        text = "".join(part.get("utf8", "") for part in event.get("segs", [])).strip()
-        if not text:
-            continue
-        start = int(event["tStartMs"])
-        end = start + int(event.get("dDurationMs", 0))
-        if start < 0 or end < start:
-            raise ValueError("invalid timestamp")
-        segments.append(
-            TranscriptSegment(
-                segment_id=f"seg-{len(segments) + 1:06d}",
-                start_ms=start,
-                end_ms=end,
-                text=text,
-                language=language,
-                source=kind,
-            )
-        )
-    if not segments:
-        raise ValueError("empty caption body")
-    return CaptionResult(status=TranscriptStatus.READY, source=kind, language=language, segments=segments)

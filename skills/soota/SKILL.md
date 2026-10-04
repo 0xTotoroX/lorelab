@@ -22,7 +22,7 @@ Read personal paths, browser selection and credentials from environment variable
 
 ## Context and optional processing
 
-`ingest` writes context.md, transcript.md and manifest.json. Context keeps cue order, wording, repetition and fragment IDs; no readability rewrite is needed. The ingest `data.content` field is a compatibility alias for context. Old bundles without context use transcript.md as input. Preserve existing reading files; stale/pending analysis state is not an instruction to regenerate them. `source_preserved` means this attempt did not replace an existing valid source; do not report it as a fresh successful acquisition. Format capabilities and preferences are documented in `docs/subtitle-formats.md`; do not assume unimplemented formats are available through Soota.
+`ingest` writes context.md, transcript.md and manifest.json. Context keeps cue order, wording, repetition and fragment IDs; no readability rewrite is needed. The ingest `data.content` field is a compatibility alias for context. Old bundles without context use transcript.md as input. Preserve existing reading files; stale/pending analysis state is not an instruction to regenerate them. `source_preserved` means this attempt did not replace an existing valid source; do not report it as a fresh successful acquisition. Providers acquire raw captions; one conversion layer handles supported formats. Format capabilities and limits are documented in `docs/subtitle-formats.md`, and the maintained workflow is in `docs/providers.md`. Missing timestamps stay unknown; do not invent times or use timed filtering on untimed text.
 
 ## Local collection rules
 

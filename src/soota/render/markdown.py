@@ -5,10 +5,10 @@ from soota.transcripts.captions import merge_paragraphs, ms_to_clock
 
 
 def evidence_link(segment: TranscriptSegment) -> str:
-    return (
-        f"[{segment.segment_id}](transcript.md#{segment.segment_id}) · "
-        f"{ms_to_clock(segment.start_ms)}-{ms_to_clock(segment.end_ms)}"
-    )
+    link = f"[{segment.segment_id}](transcript.md#{segment.segment_id})"
+    if segment.start_ms is None or segment.end_ms is None:
+        return link
+    return f"{link} · {ms_to_clock(segment.start_ms)}-{ms_to_clock(segment.end_ms)}"
 
 
 def render_context(item: MediaItem, document: TranscriptDocument) -> str:
@@ -26,7 +26,9 @@ def render_context(item: MediaItem, document: TranscriptDocument) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _timestamp(ms: int) -> str:
+def _timestamp(ms: int | None) -> str:
+    if ms is None:
+        return "未知"
     return f"{ms_to_clock(ms)}.{max(0, ms) % 1000:03d}"
 
 
@@ -45,9 +47,12 @@ def render_transcript(item: MediaItem, document: TranscriptDocument) -> str:
         lines.append("")
         return "\n".join(lines)
     for segment in document.segments:
+        timing = (
+            "无时间轴" if segment.start_ms is None else f"{_timestamp(segment.start_ms)}-{_timestamp(segment.end_ms)}"
+        )
         lines.extend(
             [
-                f"## {segment.segment_id} · {_timestamp(segment.start_ms)}-{_timestamp(segment.end_ms)}",
+                f"## {segment.segment_id} · {timing}",
                 "",
                 f'<a id="{segment.segment_id}"></a>',
                 "",

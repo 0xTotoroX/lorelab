@@ -4,12 +4,13 @@ from pathlib import Path
 import pytest
 
 from soota.errors import AuthBudgetError, ContractError, SourceError
-from soota.models import MediaItem, TranscriptMode, TranscriptSource
+from soota.models import CaptionAcquisition, CaptionPayload, MediaItem, TranscriptMode, TranscriptSource
 from soota.pipeline import estimate, ingest
-from soota.providers.opencli import OpenCLIProvider, normalize_captions
+from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_runtime import OpenCLIRuntime
 from soota.providers.process import ProcessResult
 from soota.routing import recognize
+from soota.transcripts.conversion import convert_captions
 from tests.unit.test_opencli import BILI, REAL_RUN, fail, video_rows
 
 YOUTUBE = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -196,4 +197,6 @@ def test_authorized_caption_fallback_runs_only_after_opencli_unknown(settings, m
 )
 def test_invalid_caption_segments_are_not_silently_accepted(row):
     with pytest.raises(ContractError):
-        normalize_captions("bilibili", [row])
+        convert_captions(
+            CaptionAcquisition(status="ready", payload=CaptionPayload(format="opencli-bilibili", body=[row]))
+        )

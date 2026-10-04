@@ -1,5 +1,31 @@
 # Provider 与独立运行时
 
+## 处理流程与职责
+
+这张图是单视频正文流程的职责总览；具体工具选择与失败处理见下方路由。图与下表描述当前实现，后续职责、接口或能力变化时同步更新。
+
+```mermaid
+flowchart TD
+    A[输入链接与任务] --> B[内容获取]
+    B --> C[字幕处理]
+    C --> D[保存 context]
+    D -.要求分析或总结.-> E[Agent 分析]
+    D -.要求详细文章阅读.-> F[文章整理]
+```
+
+| 黑盒 | 职责 | 代码入口 |
+| --- | --- | --- |
+| 内容获取 | 选择工具、轨道与获取格式，取得字幕正文；确认无字幕时取得音频并运行本地转写 | `providers/`、`transcripts/asr.py`、`transcripts/resolver.py` |
+| 字幕处理 | 按实际格式解析为统一片段，保留文字、输入顺序、重复与换行；不做语义处理 | `transcripts/conversion.py`、`transcripts/formats/` |
+| 保存 context | 保存 Agent 正文、字幕时间轴、来源与处理记录；保护已有文章 | `render/bundle.py`、`render/markdown.py` |
+| Agent 分析／文章整理 | 按明确请求使用 context；详细文章是可选产物 | `skills/soota/SKILL.md`、`skills/soota/references/analysis.md` |
+
+`pipeline.py` 和 `transcripts/resolver.py` 负责流程编排；`transcripts/acquisition.py` 串联获取、转换与验证后的缓存。Provider 返回 `CaptionAcquisition`：获取状态、轨道信息以及带格式标识的原始 `CaptionPayload`，不生成 `TranscriptSegment`。转换层不调用 Provider、不联网、不选取获取优先级；格式相同的正文共享同一解析器。
+
+获取成功只表示拿到了正文。转换成功且存在有效片段后，才保存可复用的字幕缓存并作为可用字幕继续处理。旧片段缓存以显式 `soota-segments` 输入经过同一转换入口；读取缓存不延长其原始有效期。正文缓存不采用日志用的 URL 脱敏，避免破坏字幕里的文字；请求记录仍按原规则脱敏，不缓存访问凭据或签名字幕下载地址。
+
+格式能力、解析限制和新增格式的位置以 [字幕格式与 context](subtitle-formats.md#统一转换层) 为准；获取工具顺序与格式获取偏好都属于内容获取黑盒。
+
 Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp、OpenCLI、`yt-dlp`、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按来源策略选择；当前顺序为 OpenCLI → yt-dlp → 经授权的 TikHub，opencli-mcp 默认停用。业务入口和按需发现方式见 [功能入口与费用策略](features.md)。
 
 ## 当前接入范围
@@ -24,7 +50,7 @@ Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp
 
 B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会报错停止，不冒充“没有字幕”，也不触发付费兜底。
 
-字幕优先匹配请求语言，其次同语系；同一语言匹配级别优先非自动轨道。没有匹配语言时选择其他现有轨道，输出记录实际语言和轨道类型。不保存签名字幕 URL、请求头或 Cookie；临时 JSON3（YouTube）或 SRT（B 站）下载后转换为标准内容包并删除。缓存按程序路径、浏览器选择和请求语言的散列隔离，保留 300 秒；同一 profile 切换账号后需使用新的缓存目录。
+字幕优先匹配请求语言，其次同语系；同一语言匹配级别优先非自动轨道。没有匹配语言时选择其他现有轨道，输出记录实际语言和轨道类型。不保存签名字幕 URL、请求头或 Cookie；根据所选轨道实际提供的格式，依次选择 JSON3、VTT、TTML、SRV3、SRV2、SRV1、SRT、XML、TXT 中的一份；转换不遍历其他格式。B 站通常提供 SRT。临时文件读取为原始正文后删除，正文交给统一转换层。缓存按程序路径、浏览器选择和请求语言的散列隔离，保留 300 秒；同一 profile 切换账号后需使用新的缓存目录。
 
 `SOOTA_YTDLP_BINARY` 指定程序，默认 PATH 中的 `yt-dlp`；`SOOTA_YTDLP_COOKIES_BROWSER` 使用 yt-dlp 的浏览器/profile 语法，默认 `chrome`，空字符串关闭 Cookie 读取。若提示 B 站字幕需要登录，先核对实际读取的 Chrome profile；`chrome` 自动选择的 profile 不一定是当前登录 B 站的 profile。个人选择仅从环境变量注入。Provider 适配随 Soota 更新；外部 yt-dlp 由其原安装工具维护，Downie 由应用自身更新。`updates apply` 不升级这两者。
 
@@ -49,7 +75,7 @@ B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会�
 ```mermaid
 flowchart TD
     A[视频链接] --> O[OpenCLI 字幕]
-    O -->|取得字幕| R[保存 context 与源字幕]
+    O -->|取得字幕| R[统一字幕转换]
     O -->|确认无字幕| D[选择音频来源]
     O -->|未知或允许兜底的失败| Y[yt-dlp 字幕]
     Y -->|取得字幕| R
@@ -67,6 +93,7 @@ flowchart TD
     C --> L
     K --> L
     L --> R
+    R --> S[保存 context 与源字幕]
 ```
 
 图中允许切换的错误不包括登录、限流、权限、超时或格式契约异常。MCP 默认停用。开启 `--prefer-youtube` 时，先按已有依据选择跨平台对照视频；不同平台不共享“无字幕”的判断。

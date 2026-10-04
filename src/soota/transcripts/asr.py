@@ -9,14 +9,13 @@ from typing import Protocol
 
 from soota.config import AsrConfig
 from soota.errors import TranscriptError
-from soota.models import TranscriptSegment, TranscriptSource
-from soota.transcripts.captions import assign_ids
+from soota.models import CaptionPayload, TranscriptSegment
 
 
 class AsrEngine(Protocol):
     name: str
 
-    def transcribe(self, audio: Path, *, language: str | None) -> list[TranscriptSegment]: ...
+    def transcribe(self, audio: Path, *, language: str | None) -> CaptionPayload | list[TranscriptSegment]: ...
 
 
 class WhisperCliEngine:
@@ -25,7 +24,7 @@ class WhisperCliEngine:
     def __init__(self, config: AsrConfig) -> None:
         self.config = config
 
-    def transcribe(self, audio: Path, *, language: str | None) -> list[TranscriptSegment]:
+    def transcribe(self, audio: Path, *, language: str | None) -> CaptionPayload:
         binary = shutil.which(self.config.whisper_bin) or self.config.whisper_bin
         if not shutil.which(binary) and not Path(binary).exists():
             raise TranscriptError(
@@ -61,7 +60,7 @@ class WhisperCliEngine:
                 raise TranscriptError("whisper 没有写出 JSON。")
             json_path = matches[0]
         payload = json.loads(json_path.read_text(encoding="utf-8"))
-        return _segments_from_whisper(payload, language)
+        return CaptionPayload(format="whisper-json", body=payload)
 
 
 class FasterWhisperEngine:
@@ -70,7 +69,7 @@ class FasterWhisperEngine:
     def __init__(self, config: AsrConfig) -> None:
         self.config = config
 
-    def transcribe(self, audio: Path, *, language: str | None) -> list[TranscriptSegment]:
+    def transcribe(self, audio: Path, *, language: str | None) -> CaptionPayload:
         try:
             from faster_whisper import WhisperModel
         except ImportError as exc:
@@ -80,24 +79,10 @@ class FasterWhisperEngine:
             ) from exc
         model = WhisperModel(self.config.model, device=self.config.device)
         segments_iter, _info = model.transcribe(str(audio), language=_whisper_lang(language) if language else None)
-        raw: list[TranscriptSegment] = []
-        for item in segments_iter:
-            text = (item.text or "").strip()
-            if not text:
-                continue
-            raw.append(
-                TranscriptSegment(
-                    segment_id="seg-tmp",
-                    start_ms=int(float(item.start) * 1000),
-                    end_ms=int(float(item.end) * 1000),
-                    text=text,
-                    language=language,
-                    source=TranscriptSource.ASR,
-                )
-            )
-        if not raw:
-            raise TranscriptError("faster-whisper 没有识别到语音。")
-        return assign_ids(raw)
+        return CaptionPayload(
+            format="whisper-json",
+            body={"segments": [{"start": item.start, "end": item.end, "text": item.text} for item in segments_iter]},
+        )
 
 
 class MlxWhisperEngine:
@@ -106,7 +91,7 @@ class MlxWhisperEngine:
     def __init__(self, config: AsrConfig) -> None:
         self.config = config
 
-    def transcribe(self, audio: Path, *, language: str | None) -> list[TranscriptSegment]:
+    def transcribe(self, audio: Path, *, language: str | None) -> CaptionPayload:
         binary = shutil.which(self.config.mlx_whisper_bin)
         if not binary:
             raise TranscriptError("未找到 mlx_whisper CLI。", hint="安装 mlx-whisper，并配置 asr.mlx_whisper_bin。")
@@ -148,7 +133,7 @@ class MlxWhisperEngine:
                 payload = json.loads(output.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 raise TranscriptError("MLX Whisper 没有生成有效 JSON。") from exc
-            return _segments_from_whisper(payload, language)
+            return CaptionPayload(format="whisper-json", body=payload)
 
 
 def resolve_engine(config: AsrConfig) -> AsrEngine:
@@ -176,31 +161,3 @@ def _whisper_lang(language: str) -> str:
     if lowered.startswith("en"):
         return "en"
     return lowered.split("-")[0]
-
-
-def _segments_from_whisper(payload: dict[str, object], language: str | None) -> list[TranscriptSegment]:
-    items = payload.get("segments")
-    if not isinstance(items, list):
-        raise TranscriptError("whisper JSON 缺少 segments。")
-    raw: list[TranscriptSegment] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("text") or "").strip()
-        if not text:
-            continue
-        start = float(item.get("start") or 0)
-        end = float(item.get("end") or start)
-        raw.append(
-            TranscriptSegment(
-                segment_id="seg-tmp",
-                start_ms=int(start * 1000),
-                end_ms=int(end * 1000),
-                text=text,
-                language=language,
-                source=TranscriptSource.ASR,
-            )
-        )
-    if not raw:
-        raise TranscriptError("whisper 结果没有文本。")
-    return assign_ids(raw)

@@ -3,14 +3,24 @@ from pathlib import Path
 import pytest
 
 from soota.errors import AuthBudgetError, CaptionUnavailable
-from soota.models import AudioAsset, CaptionResult, MediaItem, RequestRecord, TranscriptMode, TranscriptStatus
+from soota.models import (
+    AudioAsset,
+    CaptionAcquisition,
+    CaptionPayload,
+    CaptionResult,
+    MediaItem,
+    RequestRecord,
+    TranscriptMode,
+    TranscriptStatus,
+)
 from soota.pipeline import ingest
-from soota.providers.opencli import OpenCLIProvider, normalize_captions
+from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_runtime import OpenCLIRuntime
 from soota.providers.process import ProcessResult
 from soota.providers.tikhub.normalize import youtube_caption_content
 from soota.providers.ytdlp import YtDlpProvider
 from soota.routing import recognize
+from soota.transcripts.conversion import convert_captions
 from tests.unit.test_opencli import REAL_RUN
 from tests.unit.test_resolver import FakeAsr
 from tests.unit.test_ytdlp_provider import INFO, URL, stub_process
@@ -131,7 +141,12 @@ def test_opencli_only_trusts_specific_empty_track_signal(settings, monkeypatch, 
     else:
         with pytest.raises(CaptionUnavailable):
             provider.get_captions(item)
-    assert normalize_captions(platform, []).status == TranscriptStatus.UNKNOWN
+    assert (
+        convert_captions(
+            CaptionAcquisition(status="ready", payload=CaptionPayload(format=f"opencli-{platform}", body=[]))
+        ).status
+        == TranscriptStatus.UNKNOWN
+    )
 
 
 @pytest.mark.parametrize(
@@ -139,7 +154,7 @@ def test_opencli_only_trusts_specific_empty_track_signal(settings, monkeypatch, 
     [
         ({**INFO, "subtitles": {}, "automatic_captions": {}}, "missing"),
         ({k: v for k, v in INFO.items() if k not in {"subtitles", "automatic_captions"}}, "unknown"),
-        ({**INFO, "subtitles": {"zh": [{"ext": "vtt"}]}, "automatic_captions": {}}, "unknown"),
+        ({**INFO, "subtitles": {"zh": [{"ext": "unsupported-format"}]}, "automatic_captions": {}}, "unknown"),
     ],
 )
 def test_ytdlp_absent_is_not_missing_metadata_or_unsupported_format(settings, monkeypatch, info, status):

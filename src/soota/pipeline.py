@@ -45,6 +45,7 @@ from soota.storage.atomic import atomic_write
 from soota.storage.cache import CacheStore
 from soota.storage.jobs import JobStore
 from soota.storage.ledger import CostLedger
+from soota.transcripts.acquisition import acquire_captions
 from soota.transcripts.asr import AsrEngine, resolve_engine
 from soota.transcripts.promotions import filter_promotions, parse_ranges
 from soota.transcripts.resolver import TranscriptResolver, resumes_audio
@@ -567,7 +568,7 @@ def ingest_free(
                     candidate_item, captions, notes = youtube_counterpart(client, candidate_item, counterpart_fallback)
                     item = candidate_item
                     warnings.extend(notes)
-                captions = captions or client.get_captions(candidate_item)
+                captions = captions or acquire_captions(client, candidate_item)
                 document = TranscriptDocument(
                     status=captions.status,
                     source=captions.source,

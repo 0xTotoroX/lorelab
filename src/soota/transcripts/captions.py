@@ -1,63 +1,61 @@
 from __future__ import annotations
 
-import json
 import re
 from typing import Any
 
 from soota.errors import ContractError, InputError
-from soota.models import TranscriptDocument, TranscriptManifest, TranscriptSegment, TranscriptSource, TranscriptStatus
-
-_SRT_BLOCK = re.compile(
-    r"(\d+)\s*\n(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*\n(.*?)(?=\n\n|\Z)",
-    re.S,
+from soota.models import (
+    CaptionPayload,
+    TranscriptDocument,
+    TranscriptManifest,
+    TranscriptSegment,
+    TranscriptSource,
+    TranscriptStatus,
 )
-_CLOCK = re.compile(r"(\d{2}):(\d{2}):(\d{2})[,.](\d{3})")
+from soota.transcripts.conversion import parse_payload
+
+_CLOCK = re.compile(r"(\d{2,}):(\d{2}):(\d{2})[,.](\d{3})")
 
 
 def parse_transcript_markdown(text: str, manifest: TranscriptManifest) -> TranscriptDocument:
-    segments: list[TranscriptSegment] = []
-    current_id: str | None = None
-    current_time = "00:00:00-00:00:00"
-    buf: list[str] = []
-
-    def append_segment() -> None:
-        if current_id is None:
-            return
-        try:
-            left, right = current_time.split("-", 1)
-            stamps = [stamp.strip() for stamp in (left, right)]
-            stamps = [stamp + ".000" if len(stamp) == 8 else stamp for stamp in stamps]
-            start, end = clock_to_ms(stamps[0]), clock_to_ms(stamps[1])
-        except (ValueError, ContractError) as exc:
-            raise InputError("源字幕时间轴无效，未处理正文。") from exc
-        segments.append(
-            TranscriptSegment(
-                segment_id=current_id,
-                start_ms=start,
-                end_ms=end,
-                text="\n".join(buf).strip(),
-                language=manifest.language,
-                source=manifest.source or TranscriptSource.UNKNOWN,
-            )
-        )
-
-    for line in text.splitlines():
-        if line.startswith("## seg-"):
-            append_segment()
-            header = line[3:].strip()
-            current_id = header.split("·")[0].strip()
-            current_time = header.split("·", 1)[1].strip() if "·" in header else "00:00:00-00:00:00"
-            buf = []
-        elif line.startswith("<a id="):
-            continue
-        elif current_id:
-            buf.append(line)
-    append_segment()
+    # Generated files frame each verbatim body with an anchor and fixed blank
+    # lines. Remove that framing only, including for legacy second timestamps.
+    pattern = re.compile(r'^## (seg-[^\s]+) · ([^\n]+)\n\n<a id="\1"></a>\n\n', re.M)
+    matches = list(pattern.finditer(text))
+    segments = []
+    for index, match in enumerate(matches):
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        body = text[match.end() : next_start]
+        body = body.removesuffix("\n\n" if index + 1 < len(matches) else "\n")
+        segments.append(_saved_segment(match[1], match[2], body, manifest))
+    if not matches:
+        # Accept older/user-authored source files without generated anchors.
+        headers = list(re.finditer(r"^## (seg-[^\s]+) · ([^\n]+)\n", text, re.M))
+        for index, match in enumerate(headers):
+            end = headers[index + 1].start() if index + 1 < len(headers) else len(text)
+            segments.append(_saved_segment(match[1], match[2], text[match.end() : end].strip(), manifest))
     return TranscriptDocument(
-        status=manifest.status,
-        source=manifest.source,
+        status=manifest.status, source=manifest.source, language=manifest.language, segments=segments
+    )
+
+
+def _saved_segment(ident: str, timing: str, body: str, manifest: TranscriptManifest) -> TranscriptSegment:
+    try:
+        stamps = timing.split("-", 1) if timing != "无时间轴" else ["未知", "未知"]
+        if len(stamps) != 2:
+            raise ValueError("invalid time pair")
+        stamps = [stamp.strip() for stamp in stamps]
+        stamps = [stamp + ".000" if re.fullmatch(r"\d{2,}:\d{2}:\d{2}", stamp) else stamp for stamp in stamps]
+        start, end = [None if stamp == "未知" else clock_to_ms(stamp) for stamp in stamps]
+    except (ValueError, ContractError) as exc:
+        raise InputError("源字幕时间轴无效，未处理正文。") from exc
+    return TranscriptSegment(
+        segment_id=ident,
+        start_ms=start,
+        end_ms=end,
+        text=body,
         language=manifest.language,
-        segments=segments,
+        source=manifest.source or TranscriptSource.UNKNOWN,
     )
 
 
@@ -78,111 +76,22 @@ def ms_to_clock(ms: int) -> str:
 
 
 def assign_ids(segments: list[TranscriptSegment]) -> list[TranscriptSegment]:
-    ordered = sorted(segments, key=lambda s: (s.start_ms, s.end_ms, s.text))
     out: list[TranscriptSegment] = []
-    for index, segment in enumerate(ordered, start=1):
+    for index, segment in enumerate(segments, start=1):
         out.append(segment.model_copy(update={"segment_id": f"seg-{index:06d}"}))
     return out
 
 
-def parse_srt(
-    text: str,
-    *,
-    language: str | None,
-    source: TranscriptSource,
-) -> list[TranscriptSegment]:
-    blocks = _SRT_BLOCK.findall(text.replace("\r\n", "\n"))
-    if not blocks and text.strip():
-        raise ContractError("SRT 字幕无法按时间轴解析。", hint="上游字幕格式可能已变化。")
-    segments: list[TranscriptSegment] = []
-    for _, start, end, body in blocks:
-        content = re.sub(r"<[^>]+>", "", body).replace("\n", " ").strip()
-        if not content:
-            continue
-        segments.append(
-            TranscriptSegment(
-                segment_id="seg-tmp",
-                start_ms=clock_to_ms(start),
-                end_ms=clock_to_ms(end),
-                text=content,
-                language=language,
-                source=source,
-            )
-        )
-    return assign_ids(segments)
+def parse_srt(text: str, *, language: str | None, source: TranscriptSource) -> list[TranscriptSegment]:
+    return parse_payload(CaptionPayload(format="srt", body=text), language=language, source=source)
 
 
-def parse_json3(
-    payload: Any,
-    *,
-    language: str | None,
-    source: TranscriptSource,
-) -> list[TranscriptSegment]:
-    data = json.loads(payload) if isinstance(payload, str) else payload
-    if not isinstance(data, dict):
-        raise ContractError("json3 字幕不是对象。")
-    events = data.get("events")
-    if not isinstance(events, list):
-        raise ContractError("json3 字幕缺少 events。")
-    segments: list[TranscriptSegment] = []
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        segs = event.get("segs") or []
-        text = "".join(str(part.get("utf8", "")) for part in segs if isinstance(part, dict)).strip()
-        if not text or text == "\n":
-            continue
-        start = int(event.get("tStartMs") or 0)
-        duration = int(event.get("dDurationMs") or 0)
-        segments.append(
-            TranscriptSegment(
-                segment_id="seg-tmp",
-                start_ms=start,
-                end_ms=start + max(duration, 1),
-                text=text.replace("\n", " "),
-                language=language,
-                source=source,
-            )
-        )
-    if not segments:
-        raise ContractError("json3 字幕没有可用文本片段。")
-    return assign_ids(segments)
+def parse_json3(payload: Any, *, language: str | None, source: TranscriptSource) -> list[TranscriptSegment]:
+    return parse_payload(CaptionPayload(format="json3", body=payload), language=language, source=source)
 
 
-def parse_bilibili_body(
-    payload: Any,
-    *,
-    language: str | None,
-    source: TranscriptSource,
-) -> list[TranscriptSegment]:
-    data = json.loads(payload) if isinstance(payload, str) else payload
-    if not isinstance(data, dict):
-        raise ContractError("Bilibili 字幕 JSON 不是对象。")
-    body = data.get("body")
-    if not isinstance(body, list):
-        raise ContractError("Bilibili 字幕缺少 body。", hint="不要把弹幕或评论当成字幕。")
-    segments: list[TranscriptSegment] = []
-    for item in body:
-        if not isinstance(item, dict):
-            continue
-        text = str(item.get("content") or "").strip()
-        if not text:
-            continue
-        start = float(item.get("from") or 0) * 1000
-        end = float(item.get("to") or 0) * 1000
-        segments.append(
-            TranscriptSegment(
-                segment_id="seg-tmp",
-                start_ms=int(start),
-                end_ms=int(end if end > start else start + 1),
-                text=text,
-                language=language,
-                source=source,
-            )
-        )
-    if not segments:
-        return []
-    return assign_ids(segments)
+def parse_bilibili_body(payload: Any, *, language: str | None, source: TranscriptSource) -> list[TranscriptSegment]:
+    return parse_payload(CaptionPayload(format="bilibili-json", body=payload), language=language, source=source)
 
 
 def empty_caption_result() -> dict[str, Any]:
@@ -226,7 +135,7 @@ def merge_paragraphs(
         piece = segment.text.strip()
         if not piece:
             continue
-        gap = 0 if prev_end is None else segment.start_ms - prev_end
+        gap = 0 if prev_end is None or segment.start_ms is None else segment.start_ms - prev_end
         current = _join_parts(buf) if buf else ""
         should_break = bool(buf) and (gap >= gap_ms or current.endswith(sentence_end) or len(current) >= max_chars)
         if should_break:

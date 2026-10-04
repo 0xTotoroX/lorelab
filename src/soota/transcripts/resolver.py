@@ -7,6 +7,7 @@ from pathlib import Path
 from soota.config import SootaSettings
 from soota.errors import TranscriptError
 from soota.models import (
+    CaptionPayload,
     CaptionResult,
     MediaItem,
     RequestRecord,
@@ -18,7 +19,9 @@ from soota.models import (
 from soota.providers.base import AudioProvider, CaptionProvider
 from soota.providers.ytdlp import YtDlpProvider
 from soota.storage.cache import CacheStore
+from soota.transcripts.acquisition import acquire_captions
 from soota.transcripts.asr import AsrEngine, resolve_engine
+from soota.transcripts.conversion import parse_payload
 from soota.transcripts.download import ensure_audio
 
 
@@ -51,7 +54,7 @@ class TranscriptResolver:
         cached = self.cache.get_json(item.source, "transcript")
         if cached and resumes_audio(cached, mode, self.audio_provider.name):
             document = self.run_asr(item)
-            self.cache.put_json(item.source, "transcript", document.model_dump(mode="json"))
+            self.cache.put_json(item.source, "transcript", document.model_dump(mode="json"), redact=False)
             return document
         if (
             cached
@@ -71,7 +74,7 @@ class TranscriptResolver:
         captions: CaptionResult | None = None
         if mode in {TranscriptMode.AUTO, TranscriptMode.CAPTIONS_ONLY}:
             assert self.provider is not None
-            captions = self.provider.get_captions(item)
+            captions = acquire_captions(self.provider, item)
             if captions.status is TranscriptStatus.READY and captions.segments:
                 document = TranscriptDocument(
                     status=TranscriptStatus.READY,
@@ -79,7 +82,7 @@ class TranscriptResolver:
                     language=captions.language,
                     segments=captions.segments,
                 )
-                self.cache.put_json(item.source, "transcript", document.model_dump(mode="json"))
+                self.cache.put_json(item.source, "transcript", document.model_dump(mode="json"), redact=False)
                 return document
             if mode is TranscriptMode.CAPTIONS_ONLY or captions.status != TranscriptStatus.MISSING:
                 return TranscriptDocument(status=captions.status, language=captions.language)
@@ -97,7 +100,7 @@ class TranscriptResolver:
 
         if mode is TranscriptMode.ASR or mode is TranscriptMode.AUTO:
             document = self.run_asr(item)
-            self.cache.put_json(item.source, "transcript", document.model_dump(mode="json"))
+            self.cache.put_json(item.source, "transcript", document.model_dump(mode="json"), redact=False)
             return document
 
         raise TranscriptError("未知字幕模式。")
@@ -124,7 +127,15 @@ class TranscriptResolver:
         audio = self.audio_provider.get_audio(item)
         item.provenance["audio_provider"] = audio.provider or self.audio_provider.name
         media = ensure_audio(Path(audio.path))
-        segments = engine.transcribe(media, language=item.language or self.settings.default_language)
+        language = item.language or self.settings.default_language
+        payload = engine.transcribe(media, language=language)
+        if isinstance(payload, list):
+            # Compatibility for injected ASR engines implementing the older API.
+            payload = CaptionPayload(format="soota-segments", body=[s.model_dump() for s in payload])
+        segments = parse_payload(payload, language=language, source=TranscriptSource.ASR)
+        item.provenance["caption_format"] = payload.format
+        if not segments:
+            raise TranscriptError("本地转写没有识别到文本。")
         self.audio_provider.records.append(RequestRecord(endpoint=f"local:asr/{engine.name}", billed=False))
         document = TranscriptDocument(
             status=TranscriptStatus.READY,
@@ -136,5 +147,6 @@ class TranscriptResolver:
             item.source,
             "transcript",
             {**document.model_dump(mode="json"), "audio_provider": item.provenance["audio_provider"]},
+            redact=False,
         )
         return document

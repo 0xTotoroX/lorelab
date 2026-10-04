@@ -7,6 +7,7 @@ from soota.config import AsrConfig, load_settings
 from soota.errors import TranscriptError
 from soota.models import TranscriptSource
 from soota.transcripts.asr import MlxWhisperEngine, WhisperCliEngine, resolve_engine
+from soota.transcripts.conversion import parse_payload
 
 
 def cli_fixture(tmp_path: Path, body: str) -> Path:
@@ -32,7 +33,9 @@ def test_mlx_cli_contract_and_temporary_output_cleanup(tmp_path) -> None:
     )
     engine = resolve_engine(AsrConfig(engine="mlx-whisper", mlx_whisper_bin=str(binary)))
     assert isinstance(engine, MlxWhisperEngine)
-    segments = engine.transcribe(tmp_path / "audio.wav", language="zh-CN")
+    segments = parse_payload(
+        engine.transcribe(tmp_path / "audio.wav", language="zh-CN"), language="zh-CN", source=TranscriptSource.ASR
+    )
     assert [(s.segment_id, s.start_ms, s.end_ms, s.text, s.source) for s in segments] == [
         ("seg-000001", 125, 1250, "中文转写", TranscriptSource.ASR)
     ]
