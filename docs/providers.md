@@ -2,23 +2,32 @@
 
 ## 处理流程与职责
 
-这张图是单视频正文流程的职责总览；具体工具选择与失败处理见下方路由。图与下表描述当前实现，后续职责、接口或能力变化时同步更新。
+这张图按职责展示统一内容任务。每个框包含内部的工具、格式和失败处理；只有请求的目标需要某一步时才执行它。默认文字采集到 context 结束，媒体目标直接交付文件。
 
 ```mermaid
 flowchart TD
-    A[输入链接与任务] --> B[内容获取]
-    B --> C[字幕处理]
-    C --> D[保存 context]
-    D -.要求分析或总结.-> E[Agent 分析]
-    D -.要求详细文章阅读.-> F[文章整理]
+    A[输入与目标] --> B[任务编排]
+    B --> C[内容获取]
+    C --> D[内容处理]
+    D --> E[校验与保存产物]
+    E -.明确要求分析或文章.-> F[Agent 分析与整理]
+    F --> E
+    E -.指定目的地.-> G[导出]
 ```
 
 | 黑盒 | 职责 | 代码入口 |
 | --- | --- | --- |
-| 内容获取 | 选择工具、轨道与获取格式，取得字幕正文；确认无字幕时取得音频并运行本地转写 | `providers/`、`transcripts/asr.py`、`transcripts/resolver.py` |
-| 字幕处理 | 按实际格式解析为统一片段，保留文字、输入顺序、重复与换行；不做语义处理 | `transcripts/conversion.py`、`transcripts/formats/` |
-| 保存 context | 保存 Agent 正文、字幕时间轴、来源与处理记录；保护已有文章 | `render/bundle.py`、`render/markdown.py` |
-| Agent 分析／文章整理 | 按明确请求使用 context；详细文章是可选产物 | `skills/soota/SKILL.md`、`skills/soota/references/analysis.md` |
+| 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py` |
+| 任务编排 | 展开集合，组合步骤，复用产物，维护逐项进度及全批费用预留 | `tasks/runner.py`、`tasks/enumeration.py`、`storage/task_budget.py` |
+| 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |
+| 内容处理 | 字幕格式统一、本地转写、正文结构转换及媒体处理；默认不做语义改写 | `transcripts/`、`content/`、`media/` |
+| 校验与保存产物 | 校验文件与媒体，登记 v2 产物、来源及校验值，保护既有源文和文章 | `media/probe.py`、`artifacts/bundle.py` |
+| Agent 分析与整理 | 按明确目标读取 context；CLI 接收结果并检查正文指纹与证据 | `skills/soota/`、`tasks/outputs.py`、`artifacts/analysis.py` |
+| 导出 | 写入指定目录，维持相对附件链接并检查人工修改冲突 | `artifacts/export.py` |
+
+`docs/tasks.md` 是统一输入、产物目标、任务恢复和分析提交的操作契约。职责、阶段顺序或能力改变时，同步更新本图、受影响的表和对应 Skill；不以未来目标代替当前实现。
+
+### 字幕边界
 
 `pipeline.py` 和 `transcripts/resolver.py` 负责流程编排；`transcripts/acquisition.py` 串联获取、转换与验证后的缓存。Provider 返回 `CaptionAcquisition`：获取状态、轨道信息以及带格式标识的原始 `CaptionPayload`，不生成 `TranscriptSegment`。转换层不调用 Provider、不联网、不选取获取优先级；格式相同的正文共享同一解析器。
 
@@ -26,7 +35,7 @@ flowchart TD
 
 格式能力、解析限制和新增格式的位置以 [字幕格式与 context](subtitle-formats.md#统一转换层) 为准；获取工具顺序与格式获取偏好都属于内容获取黑盒。
 
-Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp、OpenCLI、`yt-dlp`、TikHub 是独立 Provider；Provider 之间不互相调用。路由层先匹配能力，再按来源策略选择；当前顺序为 OpenCLI → yt-dlp → 经授权的 TikHub，opencli-mcp 默认停用。业务入口和按需发现方式见 [功能入口与费用策略](features.md)。
+字幕路径按能力使用 OpenCLI → yt-dlp → 经费用授权的 TikHub；媒体、正文和原生数据分别使用对应能力，不能将同一个排序套用于所有步骤。MCP 默认停用。显式来源严格保留，获取失败不会自动重新从其他 Provider 获取。业务入口见 [功能入口与费用策略](features.md)，组合任务和能力发现见 [统一内容任务](tasks.md)。
 
 ## 当前接入范围
 
@@ -37,16 +46,20 @@ Soota 核心负责识别、能力选择、预算、任务和输出。opencli-mcp
 | X 用户最近帖子 | 最多 200 条快照，完整性未知 | 统一目录解析尚未接入，可用 `api call` 获取原始响应 |
 | YouTube 频道 / Bilibili UP 主目录 | 未接入可续跑分页 | 保留分页、预算、检查点与续跑 |
 | 音频、本地 ASR 流程 | 音频独立选择 yt-dlp（默认）或 Downie（显式） | 显式音频来源；受费用策略控制 |
+| 网页与文章正文 | 已绑定网页、微信、知乎、X 文章及小红书正文结果；依赖当前运行时命令 | 原生 API 数据，未通用映射为文章正文 |
+| 独立媒体产物 | 已绑定小红书、X、Bilibili 原生下载结果，由共享服务验证 | 统一音频能力；视频分轨需显式媒体描述，不能猜测返回字段 |
 
 同一 Provider 内先查缓存。显式 `--provider` 严格选择指定来源，除非同时指定已支持的 fallback。字幕跨平台选择及推广过滤见 [字幕选择与过滤](subtitle-selection.md)。
 
-`api list/show/call` 始终是显式 TikHub 接口工具，不会转成浏览器调用。OpenCLI 自带的其他命令不等于 Soota 已接入它们。
+共享 `media/` 还接收本地文件、直接媒体地址、HLS/DASH、分离音视频地址及 yt-dlp 页面提取结果，完成文件获取和验证。下载器能读取某个媒体，不等于该平台已经拥有标准字幕、正文或集合解析。
+
+`capabilities` 从当前运行时清单和受控注册表区分 `discovered`、`native`、`standard`、`blocked`；不会自动标记真实站点 `verified`。`api list/show/call` 仍是显式 TikHub 接口工具。OpenCLI 自带命令只有经过结果绑定后才进入对应的标准正文、媒体或列表流程。
 
 ### yt-dlp Provider
 
 使用 `--provider yt-dlp` 显式选择。旧 `--provider soota`、旧默认来源配置和未过期的 YouTube 缓存仍可读取；新输出统一标记 `yt-dlp`。Soota 程序名和 `SOOTA_YTDLP_*` 环境变量不变。
 
-支持 YouTube/Bilibili 单视频元数据和字幕，通过外部 yt-dlp 执行。`inspect`、`ingest`、`youtube.video.detail` 和 `bilibili.video.detail` 按能力使用它；同时支持转写用的音频下载；没有接入目录或其他平台。B 站当前使用默认分 P。`official` 表示网站的非自动字幕轨道，不保证作者上传前未使用 AI。
+支持 YouTube/Bilibili 单视频元数据和字幕，通过外部 yt-dlp 执行。`inspect`、`ingest`、`youtube.video.detail` 和 `bilibili.video.detail` 按能力使用它；同时支持转写用的音频下载。统一任务的媒体页面提取和 YouTube 播放列表枚举另外复用 yt-dlp；这些入口不扩张该字幕适配器的双平台契约。B 站当前使用默认分 P。`official` 表示网站的非自动字幕轨道，不保证作者上传前未使用 AI。
 
 B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会报错停止，不冒充“没有字幕”，也不触发付费兜底。
 
@@ -87,7 +100,6 @@ flowchart TD
     D --> U[yt-dlp：默认]
     D --> W[Downie：明确选择]
     D --> K[TikHub 音频：明确选择并检查费用]
-    K -.既有下载失败兜底.-> U
     U --> L[本地 Whisper 转写]
     W --> C[完成标记与音轨校验]
     C --> L
@@ -98,9 +110,9 @@ flowchart TD
 
 图中允许切换的错误不包括登录、限流、权限、超时或格式契约异常。MCP 默认停用。开启 `--prefer-youtube` 时，先按已有依据选择跨平台对照视频；不同平台不共享“无字幕”的判断。
 
-`--audio-provider` 独立选择转写用的音频来源：默认 `yt-dlp`；`downie` 只在明确选择或用户配置时使用；`tikhub` 仍经过付费授权。显式音频来源之间没有新增自动切换；TikHub 原有的媒体下载失败后 yt-dlp 回退保留。结果中 `audio_provider_requested` 是所选来源，`audio_provider` 是实际取得音频的来源，旧音频缓存不能核实时保留 `unknown`。
+`--audio-provider` 独立选择转写用的音频来源：默认 `yt-dlp`；`downie` 只在明确选择或用户配置时使用；`tikhub` 仍经过付费授权。显式音频来源获取失败时停止并保留错误，不自动改用另一来源。结果中 `audio_provider_requested` 是所选来源，`audio_provider` 是实际取得音频的来源，旧音频缓存不能核实时保留 `unknown`。
 
-所有付费请求共用本次 `--max-cost` 上限，后续音频阶段扣除已发生的元数据费用。`--max-cost 0` 禁止计费接口，但允许免费音频下载和本地计算。`estimate` 在选择 TikHub 音频时单列确认无字幕后才触发的 `conditional_audio` 费用，不把整次任务说成零费用。单价为受控快照中的预估，不冒充实际账单；`ask` 每次确认，`auto` 按已配置的余额门槛授权。
+单视频各阶段共用本次 `--max-cost` 上限；统一任务还将集合枚举与所有条目纳入同一个持久化预留账本，后续请求扣除已经预留的额度，恢复不清零。`--max-cost 0` 禁止计费接口，但允许免费音频下载和本地计算。`estimate` 在选择 TikHub 音频时单列确认无字幕后才触发的 `conditional_audio` 费用，不把整次任务说成零费用。单价为受控快照中的预估，不冒充实际账单；`ask` 每次确认，`auto` 按已配置的余额门槛授权。
 
 ### Downie 可选音频接入
 
@@ -159,6 +171,7 @@ enabled = false
 
 [routing]
 default_provider = "auto"  # 或 opencli / yt-dlp / tikhub
+disabled_providers = []  # 如 ["tikhub"]，从业务发现和执行中停用该来源
 ```
 
 MCP 默认停用：自动路由跳过、功能清单隐藏，显式选择及 `mcp search/run` 在启动进程前拒绝。保留的代码供兼容性研究，普通任务不启用；不卸载浏览器扩展或影响其他客户端。Soota 命令结束后不持有 MCP 会话。
@@ -194,13 +207,18 @@ uv run soota runtime rollback --json
 
 | 文件 | 职责 |
 | --- | --- |
+| `tasks/` | 统一输入与目标、步骤组合、集合展开、逐项检查点及分析接续 |
+| `content/` | 本机能力发现、显式原生读取及受控结果转换 |
+| `media/` | 本地或远程媒体获取、合并、抽音轨及实际文件验证 |
+| `artifacts/` | v1/v2 内容包、产物哈希、分析证据与受保护导出 |
+| `storage/task_budget.py` | 全批计费请求的原子预留和恢复预算 |
 | `providers/router.py` | 能力选择、元数据兜底和请求预算 |
 | `mcp_cli.py` | 按需发现并调用 MCP 只读站点命令 |
 | `providers/mcp_contract.py` | 将上游参数描述转换为 JSON Schema 并验证调用 |
 | `providers/mcp_client.py` | 本地 stdio MCP 会话、响应大小与超时控制 |
 | `providers/opencli_mcp.py` | opencli-mcp 只读命令白名单、结果规范化和缓存 |
 | `providers/soota.py` | 旧 Python Provider 导入的兼容入口 |
-| `providers/ytdlp.py` | 双平台元数据、字幕探测、JSON3/SRT 规范化和音频下载 |
+| `providers/ytdlp.py` | 双平台元数据、字幕探测、原始字幕格式选择和音频获取 |
 | `providers/audio.py` | 音频来源选择与条件费用预估 |
 | `providers/downie.py` | Downie 任务提交、恢复、完成标记与音轨提取 |
 | `providers/downie_complete.sh` | Downie 下载完成后的受限目录回调 |

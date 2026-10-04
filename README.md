@@ -1,14 +1,16 @@
 # Soota
 
-给 Soota 一个链接：获取字幕或转写，保存可追溯的 context 正文。
+给 Soota 链接或本地文件，选择需要的字幕、正文、媒体和分析产物。
 
-Soota 是本地优先的内容摄取 CLI：优先使用 OpenCLI 的已核验免费能力，再由 `yt-dlp` Provider 获取 YouTube/Bilibili 字幕，字幕获取失败且符合兜底条件时按费用策略使用 TikHub；确认无字幕则直接下载音频、本地转写，并为 YouTube、Bilibili 提供字幕、ASR 和 Markdown 流程。Codex Skill 把自然语言任务变成 `soota` 命令。opencli-mcp 当前默认停用，不参与自动路由。
+Soota 是本地优先的内容处理 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context，只有明确请求时才由 Agent 分析、写笔记或整理详细阅读文章。
 
-已接入 OpenCLI 的 X 最近快照、Bilibili 和 YouTube 视频元数据及字幕；还提供可选的 B站同作者同一期 YouTube 字幕优先、推广片段过滤、11 个统一业务入口、TikHub 接口封装、逐次确认/自动付费策略，三个外部 Provider 的默认自动更新，以及 OpenCLI 的独立升级/回滚。完整命令见 [功能映射与费用策略](docs/features.md)、[终端参考教程](docs/terminal-tutorial.md) 和 [Provider 架构与处理流程](docs/providers.md#处理流程与职责)。接口版本和平台能力清单见 [TikHub 接口说明](docs/tikhub-api.md)。
+YouTube/Bilibili 字幕按已接入能力使用 OpenCLI → yt-dlp → 经费用授权的 TikHub；确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
+
+常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
-需要 Python 3.12+。音频处理需要 ffmpeg；本地转写支持 `whisper` CLI、`faster-whisper` 和 Apple Silicon 上的 `mlx_whisper` CLI，默认模型为 `base`。MLX 的安装与配置见[本地转写引擎](docs/terminal-tutorial.md#本地转写引擎)。纯 API 查询不需要这些音频工具。
+需要 Python 3.12+。媒体处理和验证需要 ffmpeg、ffprobe；本地转写支持 `whisper` CLI、`faster-whisper` 和 Apple Silicon 上的 `mlx_whisper` CLI，默认模型为 `base`。MLX 的安装与配置见[本地转写引擎](docs/terminal-tutorial.md#本地转写引擎)。纯 API 查询不需要这些音频工具。
 
 ```bash
 cd /path/to/soota
@@ -38,22 +40,30 @@ security add-generic-password -s soota.tikhub -a api_key -w
 uv run soota doctor --json
 uv run soota updates check --json
 uv run soota platforms --json
+uv run soota capabilities --search download --limit 20 --json
 uv run soota api list --platform bilibili --task detail --json
 uv run soota api show bilibili.web.fetch_one_video --json
 uv run soota inspect "URL" --json
 uv run soota estimate "URL" --mode ingest --json
 uv run soota catalog "频道或 UP 主 URL" --dry-run --json
 uv run soota ingest "URL" --transcript auto --max-cost 0.05 --output PATH --json
+uv run soota ingest "视频 URL" --want video,audio,transcript --max-cost 0 --json
+uv run soota ingest "/path/to/captions.vtt" --want context,transcript --subtitle-format srt,json --json
+uv run soota ingest --inputs-file links.txt --want context --max-items 20 --max-cost 0 --json
+uv run soota ingest "内容 URL" --want note,outline --max-cost 0 --json
+uv run soota jobs resume JOB_ID --analysis submission.json --json
 uv run soota render --bundle PATH/manifest.json --analysis analysis.json
 uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
 ```
 
-字幕模式：`auto`、`captions-only`、`asr`、`none`。默认按能力依次尝试 OpenCLI、经授权的 TikHub。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
+字幕模式：`auto`、`captions-only`、`asr`、`none`。视频字幕默认按能力依次尝试 OpenCLI、yt-dlp、经授权的 TikHub。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
 
 B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优先使用 YouTube，并默认排除已有推广标注。`--no-prefer-youtube` 关闭跨平台检查，`--keep-promotions` 保留推广。过滤保留原字幕供追溯；无标注不代表无推广。详细使用与限制见 [字幕选择与过滤](docs/subtitle-selection.md)。
 
-`--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。
+`--want` 可以组合目标，`--optional` 指定可选产物；只下载视频不会自动转写或总结。`note`、`outline`、`analysis`、`article` 会在原文准备后等待 Agent 提交结果，CLI 不调用大模型。`--want markdown` 保存未加工正文，`--want article` 才要求详细阅读文章。具体区别见 [目标产物](docs/tasks.md#选择目标)。
+
+`--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。统一任务的 `items` 包含逐项产物、错误和缺失目标。`completed` 表示本次范围内的必需产物完成；集合历史完整性另看 `enumeration`。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
 
@@ -75,7 +85,7 @@ uv run soota api call bilibili.web.fetch_one_video \
 
 此标识当前选择 `fetch_one_video_v3`。新版接口即使改了参数，也按新版契约校验；例如 V3 使用 `url`，不再接受旧版 `bv_id`。复杂查询参数使用 `--params-file`，POST 请求体使用 `--body`，均从 JSON 文件读取。
 
-通用查询覆盖详情、搜索、作品列表、评论、用户资料、热榜、媒体地址及部分分析接口，具体能力以 `api list --platform 平台 --task 类型` 为准。返回的是经过凭据脱敏的平台 JSON；不会自动分页、下载、转写或生成 Markdown。可续跑目录和标准化内容包目前支持 YouTube、Bilibili。
+通用查询覆盖详情、搜索、作品列表、评论、用户资料、热榜、媒体地址及部分分析接口，具体能力以 `api list --platform 平台 --task 类型` 为准。返回的是经过凭据脱敏的平台 JSON；不会自动分页、下载、转写或生成 Markdown。可续跑的 `catalog` 分页目前支持 YouTube、Bilibili；其他来源的标准正文和媒体能力见 [统一任务能力边界](docs/tasks.md#集合与原生操作)。
 
 ## 频道与 UP 主目录
 
@@ -94,21 +104,15 @@ uv run soota catalog "频道或 UP 主 URL" --incremental --max-cost 0.004 --jso
 
 ## 输出与个人配置
 
-用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过 `SOOTA_OUTPUT_DIR` 或 `--output` 指定 Obsidian 内的目录，Soota 不会自动定位或写入知识库。个人路径、账号选择和凭据从环境变量读取，不应把实际值写入项目或共享 Skill。名单、处理规则和采集结果保存在项目外的私人文件中。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
+用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过 `SOOTA_OUTPUT_DIR` 或 `--output` 设置内容包位置；`--destination` 另行导出，`--vault` 与 `--subdir` 明确指定 Obsidian 目的地。导出使用稳定目录、相对附件链接和 SHA 冲突检查，保护人工修改。Soota 不自动定位知识库或选择分类。个人路径、账号选择和凭据从环境变量读取，不应把实际值写入项目或共享 Skill。名单、处理规则和采集结果保存在项目外的私人文件中。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
 
-```text
-output/{platform}/{source_id}/
-├── context.md
-├── transcript.md
-└── manifest.json
+新的统一任务使用 v2 内容包，`manifest.json` 的 `artifacts` 登记实际文件、类型、字节数、SHA-256、来源和验证信息。视频、音频、正文、字幕和分析可独立存在，未取得的产物不以空文件冒充。既有 v1 包仍可读取；原有单视频命令的输出契约保留。
 
-output/catalogs/{job_id}/
-├── catalog.json
-└── catalog.md
-```
+`context.md` 保存给 Agent 的原文输入，保留顺序、重复和断句。取得字幕时保存 `transcript.md`、片段 JSON 及请求的字幕导出；取得文章正文时保存 `body.md` 和有序正文块；媒体进入 `attachments/`。`note.md`、`outline.md`、`analysis.md` 和阅读用 `content.md` 仅在明确请求并提交结果后生成。文件结构和旧包处理见 [内容包与导出](docs/tasks.md#内容包与导出)。
 
-单条视频有字幕时不下载媒体、不跑 ASR；已缓存的视频阶段再次运行不再付费请求 TikHub。目录新快照会重新读取页面；`jobs resume` 复用已保存的页面和未消费条目。
-`context.md` 是给 Agent 的原文输入，保留片段顺序、重复与断句，不做语义处理。`transcript.md` 保留来源时间轴，缺失时明确标记未知。默认不生成文章；分析请求直接使用 context，明确要求详细阅读时才由 Agent 整理文章。`content.md` 是可选的阅读／分析输出，`render` 只负责排版，不调用大模型。统一转换层支持 SRT、VTT、TTML、SRV/XML、已知字幕 JSON、Whisper TSV/JSONL 和无时间 TXT；不同 Provider 共享解析入口。字幕格式能力表、限制及获取优先级见 [字幕格式与 context](docs/subtitle-formats.md)。TikHub 音频失败时回退本机 `yt-dlp`，不循环重试计费接口。
+统一字幕转换支持 SRT、VTT、TTML、SRV/XML、已知字幕 JSON、Whisper TSV/JSONL 和无时间 TXT。获取层选择一份字幕，转换层按实际格式处理；详见 [字幕格式与 context](docs/subtitle-formats.md)。显式选择 TikHub 音频后，获取失败会报告错误，不会自动改用 yt-dlp 重新获取。
+
+同一统一任务的目录枚举和各条目共享费用上限；恢复复用满足要求的文件与检查点，不清零已预留额度。媒体校验会检查文件、解码、轨道和已知时长；来源时长未知时仍保留完整性未知，不能仅凭下载成功声称视频全长。
 
 ## 质量
 

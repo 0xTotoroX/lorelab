@@ -1,0 +1,204 @@
+# 统一内容任务
+
+`ingest` 接受链接、本地文件、输入清单和已有内容包，通过 `--want` 选择目标产物。每个条目使用相同的获取、处理和保存流程；同一批任务共享费用上限，并保留逐项进度。
+
+默认获取供 Agent 使用的原文 context，不润色、合段、总结或生成文章。没有 `--want` 的原有 YouTube/Bilibili 单视频命令保留旧输出契约；显式目标及新输入使用 v2 内容包。高层职责图见 [处理流程与职责](providers.md#处理流程与职责)。
+
+## 选择目标
+
+以下命令中的 URL、路径和任务编号均为占位值，执行前替换为实际输入。
+
+```bash
+# 只保存视频；不会因为视频目标而自动转写或总结
+soota ingest "视频 URL" --want video --max-cost 0 --json
+
+# 同时保存视频、音频和字幕
+soota ingest "视频 URL" --want video,audio,transcript --max-cost 0 --json
+
+# 只要已有字幕，不允许本地转写；同时导出 SRT 和 VTT
+soota ingest "视频 URL" --want transcript --transcript captions-only \
+  --subtitle-format srt,vtt --max-cost 0 --json
+
+# 保存网页原文和图片
+soota ingest "文章 URL" --want context,images --max-cost 0 --json
+
+# 图片为可选目标，失败不影响必需的 context 目标
+soota ingest "文章 URL" --want context --optional images --max-cost 0 --json
+```
+
+| `--want` | 交付内容 |
+| --- | --- |
+| `video` | 经过媒体验证的视频文件；默认要求音轨，可明确使用 `--allow-silent` |
+| `audio` | 独立音频文件；已有合格视频时可从中提取 |
+| `transcript` | 字幕及 `--subtitle-format` 指定的导出文件 |
+| `context` | 按原顺序保存的正文或字幕文字，供 Agent 使用 |
+| `markdown` | 未加工正文的 Markdown 输出目标，沿用 context 的处理边界 |
+| `images` | 实际取得并验证的图片；图文正文使用相对附件链接 |
+| `data` | 原生读取结果或该输入的结构化数据；不自动猜测任意 JSON 的正文含义 |
+| `analysis` | Agent 显式提交的摘要、要点及证据等分析 |
+| `note` | Agent 按用户要求整理的笔记 |
+| `outline` | 独立大纲，可与笔记相互链接 |
+| `article` | Agent 明确按详细阅读要求整理的文章 |
+
+保存网站已有文章正文使用 `context` 或 `markdown`；`article` 会要求 Agent 进行后续文章整理。CLI 自身不调用大模型。
+
+`--language` 要求实际字幕语言，不能用语言未知或其他语言的轨道冒充。`--min-height` 指定视频最低高度，`--max-bytes` 限制单个媒体文件大小。字幕导出支持 `srt,vtt,txt,json`；缺少时间轴时可以导出 TXT/JSON，不能生成虚构时间的 SRT/VTT。
+
+字幕模式沿用 `auto`、`captions-only`、`asr`、`none`：`auto` 只在确认无字幕时进入本地转写，`asr` 明确要求语音转写，`none` 不请求字幕。只取元数据可用 `inspect` 或 `--want data`；没有可复用正文且禁止取得字幕或转写时，CLI 会报告缺少目标产物。
+
+## 本地文件、清单与旧内容包
+
+```bash
+soota ingest "/path/to/video.mp4" --want audio,context --json
+soota ingest "/path/to/audio.m4a" --want transcript,context --json
+soota ingest "/path/to/captions.vtt" --want transcript --subtitle-format srt,json --json
+soota ingest "/path/to/article.md" --want context,images --json
+soota ingest "/path/to/bundle/manifest.json" --want note --json
+soota ingest --inputs-file "/path/to/links.txt" --want context --max-items 20 --max-cost 0 --json
+```
+
+本地处理保留用户原文件，在任务目录处理转换和转写所需的中间文件。普通文本 TXT 按无时间正文读取；若需要将它明确作为字幕输入，可指定 `--input-format txt`。JSON 字幕后缀相同、内部结构可能不同，必要时使用 `--input-format` 指定已支持的格式，详见 [统一字幕转换层](subtitle-formats.md#统一转换层)。
+
+文本清单每行一个链接或路径，空行及以 `#` 开始的行忽略。相对文件路径以清单所在目录为基准。JSON 清单接受字符串或 `InputSpec` 对象，例如：
+
+```json
+{
+  "inputs": [
+    "https://www.youtube.com/watch?v=Example0001",
+    "./captions.vtt",
+    {"kind": "file", "value": "./article.md"}
+  ]
+}
+```
+
+分享文本中的 HTTP(S) 链接也可作为输入。链接所需的访问参数在受控请求中保留；公开结果会对签名参数和凭据脱敏，不能把脱敏后的媒体地址当作可再次下载的地址。
+
+已有内容包接受目录或 `manifest.json`，可读取 v1/v2。读取旧包不会自动改写文件；补做目标时复用满足要求的已有产物。普通目录不是内容包，不作为输入文件夹递归采集。
+
+## 集合与原生操作
+
+频道、作者目录、播放列表和已绑定的搜索结果先展开为条目，再进入同一条单项流程：
+
+```bash
+soota ingest "频道或播放列表 URL" --want context \
+  --max-items 20 --max-pages 3 --max-cost 0.05 --json
+
+soota ingest --inputs-file "/path/to/catalog.json" --want context \
+  --max-items 20 --max-cost 0 --json
+
+# 按本机当前参数契约发起一次原生读取，只保存其数据
+soota ingest --operation opencli.youtube.search --param query=example \
+  --want data --max-cost 0 --json
+
+# 将已有列表转换契约的搜索结果展开为内容任务
+soota ingest --operation opencli.youtube.search --param query=example \
+  --expand --want context --max-items 5 --max-cost 0 --json
+```
+
+YouTube/Bilibili 的可续跑目录沿用原有 `catalog` 分页契约；YouTube 播放列表使用 yt-dlp 枚举；X 最近快照保留完整性未知的边界。`catalog` 本身仍只保存目录，使用统一 `ingest` 才继续处理各条目。搜索展开只接受已绑定的 URL 行结果，不递归扫描任意 JSON 寻找链接。
+
+`--max-items` 限制本次处理的条目数；`--max-pages` 传入目录分页任务。达到本次范围与收齐作者全部历史分别报告，不能从 `ok=true` 推断历史完整性。检查 `enumeration`、`discovered`、`limit_reached` 和各条目状态。
+
+查看本机能力：
+
+```bash
+soota capabilities --search download --limit 30 --json
+soota capabilities --provider opencli --search article --json
+```
+
+此命令读取本地运行时清单、已打包接口注册表和处理器状态，不执行站点采集、不验证登录、不启动 MCP。`discovered` 表示发现能力，`native` 表示原生调用契约可用，`standard` 表示已有标准转换；这些状态都不等于当前网站已真实验收。`verified` 需要具体来源、运行时与产物证据，能力发现不会自行产生该状态。
+
+目前标准正文绑定包括通用网页读取、微信/知乎 Markdown、X 文章和小红书正文；原生媒体绑定包括小红书、X 和 Bilibili。实际执行还取决于当前 OpenCLI 版本的命令、只读标记、参数契约、登录与站点状态。其他已发现命令可以按原生数据路径调用，不自动获得标准正文或媒体能力。
+
+TikHub 原生读取使用 `--operation tikhub.<接口标识>` 和对应参数；接口标识及参数先查 `api list/show`。统一任务只接收已审查的读取接口，付费请求仍经过费用策略。`api call`、`features call` 保留原有查询用途。
+
+## 费用与恢复
+
+统一任务内的目录枚举、各条目、字幕和音频阶段共享 `--max-cost`（USD）。每次计费请求在发送前检查并持久化预算预留；失败、中断和 `jobs resume` 不清零已预留费用。返回值 `reserved_cost_usd` 是预留估算，`actual_cost_usd` 未核实账单时保持未知。
+
+`--max-cost 0` 禁止计费接口，允许本地处理和免费来源。上限不替代付费授权：`ask` 逐次确认，非交互调用返回 `payment_required`；`auto` 使用用户已配置的自动授权和余额阈值。不要通过修改付款模式绕过一次任务的暂停。
+
+```bash
+# 只生成计划，不采集、不创建任务
+soota ingest --inputs-file "/path/to/links.txt" --want video,context --dry-run --json
+
+soota jobs list --json
+soota jobs resume JOB_ID --json
+soota jobs resume JOB_ID --max-items 40 --max-pages 6 --max-cost 0.10 --json
+```
+
+恢复参数表示新的总上限。已有目录的 Provider 和游标语义继续保留，不把一个来源的游标交给另一个。下载或导出失败时，已经保存的有效产物保留；再次运行会校验文件与采集条件，补做未满足的步骤。输入文件在任务创建后变化时，使用新任务处理新的输入。
+
+| 状态 | 如何理解 |
+| --- | --- |
+| `completed` | 本次范围内的必需产物完成；仍需查看集合完整性和可选目标结果 |
+| `waiting_analysis` | 原文已准备，仍需 Agent 提交用户要求的分析产物 |
+| `partial` | 部分目标已保存，还有缺失产物或未完成的枚举 |
+| `blocked` / `failed` | 查看条目的 `steps`、`errors` 和任务警告，处理对应原因后恢复 |
+
+JSON 中 `items` 分别记录每项的 `bundle`、`steps`、`missing_outputs` 和产物路径。整个任务只返回一份状态文档，不将某一步成功当作全部目标完成。
+
+## 分析接续
+
+```bash
+soota ingest "内容 URL" --want note,outline --max-cost 0 --json
+```
+
+CLI 保存原文后返回 `waiting_analysis`，内容包中的 `analysis-request.json` 记录目标、task/item 身份、原文指纹、提交 schema 和恢复命令。Agent 读取实际 context，按照用户明确要求生成结果。需要结构化摘要时填写 `analysis`；笔记、大纲和详细文章分别填写 `note_markdown`、`outline_markdown`、`article_markdown`。
+
+以下是提交结构示例；身份、指纹和证据 ID 必须从当前请求及原文读取，不能照抄占位值：
+
+```json
+{
+  "task_id": "JOB_ID",
+  "item_id": "ITEM_ID",
+  "context_fingerprint": "CURRENT_CONTEXT_SHA256",
+  "note_markdown": "# 笔记\n\n按用户要求写出的笔记正文。",
+  "outline_markdown": "# 大纲\n\n- 按原文证据组织的主题"
+}
+```
+
+```bash
+soota jobs resume JOB_ID --analysis "/path/to/submission.json" --json
+```
+
+也可传入包含多个提交 JSON 的目录。任务接续核验 task/item 身份；渲染核验 context 指纹及所引用的 `seg-*` 字幕 ID、`para-*` 正文块 ID。过期原文或不存在的证据会拒绝写入。相同提交可用于恢复；替换已有分析产物需明确 `--force`。显式渲染不会重写原文。
+
+独立 `render --bundle ... --analysis ...` 保留旧 v1 Analysis 用法；v2 接受带 `context_fingerprint` 的 `AnalysisSubmission`。有未完成任务时使用 `jobs resume --analysis`，让原任务继续验证目标并完成导出。
+
+## 内容包与导出
+
+v2 的 `manifest.json` 保留兼容来源、字幕、分析和费用字段，并使用 `artifacts` 登记实际文件。每个产物记录相对路径、类型、格式、字节数、SHA-256、Provider、验证类型和完整性信息。没有请求或没有取得的产物，不用空占位文件冒充。
+
+| 文件 | 用途 |
+| --- | --- |
+| `context.md` | 原文输入，含稳定的字幕或正文块 ID |
+| `transcript.md` / `transcript.json` | 取得字幕时保存的时间轴和片段数据 |
+| `captions.srt` 等 | 用户请求的字幕导出格式 |
+| `body.md` / `content.json` | 取得文章正文时保存的原始 Markdown 与有序正文块 |
+| `attachments/` | 视频、音频、图片等实际文件 |
+| `data.json` | 请求的数据产物 |
+| `analysis.md` / `analysis.json` | 显式分析及提交记录 |
+| `note.md` / `outline.md` / `content.md` | 显式请求的笔记、大纲、阅读文章 |
+
+媒体成功需要文件有效、可解码、目标轨道与质量符合要求，并在已知来源时长时校验时长。文件哈希匹配只说明文件未变；来源时长未知时，不能据此宣称视频全长。标题、简介、节选或范围未知的正文也不能当作全文分析。
+
+```bash
+# 在输出内容包之外另外导出
+soota ingest "内容 URL" --want context,images \
+  --destination "/path/to/archive" --max-cost 0 --json
+
+# 指定 Obsidian Vault 和库内目录
+soota ingest "/path/to/bundle" --want note,outline \
+  --vault "/path/to/vault" --subdir "收件箱/Soota" --json
+```
+
+导出保留包内相对链接，按来源生成稳定目录名，并用 `.soota-export.json` 记录受管文件的 SHA。再次导出先检查目标文件；存在未登记文件或人工修改时返回冲突，保留手写内容。采集或渲染的 `--force` 不取消导出冲突保护。
+
+CLI 只写显式目的地，不自动寻找 Vault、重组知识库、选择知识分类或解释 `AGENTS.md`。Agent 应先读取用户指定目的地的约定，再选择目录和分析方式。目标文件夹自身的 Git/同步策略也需要由用户配置。
+
+## 实现与验证边界
+
+任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，内容包和导出位于 `artifacts/`。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
+
+自动测试使用合成内容、模拟网络响应和本地媒体样本，检查费用、恢复、文件与证据契约。它们不证明某个真实网站已登录、某份视频已完整下载或付费接口当前可用；应按实际来源单独记录运行验收。

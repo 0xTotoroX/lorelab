@@ -1,6 +1,6 @@
 # Soota 终端参考教程
 
-所有示例都从项目当前代码运行，避免终端里旧版 `soota` 与源码不一致。
+所有示例都从项目当前代码运行，避免终端里旧版 `soota` 与源码不一致。统一目标、输入清单、v2 内容包和恢复契约见 [统一内容任务](tasks.md)；本页提供常用终端操作。
 
 ## 1. 检查环境
 
@@ -38,7 +38,7 @@ MLX 使用 Metal GPU 和 FP16，采用 greedy 解码，不使用原 Whisper CLI 
 
 `doctor --json` 的 `asr_engine`、`asr_model` 和 `mlx_whisper_cli` 可核对选择与命令是否存在。切回原命令行引擎时将 `engine` 改为 `whisper-cli`；`auto` 沿用原来的引擎选择顺序。MLX 命令的临时 JSON 输出在读取后清理，音频与转写缓存仍按现有规则保存。
 
-引擎选择不改变 Provider 的费用策略，也不会自动补齐零预算无字幕下载与转写路径。已有转写缓存继续复用；验证新引擎时使用新的音频或缓存目录。
+引擎选择不改变 Provider 的费用策略；零预算可以使用免费音频来源及本地转写，仍需对应的本机依赖和可访问来源。已有转写缓存继续复用；验证新引擎时使用新的音频或缓存目录。
 
 ## 2. 零 API 费用获取最近帖子
 
@@ -87,7 +87,7 @@ TikHub 需要自己的 API Key。登录、验证码、限流和契约错误会�
 uv run soota ingest "视频 URL" --max-cost 0 --json
 ```
 
-以上零预算示例在字幕不存在时保留元数据。省略零预算时，默认 auto 会按付费策略处理 TikHub 兜底；也可显式 `--fallback tikhub --max-cost 0.05`。如需直接选择 TikHub：
+以上零预算示例使用默认 `auto`，确认无字幕后会尝试免费音频获取及本地转写；只想保存原字幕时加 `--transcript captions-only`。省略零预算时，默认 auto 会按付费策略处理 TikHub 兜底；也可显式 `--fallback tikhub --max-cost 0.05`。如需直接选择 TikHub：
 
 ```bash
 uv run soota estimate "视频 URL" --provider tikhub --json
@@ -117,7 +117,7 @@ uv run soota ingest "B站视频 URL" --no-prefer-youtube --max-cost 0 --json
 uv run soota ingest "YouTube 或 B站视频 URL" --provider yt-dlp --transcript captions-only --max-cost 0 --json
 ```
 
-默认读取 Chrome Cookie；用 `SOOTA_YTDLP_COOKIES_BROWSER` 选择浏览器/profile，设为空关闭。`SOOTA_YTDLP_BINARY` 可指定程序。JSON 返回实际 provider，内容包记录实际字幕语言和轨道类型。不会下载视频。
+默认读取 Chrome Cookie；用 `SOOTA_YTDLP_COOKIES_BROWSER` 选择浏览器/profile，设为空关闭。`SOOTA_YTDLP_BINARY` 可指定程序。JSON 返回实际 provider，内容包记录实际字幕语言和轨道类型。此字幕命令不保存完整视频；独立媒体目标使用 `--want video`。
 
 ## 4. 三个外部 Provider 的自动更新
 
@@ -198,8 +198,65 @@ Obsidian 中的 `AGENTS.md` 可引用本地处理规则和 prompt，约定文章
 
 项目外不等于不会上传：知识库、用户配置或云盘若另外开启同步，需要在各自的同步/Git 配置中排除私人名单、状态和采集结果。Git 忽略规则不会清除已经提交过的历史内容。
 
-## Context 与可选文章
+## 组合产物与批量输入
 
-视频 ingest 默认输出 `context.md`、`transcript.md` 和 `manifest.json`，不调用模型润色，也不生成阅读文章。JSON 的 `data.context` 是正文路径；旧 `data.content` 在 ingest 中指向同一路径。目录命令不受此变更影响。
+```bash
+# 文件目标可以组合，不默认添加语义处理
+uv run soota ingest "视频 URL" --want video,audio,transcript --max-cost 0 --json
+uv run soota ingest "视频 URL" --want video --min-height 720 --max-cost 0 --json
+uv run soota ingest "/path/to/captions.vtt" --want context,transcript --subtitle-format srt,json --json
+uv run soota ingest "/path/to/article.md" --want context,images --json
 
-只要求采集时到 context 结束。要求分析／总结时，Agent 直接使用 context；明确要求详细文章阅读时才整理完整文章。标准 Analysis JSON 可用 `soota render` 排版为 `content.md`，已有文件需明确 `--force` 才替换，源 context 与字幕保持不变。格式能力与优先级见 [字幕格式与 context](subtitle-formats.md)。
+# 清单每行一个链接或路径；JSON 也可使用 inputs 数组
+uv run soota ingest --inputs-file "/path/to/links.txt" --want context --max-items 20 --max-cost 0 --json
+uv run soota ingest --inputs-file "/path/to/links.txt" --want video,context --dry-run --json
+uv run soota jobs resume JOB_ID --json
+```
+
+必需目标写在 `--want`，可选目标写在 `--optional`。运行结果中的 `items` 分别说明目标是否满足；`partial` 会保留已取得的文件。预算在全批次内累计，恢复不清零；`--max-bytes` 限制单个媒体文件。已有内容包目录或 `manifest.json` 也可以作为输入，补做目标。
+
+本地输入使用任务目录完成转换，不覆盖源媒体或其旁边的同名音频。媒体文件会验证可读性、解码、轨道与已知时长；完整性未知时，结果仍明确保留未知。
+
+## 能力发现与原生结果
+
+```bash
+uv run soota capabilities --search download --limit 30 --json
+uv run soota capabilities --provider opencli --search article --json
+uv run soota ingest --operation opencli.youtube.search --param query=example --want data --max-cost 0 --json
+uv run soota ingest --operation opencli.youtube.search --param query=example \
+  --expand --want context --max-items 5 --max-cost 0 --json
+```
+
+`capabilities` 只查本机命令、受控接口注册表和处理器，不访问站点或核实登录。`native` 表示可以按原生契约调用，`standard` 表示已有结果转换；发现完成不能替代实际文件验收。原生参数以当前能力清单和 `--help` 为准，只有已绑定的列表结构可以使用 `--expand`。
+
+可以在用户配置中关闭不使用的来源：
+
+```toml
+[routing]
+disabled_providers = ["tikhub"]
+```
+
+MCP 仍默认停用。显式来源发生获取错误时保留错误，不因另一工具也能下载就自动改用它；TikHub 音频失败也不再隐式换成 yt-dlp。
+
+## Context 与分析接续
+
+原单视频命令默认保存 `context.md`、`transcript.md` 和 `manifest.json`，不生成文章。显式 `--want` 使用 v2 产物清单：正文、字幕、媒体和分析按实际目标保存，详情见 [内容包](tasks.md#内容包与导出)。`markdown` 与 `context` 都保持未加工正文；`article` 才要求 Agent 整理阅读文章。
+
+```bash
+uv run soota ingest "内容 URL" --want analysis --max-cost 0 --json
+uv run soota ingest "/path/to/bundle" --want note,outline --json
+uv run soota jobs resume JOB_ID --analysis "/path/to/submission.json" --json
+```
+
+`waiting_analysis` 表示原文已准备、分析尚未完成。Agent 读取内容包中的 `analysis-request.json` 和实际 context，使用请求里的身份、正文指纹和 schema 生成提交文件，再执行恢复命令。CLI 只校验与渲染，不调用模型；过期指纹和不存在的证据会拒绝。采集保留已有文章，来源变化时标记旧分析过时。
+
+## 导出到目录或 Obsidian
+
+```bash
+uv run soota ingest "/path/to/bundle" --want context \
+  --destination "/path/to/archive" --json
+uv run soota ingest "/path/to/bundle" --want note,outline \
+  --vault "/path/to/vault" --subdir "收件箱/Soota" --json
+```
+
+导出保留相对附件链接，使用稳定来源目录及 `.soota-export.json` 记录文件校验值。再次导出遇到手写修改或未登记的同名文件会报冲突；`--force` 不绕过这项保护。CLI 不自动选择知识分类，也不解释知识库 `AGENTS.md`；Agent 应按前述目的地约定完成目录选择和请求的分析。
