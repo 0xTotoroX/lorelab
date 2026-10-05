@@ -6,13 +6,16 @@ from pathlib import Path
 
 from soota.storage.atomic import atomic_write
 
-# Apache-2.0 upstream: jackwener/OpenCLI. Only managed installations are modified.
+# Upstream match fragments: Apache-2.0, copyright 2025 jackwener/OpenCLI.
+# Soota-authored patch code/additions: Copyright 2026 Soota contributors; GPL-3.0-only.
+# Only managed installations are modified; retain their upstream license and notices.
 # https://github.com/jackwener/OpenCLI/issues/2487
 NAVIGATION = """            result = await sendCommandFull('navigate', {
                 url,
                 ...this._cmdOpts(),
             });"""
-REPLACEMENT = r"""            // Modified by Soota: supported media adapters use a verified owned tab.
+REPLACEMENT = r"""            // Copyright 2026 Soota contributors; GPL-3.0-only.
+            // Modified by Soota: supported media adapters use a verified owned tab.
             if (this.surface === 'adapter' && /^https:\/\/(www\.)?(bilibili\.com|youtube\.com)(\/|$)/.test(url)) {
                 result = { page: await sootaNavigate(this, url) };
             } else {
@@ -21,7 +24,8 @@ REPLACEMENT = r"""            // Modified by Soota: supported media adapters use
                     ...this._cmdOpts(),
                 });
             }"""
-NAVIGATION_HELPER = """// Modified by Soota: avoid Browser Bridge detach/update race for supported media sites.
+NAVIGATION_HELPER = """// Copyright 2026 Soota contributors; GPL-3.0-only.
+// Modified by Soota: avoid Browser Bridge detach/update race for supported media sites.
 async function sootaNavigate(page, url) {
     const expected = new URL(url);
     const actual = await page.evaluate('location.href');
@@ -51,6 +55,7 @@ async function sootaNavigate(page, url) {
 YOUTUBE_TIMEDTEXT_FILTERS = (
     (
         "        if (!url.includes('fmt=json3') || !url.includes('pot='))\n            return false;",
+        "        // Copyright 2026 Soota contributors; GPL-3.0-only.\n"
         "        // Modified by Soota: valid JSON3 captions may omit pot.\n"
         "        if (!url.includes('fmt=json3'))\n            return false;",
     ),
@@ -59,12 +64,14 @@ YOUTUBE_TIMEDTEXT_FILTERS = (
         "                        && url.includes('pot=')\n"
         "                        && timedtextUrlMatchesVideo(url));",
         "                        && url.includes('fmt=json3')\n"
+        "                        // Copyright 2026 Soota contributors; GPL-3.0-only.\n"
         "                        // Modified by Soota: pot is not required for every caption track.\n"
         "                        && timedtextUrlMatchesVideo(url));",
     ),
     (
         "          if (!url.includes('pot=')) return false;\n"
         "          if (!timedtextUrlMatchesVideo(url)) return false;",
+        "          // Copyright 2026 Soota contributors; GPL-3.0-only.\n"
         "          // Modified by Soota: accept captured JSON3 without pot; keep video identity checks.\n"
         "          if (!timedtextUrlMatchesVideo(url)) return false;",
     ),
@@ -73,6 +80,7 @@ YOUTUBE_TIMEDTEXT_FILTERS = (
 YOUTUBE_LIVE_TRACK_ANCHOR = """        try {
           if (boundOriginalFetch) {"""
 YOUTUBE_LIVE_TRACK = """        try {
+          // Copyright 2026 Soota contributors; GPL-3.0-only.
           // Modified by Soota: use the loaded player's signed URL before waiting
           // for caption traffic. A separately fetched watch HTML URL may be empty.
           try {
@@ -171,6 +179,7 @@ def apply_managed_fixes(install: Path) -> None:
                 "patch": next(iter(applied)),
                 "patches": list(applied),
                 "modified_by": "Soota",
+                "soota_modification_license": "GPL-3.0-only",
                 "files": [
                     {"file": relative, "sha256": hashlib.sha256((install / relative).read_bytes()).hexdigest()}
                     for relative in dict.fromkeys(applied.values())

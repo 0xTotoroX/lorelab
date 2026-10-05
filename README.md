@@ -127,4 +127,8 @@ uv run pytest
 
 ## 许可证
 
-Copyright 2026 Soota contributors. Soota 自有代码采用 [Apache-2.0](LICENSE)。第三方组件保留各自许可与版权，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；TikHub 2.1.2 的元数据与许可证正文存在尚未澄清的冲突。
+Copyright 2026 Soota contributors. 本次许可变更起，Soota 有权授权的自有代码采用 [GNU GPL 第三版](LICENSE)，固定为 `GPL-3.0-only`，不包含“或更新版本”选项。
+
+允许免费使用和商业使用，也允许收费分发；分发 GPL 覆盖的软件及修改版本时，须按 GPL 第三版保留许可、提供对应源码并满足适用条件。这里没有商业双许可、非商业限制或额外收费条件，也不要求所有私人修改都向全世界公开。
+
+此前已按 Apache-2.0 授权的版本继续保留原授权；本次声明只适用于当前及后续有权授权的版本，不追溯撤回历史授权。原许可证全文保留在 [历史 Apache-2.0 许可](LICENSES/soota-historical-Apache-2.0-LICENSE)。第三方代码、依赖与采集的数据保留各自许可、版权及使用条件，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。TikHub 2.1.2 的许可冲突仍未澄清；可选 SponsorBlock 标注数据的 CC BY-NC-SA 4.0 条件独立于 Soota 代码，不能据此推定数据允许商业使用。

@@ -46,4 +46,4 @@ soota ingest "视频 URL" --exclude-promotions --exclude-range 113:208 \
 
 已有内容包改变过滤结果时，需要新输出目录，或明确使用 `--force` 重建，防止旧总结引用被移除的片段。渲染总结保留原字幕文件的登记。
 
-SponsorBlock 标注数据采用 [CC BY-NC-SA 4.0](https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License)，输出保留署名；该数据的非商业和相同方式共享要求不因 Soota 采用 Apache-2.0 而改变。原视频字幕不由此获得新授权。
+SponsorBlock 标注数据采用 [CC BY-NC-SA 4.0](https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License)，输出保留署名；该数据的非商业和相同方式共享要求不因 Soota 自有代码采用 GPL-3.0-only 而改变。原视频字幕不由此获得新授权。

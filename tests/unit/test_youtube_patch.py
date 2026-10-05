@@ -80,6 +80,8 @@ for (const filter of [capture, url => resources([url]).length === 1, hook]) {
         result = subprocess.run([node, str(script)], capture_output=True, text=True, timeout=10)
         assert result.returncode == 0, result.stderr
     manifest = json.loads((tmp_path / "soota-compatibility.json").read_text())
+    assert manifest["soota_modification_license"] == "GPL-3.0-only"
+    assert "Copyright 2026 Soota contributors; GPL-3.0-only" in path.read_text()
     assert manifest["patches"] == ["youtube-timedtext-optional-pot"]
     assert manifest["files"][0]["file"] == RELATIVE
 

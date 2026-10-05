@@ -1,10 +1,18 @@
 # Third-party notices
 
-Soota's Apache-2.0 declaration covers its own code. It does not replace the
-licenses, copyright notices, or other requirements of third-party components.
-Dependencies are installed separately; Soota does not vendor their source or
-include their runtimes in its wheel. The copies below document the reviewed
+Soota's GPL-3.0-only declaration covers the code it is entitled to license. It does
+not replace the licenses, copyright notices, or other requirements of third-party
+components.
+Dependencies are installed separately; their runtimes are not included in Soota's
+wheel. Its OpenCLI compatibility module includes upstream source match fragments,
+which retain Apache-2.0 licensing as described below. The copies below document the reviewed
 versions. They are included in Soota's wheel and source distribution.
+
+Copyright 2026 Soota contributors. The GPL declaration applies from this licensing
+change to current and later versions that Soota is entitled to license. Earlier
+Apache-2.0 grants are not retroactively withdrawn. The unchanged former top-level
+text is retained as [historical Apache-2.0 evidence](LICENSES/soota-historical-Apache-2.0-LICENSE);
+it is not an alternative license grant for newly authored GPL-covered changes.
 
 ## TikHub Python SDK 2.1.2
 
@@ -16,6 +24,8 @@ versions. They are included in Soota's wheel and source distribution.
   distribution's pyproject.toml declare MIT, while both distributions contain
   an Apache-2.0 LICENSE. This is not evidence of a dual-license grant. Soota
   preserves the actual license text without claiming that the conflict is resolved.
+  MIT and Apache-2.0 are each compatible with GPL version 3, but that compatibility
+  does not establish which grant the upstream intended or resolve the discrepancy.
 - No upstream NOTICE was present in the reviewed wheel or source distribution.
 - Reviewed 2026-09-22 against the artifacts pinned by `uv.lock`:
   wheel SHA-256 `9de5b6828ab2e04a97efed6054af6015ac3546cc42cf8ecaaa1e26d48faee710`;
@@ -23,14 +33,18 @@ versions. They are included in Soota's wheel and source distribution.
 
 ## OpenCLI 1.8.3 (adapter reference version)
 
-- Integration: separately installed executable invoked through a read-only command allowlist.
+- Integration: separately installed executable invoked through a read-only command allowlist;
+  upstream source match fragments are embedded in Soota's compatibility patch module.
 - Source: <https://github.com/jackwener/OpenCLI/tree/v1.8.3>.
 - Package: <https://www.npmjs.com/package/@jackwener/opencli/v/1.8.3>.
 - Copyright 2025 jackwener. License: Apache-2.0, consistently declared by
   package.json and [the unmodified LICENSE](LICENSES/opencli-1.8.3-LICENSE).
 - No root NOTICE was present in the reviewed release. Soota can apply narrowly
   matched compatibility fixes to its managed runtime (see `providers/opencli_patches.py`);
-  modified files identify Soota and retain upstream licensing. Global installations
+  modified files identify Soota and retain upstream copyright and Apache-2.0
+  notices. Soota-authored additions carry GPL-3.0-only modification notices; the
+  compatibility manifest records that scope. Original upstream code is not
+  relabeled as Soota-owned GPL code. Global installations
   are not modified. User-installed or Soota-managed runtimes retain
   their own license files; this reference copy does not describe every later release.
 
@@ -49,7 +63,9 @@ versions. They are included in Soota's wheel and source distribution.
   <https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License>.
 - Soota does not bundle the database. Optional promotion filtering queries annotated
   ranges and records attribution in the output manifest. These data retain their
-  noncommercial/share-alike requirements; Soota Apache-2.0 does not replace them.
+  noncommercial/share-alike requirements; Soota GPL-3.0-only does not replace them.
+  Commercial permission for Soota code is not commercial permission for these data;
+  commercial users must separately establish data rights or avoid these annotations.
 - Missing annotations do not establish that a video is free of promotion.
 
 ## yt-dlp (external executable)
