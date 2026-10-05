@@ -4,6 +4,8 @@ Collection ends at `context.md`. Do not polish, rewrite, summarize or generate a
 
 For a requested analysis or summary, read context in chunks and apply the selected prompt directly; do not create a full-article intermediate. Only an explicit detailed-article/reading request enables article composition. Then preserve the source's substance and reasoning, follow applicable local formatting rules, and do not substitute a short summary for the requested article. A saved prompt or older folder workflow does not itself authorize an extra article stage.
 
+For supplied text that the user wants saved as concise, classified knowledge, use [knowledge workflow](knowledge.md). It preserves the paste, checks source evidence and relevant existing notes, and separates source-task completion from actual knowledge placement.
+
 Use `transcript.md` for timestamps and evidence IDs. For legacy bundles without context, read the transcript directly. Do not use an old reading article as the source transcript, invent facts/timestamps, or silently regenerate preserved stale articles.
 
 Use the output format and location specified by the user or local rules. A custom prompt may require sections that the built-in renderer cannot represent; do not drop or flatten them merely to fit its schema. Keep source transcripts and provenance available for verification, and do not overwrite user edits without authorization.

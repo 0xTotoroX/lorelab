@@ -75,6 +75,20 @@ soota ingest --inputs-file "/path/to/links.txt" --want context --max-items 20 --
 
 已有内容包接受目录或 `manifest.json`，可读取 v1/v2。读取旧包不会自动改写文件；补做目标时复用满足要求的已有产物。普通目录不是内容包，不作为输入文件夹递归采集。
 
+### 粘贴文字与知识归纳
+
+通过 Soota Skill 可以把用户提供的帖子、片段或混合话题文字保存并精炼归档。Agent 先将文字原样保存成独立 TXT 文件，再使用本地正文入口；文件里的链接保留为文字，不因此访问网站。
+
+```bash
+soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
+  --provider local --want context,note --max-cost 0 \
+  --output "/path/to/source-bundles" --json
+```
+
+Agent 读取本次 context、目标目录规则和最新 prompt，按主题拆分、精炼、检查相关已有笔记并选择存放位置，再提交带证据的 `note_markdown`，通过 `jobs resume --analysis` 完成来源笔记。不同主题的知识文件由 Agent 按知识库约定创建或补充；无法分类的内容进入约定的收件目录。写入后核对实际文件和来源链接，分别报告来源包与知识归档的结果。流程见 [Skill 知识归纳](../skills/soota/references/knowledge.md)。
+
+CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 的单份 `note.md` 与整包导出不代替多主题分类，也不会调用模型或自动合并已有知识。
+
 ## 集合与原生操作
 
 频道、作者目录、播放列表和已绑定的搜索结果先展开为条目，再进入同一条单项流程：

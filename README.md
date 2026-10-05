@@ -63,6 +63,8 @@ B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优
 
 `--want` 可以组合目标，`--optional` 指定可选产物；只下载视频不会自动转写或总结。`note`、`outline`、`analysis`、`article` 会在原文准备后等待 Agent 提交结果，CLI 不调用大模型。`--want markdown` 保存未加工正文，`--want article` 才要求详细阅读文章。具体区别见 [目标产物](docs/tasks.md#选择目标)。
 
+Soota Skill 也支持将粘贴文字精炼归档到用户选择的知识库：Agent 保存原文，拆分主题、查重并按现有分类写入，CLI 保存来源包并校验笔记提交。使用方式和边界见 [粘贴文字与知识归纳](docs/tasks.md#粘贴文字与知识归纳)。
+
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。统一任务的 `items` 包含逐项产物、错误和缺失目标。`completed` 表示本次范围内的必需产物完成；集合历史完整性另看 `enumeration`。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。

@@ -1,6 +1,6 @@
 ---
 name: soota
-description: Use the local Soota CLI to collect webpage or video content, download media and subtitles, transcribe local files, process link batches, or export content bundles. Save unprocessed context by default; continue with analysis, notes or readable articles only when requested. Explanations of already supplied text do not require collection.
+description: Use the local Soota CLI to collect content, download media and subtitles, transcribe files, or export bundles. Also use when the user asks to save pasted text as concise, classified knowledge in a chosen collection. Save unprocessed context by default; analysis and writing require a request. Ordinary explanations of supplied text do not require collection.
 ---
 
 # Soota
@@ -12,6 +12,8 @@ Use an installed `soota` command. For a source checkout, resolve this SKILL.md s
 Use `ingest INPUT --want ... --json` for explicit artifacts and combinations: `video`, `audio`, `transcript`, `context`, `markdown`, `images`, `data`, `analysis`, `note`, `outline`, `article`. `--optional` declares outputs whose failure does not block the required ones. Inputs can be URLs, local files, a bundle directory or manifest, and `--inputs-file` lists. For batch processing, existing bundles, explicit native operations, analysis handoffs or exports, read [task workflow](references/tasks.md).
 
 Default collection ends at unprocessed context. Saving an existing article uses `context` or `markdown`; `article` requests a separate reading article written by the Agent. Do not introduce an article step before a summary or analysis. A media-only request does not authorize transcription or summarization; do not load the full body for a download-only request.
+
+For “save this pasted text to my knowledge base”, read [concise knowledge workflow](references/knowledge.md). Preserve the paste as a local text file, use `--provider local --want context,note`, and let the Agent split, deduplicate and classify the requested knowledge using the destination's current rules and prompt. A paste containing URLs is still supplied text; do not turn it into link collection. A summary-only request does not authorize knowledge-base writes.
 
 The existing single-video command without `--want` remains available: `ingest URL --transcript captions-only|auto|asr|none --json`. Use `inspect URL --json` for metadata only. Use `doctor --json` when required runtimes are unknown.
 

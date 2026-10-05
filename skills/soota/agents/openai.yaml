@@ -1,7 +1,7 @@
 interface:
-  display_name: "Soota 内容采集"
-  short_description: "从视频和平台获取字幕、内容与创作者目录"
-  default_prompt: "获取这个视频的字幕并保存为 Soota 内容包。"
+  display_name: "Soota 内容采集与归纳"
+  short_description: "采集字幕、正文与创作者目录，按请求将粘贴文字精炼归档到知识库"
+  default_prompt: "使用 $soota 保存这段文字，精炼其中的知识并按目标知识库的现有分类归档。"
 
 policy:
   allow_implicit_invocation: true

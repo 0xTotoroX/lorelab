@@ -17,6 +17,8 @@ Use only targets requested or necessary for the task:
 | Write a note and separate outline | `--want note,outline` |
 | Produce a detailed reading article | `--want article` |
 
+Saving pasted text as classified knowledge uses a saved `.txt` file with `--provider local --want context,note`, then Agent-managed classification. Read [concise knowledge workflow](knowledge.md); do not pass the paste as share text or a link list.
+
 `markdown` keeps the same unprocessed-text boundary as context. Do not map “download this article” to a semantic rewrite. Put optional outputs in `--optional`; do not downgrade a user-required target merely to obtain a successful exit code.
 
 Examples use placeholders:
