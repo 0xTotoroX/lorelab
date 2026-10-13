@@ -95,3 +95,12 @@ def saved_segments(body: Any) -> list[Cue]:
         )
         for row in objects(decode(body))
     ]
+
+
+def youtube_transcript(body: Any) -> list[Cue]:
+    cues = []
+    for row in objects(decode(body)):
+        start = milliseconds(row["start"], 1000)
+        end = start + milliseconds(row["duration"], 1000) if row.get("duration") is not None else None
+        cues.append(Cue(start, end, text_field(row, "text")))
+    return cues

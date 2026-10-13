@@ -4,7 +4,7 @@
 
 Soota 是本地优先的内容处理 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context，只有明确请求时才由 Agent 分析、写笔记或整理详细阅读文章。
 
-YouTube/Bilibili 字幕按已接入能力使用 OpenCLI → yt-dlp → 经费用授权的 TikHub；确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
+YouTube/Bilibili 字幕按平台和能力的费用规则选择来源，支持手动优先级；Monid 为可选付费 Provider，免费来源默认优先。确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
 
 常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
 
@@ -32,6 +32,18 @@ export TIKHUB_API_KEY="..."   # 不要把 Key 发给聊天或写入 Git
 security add-generic-password -s soota.tikhub -a api_key -w
 ```
 
+## 可选 Monid 和优先级
+
+```bash
+uv run soota providers auth monid
+uv run soota providers enable monid
+uv run soota providers priority show youtube captions
+uv run soota providers priority set youtube captions --mode cost
+uv run soota providers priority set bilibili captions --mode manual --order opencli,yt-dlp,tikhub,monid
+```
+
+所有配置均可在 CLI 完成。按平台分别设置 `inspect/captions/catalog/api/audio`；显式 `--provider monid` 或 `--provider tikhub` 优先于规则。启用 Monid 不关闭付费确认。YouTube 字幕通过 Monid/Apify，B站字幕和已覆盖的原生接口通过 Monid/TikHub；按公布的整条链费用排序，价格未知时不自动派发。查看与免费刷新报价、密钥配置及恢复边界见 [Monid 与来源优先级](docs/monid.md)。
+
 ## 命令
 
 零费用快照示例：`uv run soota catalog "https://x.com/USERNAME" --max-items 50 --max-cost 0 --json`。完整性未知，不代表全部历史。
@@ -57,7 +69,7 @@ uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
 ```
 
-字幕模式：`auto`、`captions-only`、`asr`、`none`。视频字幕默认按能力依次尝试 OpenCLI、yt-dlp、经授权的 TikHub。`policy set --mode auto` 只改变轮到 TikHub 时的付费方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
+字幕模式：`auto`、`captions-only`、`asr`、`none`。视频字幕默认免费来源优先，再按整条请求链报价选择 TikHub 或已启用的 Monid。`policy set --mode auto` 只改变付费来源的授权方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
 
 B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优先使用 YouTube，并默认排除已有推广标注。`--no-prefer-youtube` 关闭跨平台检查，`--keep-promotions` 保留推广。过滤保留原字幕供追溯；无标注不代表无推广。详细使用与限制见 [字幕选择与过滤](docs/subtitle-selection.md)。
 
@@ -100,7 +112,7 @@ uv run soota jobs resume JOB_ID --max-items 200 --max-pages 6 --max-cost 0.007 -
 uv run soota catalog "频道或 UP 主 URL" --incremental --max-cost 0.004 --json
 ```
 
-目录采集默认逐次询问付费；可用 `policy set` 明确启用自动付费。`--max-cost`（USD）是可选的额外上限。条数、页数和费用均是整个任务的累计上限；续跑传入的是新总上限，不是追加额度。费用按受控价格快照在每次请求前预留，实际扣费以 TikHub 账单为准；请求失败或中断后，已预留的额度仍保留。
+目录采集默认逐次询问付费；可用 `policy set` 明确启用自动付费。`--max-cost`（USD）是可选的额外上限。条数、页数和费用均是整个任务的累计上限；续跑传入的是新总上限，不是追加额度。费用按受控价格快照在每次请求前预留，实际扣费以对应服务账单为准；请求失败或中断后，已预留的额度仍保留。
 
 `--incremental` 创建新快照，跳过本机历史目录中已收录的视频；遇到整页都已收录时停止。默认上限是 100 条、10 页。目录只生成视频链接与已有元数据，不自动获取字幕、音频或摘要。使用方法、恢复边界与接口证据见 [目录采集说明](docs/catalog.md)。
 

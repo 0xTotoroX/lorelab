@@ -140,7 +140,7 @@ def test_no_balance_limit_skips_wallet_and_cap_precedes_prompt(settings, monkeyp
 def test_policy_requires_explicit_auto_threshold_and_preserves_toml(settings, monkeypatch):
     monkeypatch.setattr("soota.pipeline.StdioMCPClient.available", lambda config: True)
     settings.config_dir.mkdir(parents=True)
-    settings.config_path.write_text('[soota]\ndefault_language="en"\n')
+    settings.config_path.write_text('[soota]\ndefault_language="en"\n[opencli_mcp]\nenabled=true\n')
     monkeypatch.setenv("SOOTA_CONFIG_DIR", str(settings.config_dir))
     monkeypatch.setenv("SOOTA_DATA_DIR", str(settings.data_dir))
     monkeypatch.setenv("SOOTA_CACHE_DIR", str(settings.cache_dir))

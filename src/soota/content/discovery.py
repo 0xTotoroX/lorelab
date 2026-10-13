@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.metadata
 import importlib.util
+import json
 import re
 import shutil
+from pathlib import Path
 from typing import Any
 
 from soota.billing import provider_enabled
@@ -206,6 +208,38 @@ def discover_capabilities(settings: SootaSettings) -> dict[str, Any]:
                 "verification": None,
             }
         )
+    monid_enabled = provider_enabled(settings, "monid")
+    providers.append(
+        {
+            "provider": "monid",
+            "enabled": monid_enabled,
+            "available": monid_enabled,
+            "state": "discovered" if monid_enabled else "blocked",
+            "credentials_checked": False,
+            "prices_checked": False,
+            "verification": None,
+        }
+    )
+    if monid_enabled:
+        prices = json.loads(Path(__file__).parents[1].joinpath("providers/monid/prices.json").read_text())
+        for endpoint in registry.preferred():
+            if endpoint.path not in prices["tikhub"]:
+                continue
+            capabilities.append(
+                {
+                    "id": "monid." + endpoint.key,
+                    "provider": "monid",
+                    "operation": endpoint.key,
+                    "description": endpoint.summary,
+                    "state": "native" if endpoint.callable and not endpoint.deprecated else "blocked",
+                    "access": "read" if endpoint.callable else "unclassified",
+                    "input_schema": endpoint.query_schema,
+                    "tasks": endpoint.tasks,
+                    "output_contract": "provider_native",
+                    "requires_payment_policy": True,
+                    "verification": None,
+                }
+            )
     return {
         "providers": providers,
         "capabilities": capabilities,

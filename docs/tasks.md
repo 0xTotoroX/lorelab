@@ -46,6 +46,12 @@ soota ingest "文章 URL" --want context --optional images --max-cost 0 --json
 
 字幕模式沿用 `auto`、`captions-only`、`asr`、`none`：`auto` 只在确认无字幕时进入本地转写，`asr` 明确要求语音转写，`none` 不请求字幕。只取元数据可用 `inspect` 或 `--want data`；没有可复用正文且禁止取得字幕或转写时，CLI 会报告缺少目标产物。
 
+## Provider 优先级
+
+`--provider auto` 使用按平台和能力保存的 cost/manual 规则；`--provider monid` 显式使用可选 Monid。通过 `providers auth/enable/disable/priority set/priority show` 配置，详见 [Monid 与来源优先级](monid.md)。元数据、字幕、目录、原生 API、音频分别比较，不按平台给出一个混合单价。Monid 报价预留与其他付费来源共享任务累计上限，异步恢复查询原 runId；无字幕结果也可能收费。
+
+`monid.<TikHub 接口 key>` 原生任务只取得已经登记的读取契约，不自动提供任意平台的文章或字幕转换。`tikhub.<key>` 在 auto 下遵守 api 规则，显式 `--provider tikhub` 强制直连。
+
 ## 本地文件、清单与旧内容包
 
 ```bash

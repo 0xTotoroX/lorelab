@@ -71,3 +71,8 @@ def task_budget_scope(budget: TaskBudget) -> Iterator[None]:
         yield
     finally:
         _ACTIVE.reset(token)
+
+
+def active_task_identity() -> str | None:
+    budget = _ACTIVE.get()
+    return str(budget.folder.resolve()) if budget is not None else None

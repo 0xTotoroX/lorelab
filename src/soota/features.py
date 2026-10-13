@@ -8,15 +8,16 @@ from pathlib import Path
 from typing import Any
 
 from soota.api import _protect, call_endpoint, prepare_request
-from soota.billing import selected_provider
+from soota.billing import provider_enabled, selected_provider
 from soota.config import SootaSettings
 from soota.errors import InputError, SourceError
 from soota.feature_aliases import ALIASES, FeatureAlias, alias_params
-from soota.models import CommandResult
+from soota.models import CommandResult, SourceRef
 from soota.providers import opencli_commands
 from soota.providers.mcp_client import StdioMCPClient, require_enabled
 from soota.providers.opencli_mcp import READ_COMMANDS, OpenCLIMCPProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
+from soota.providers.priority import NAMES, quote_rows, rule_for
 from soota.providers.tikhub.registry import load_registry
 from soota.secrets import CREDENTIAL_FIELDS
 from soota.storage.atomic import atomic_write
@@ -45,8 +46,12 @@ def list_features(
 ) -> CommandResult:
     if provider == "soota":
         provider = "yt-dlp"
-    if provider not in {None, "opencli-mcp", "opencli", "yt-dlp", "tikhub"} or not 1 <= limit <= 5000 or offset < 0:
-        raise InputError("provider 支持 opencli-mcp/opencli/yt-dlp/tikhub；limit 为 1–5000，offset 非负。")
+    if (
+        provider not in {None, "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid"}
+        or not 1 <= limit <= 5000
+        or offset < 0
+    ):
+        raise InputError("provider 支持 opencli-mcp/opencli/yt-dlp/tikhub/monid；limit 为 1–5000，offset 非负。")
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
     if settings.opencli_mcp.enabled and provider in {None, "opencli-mcp"}:
@@ -67,18 +72,28 @@ def list_features(
                     "plans": [{"provider": "opencli-mcp", "operation": operation}],
                 }
             )
-    if provider in {None, "tikhub"}:
+    for paid_name in ("tikhub", "monid"):
+        if paid_name == "monid" and provider is None and not provider_enabled(settings, "monid"):
+            continue
+        if provider not in {None, paid_name}:
+            continue
         for endpoint in load_registry().preferred():
+            if paid_name == "monid":
+                source = SourceRef(platform=endpoint.platform, kind="query", id="feature", url="", canonical_url="")
+                if not quote_rows(settings, source, "api", [paid_name], endpoint=endpoint.path)[0]["supported"]:
+                    continue
+                if not endpoint.callable or endpoint.deprecated:
+                    continue
             rows.append(
                 {
-                    "id": "tikhub." + endpoint.key,
+                    "id": paid_name + "." + endpoint.key,
                     "site": endpoint.platform,
                     "description": endpoint.summary,
-                    "providers": ["tikhub"],
+                    "providers": [paid_name],
                     "access": "read" if endpoint.callable else "unclassified",
                     "callable": not endpoint.deprecated,
                     "requires_allow_write": not endpoint.callable,
-                    "plans": [{"provider": "tikhub", "operation": endpoint.key}],
+                    "plans": [{"provider": paid_name, "operation": endpoint.key}],
                     "reason": None if endpoint.callable else "辅助接口；需显式 --allow-write，价格未知时仍暂停",
                 }
             )
@@ -111,13 +126,28 @@ def list_features(
     )
 
 
-def alias_view(settings: SootaSettings, alias: FeatureAlias) -> dict[str, Any]:
+def alias_view(settings: SootaSettings, alias: FeatureAlias, *, preferred: str | None = None) -> dict[str, Any]:
     plans = [{"provider": "opencli", "operation": alias.opencli}, {"provider": "tikhub", "operation": alias.tikhub}]
     if alias.id in {"youtube.video.detail", "bilibili.video.detail"}:
         plans.insert(1, {"provider": "yt-dlp", "operation": alias.opencli})
     if settings.opencli_mcp.enabled and alias.opencli_mcp:
         plans.insert(0, {"provider": "opencli-mcp", "operation": alias.opencli_mcp})
-    preferred = settings.routing.default_provider
+    endpoint = load_registry().resolve(alias.tikhub)
+    source = SourceRef(platform=endpoint.platform, kind="query", id="feature", url="", canonical_url="")
+    quotes = {
+        row["provider"]: row for row in quote_rows(settings, source, "api", ["tikhub", "monid"], endpoint=endpoint.path)
+    }
+    if quotes["monid"]["supported"]:
+        plans.append({"provider": "monid", "operation": alias.tikhub})
+    rule = rule_for(settings, endpoint.platform, "inspect" if alias.id.endswith("video.detail") else "api")
+    order = list(rule.order) + [name for name in NAMES if name not in rule.order]
+
+    def plan_cost(plan: dict[str, str]) -> float:
+        price = quotes.get(plan["provider"], {}).get("estimated_cost_usd", 0)
+        return float(price) if price is not None else float("inf")
+
+    plans.sort(key=lambda plan: (plan_cost(plan) if rule.mode == "cost" else 0, order.index(plan["provider"])))
+    preferred = preferred or settings.routing.default_provider
     if preferred != "auto":
         plans.sort(key=lambda plan: plan["provider"] != preferred)
     return {
@@ -155,10 +185,10 @@ def show_feature(settings: SootaSettings, selector: str) -> CommandResult:
             "opencli-mcp 已核验只读功能。",
             {"feature": {"id": selector, "site": site_name, "command": command_name, "access": "read"}},
         )
-    if selector.startswith("tikhub."):
-        endpoint = load_registry().resolve(selector.removeprefix("tikhub."))
+    if selector.startswith(("tikhub.", "monid.")):
+        endpoint = load_registry().resolve(selector.split(".", 1)[1])
         return success(
-            "TikHub 原生功能契约。",
+            "供应商原生功能契约。",
             {
                 "feature": {
                     "id": selector,
@@ -320,16 +350,18 @@ def call_feature(
     if provider == "soota":
         provider = "yt-dlp"
     chosen = selected_provider(settings, provider)
-    if chosen not in {"auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub"}:
-        raise InputError("provider 支持 auto/opencli-mcp/opencli/yt-dlp/tikhub。")
+    if chosen not in {"auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid"}:
+        raise InputError("provider 支持 auto/opencli-mcp/opencli/yt-dlp/tikhub/monid。")
     if output is not None and output.expanduser().exists() and not dry_run:
         raise InputError("输出文件已存在。", hint="请使用新的 --output 路径，避免覆盖已有结果。")
-    if selector.startswith("tikhub."):
-        if provider in {"opencli-mcp", "opencli", "yt-dlp"}:
-            raise InputError("原生 TikHub 功能不能指定免费来源；请选择统一功能 id。")
+    if selector.startswith(("tikhub.", "monid.")):
+        native_provider = selector.split(".", 1)[0]
+        if provider not in {None, "auto", native_provider}:
+            raise InputError("原生功能标识与显式 Provider 不一致。")
         return call_endpoint(
             settings,
-            selector.removeprefix("tikhub."),
+            selector.split(".", 1)[1],
+            provider_name="monid" if selector.startswith("monid.") else "tikhub",
             params=params,
             params_file=params_file,
             body_file=body_file,
@@ -337,16 +369,16 @@ def call_feature(
             dry_run=dry_run,
             max_cost=max_cost,
             requester=requester,
-            allow_auxiliary=allow_write,
+            allow_auxiliary=allow_write if selector.startswith("tikhub.") else False,
         )
     values = read_params(params, params_file)
     secrets = [str(value) for key, value in values.items() if key.lower() in CREDENTIAL_FIELDS]
     if body_file:
-        raise InputError("--body 仅适用于 tikhub.* 原生功能。")
+        raise InputError("--body 仅适用于 tikhub.* 或 monid.* 原生功能。")
     if selector.startswith("opencli."):
         raise InputError("OpenCLI 原生命令映射已移除。", hint="直接调用 OpenCLI，或选择 Soota 的统一业务入口。")
     elif selector.startswith("opencli-mcp."):
-        if provider in {"opencli", "yt-dlp", "tikhub"}:
+        if provider in {"opencli", "yt-dlp", "tikhub", "monid"}:
             raise InputError("原生 opencli-mcp 功能不能指定其他 Provider；请选择统一功能 id。")
         result = _native_mcp(settings, selector, values, dry_run=dry_run)
     else:
@@ -361,61 +393,61 @@ def call_feature(
         prepare_request(endpoint, paid_pairs, None, None)
         result = None
         unavailable: list[str] = []
-        if settings.opencli_mcp.enabled and chosen in {"auto", "opencli-mcp"}:
-            if not alias.opencli_mcp:
-                if chosen == "opencli-mcp":
-                    raise SourceError("该统一功能尚无已核验的 opencli-mcp 方案。")
-            elif chosen == "opencli-mcp" or StdioMCPClient.available(settings.opencli_mcp):
-                try:
+        plans = alias_view(settings, alias, preferred=chosen)["plans"]
+        selected_plans = [
+            plan
+            for plan in plans
+            if (chosen == "auto" or plan["provider"] == chosen) and provider_enabled(settings, plan["provider"])
+        ]
+        for plan in selected_plans:
+            name = plan["provider"]
+            try:
+                if name == "opencli-mcp":
+                    assert alias.opencli_mcp is not None
                     result = _native_mcp(
                         settings,
                         "opencli-mcp." + alias.opencli_mcp.replace("/", "."),
                         {"bvid": cheap[alias.opencli_parameter]},
                         dry_run=dry_run,
                     )
-                except RuntimeUnavailable as exc:
-                    if chosen == "opencli-mcp":
-                        raise
-                    unavailable.append(exc.message)
-        if result is None and chosen in {"auto", "opencli"}:
-            try:
-                result = _native_opencli(
-                    settings, "opencli." + alias.opencli.replace("/", "."), cheap, dry_run=dry_run, allow_write=False
-                )
-            except RuntimeUnavailable as exc:
-                if chosen == "opencli":
-                    raise
-                unavailable.append(exc.message)
-        ytdlp_detail = alias.id in {"youtube.video.detail", "bilibili.video.detail"}
-        if chosen == "yt-dlp" and not ytdlp_detail:
-            raise SourceError("yt-dlp Provider 当前支持 YouTube/Bilibili inspect/ingest。")
-        if result is None and chosen in {"auto", "yt-dlp"} and ytdlp_detail:
-            from soota.pipeline import inspect
+                elif name == "opencli":
+                    result = _native_opencli(
+                        settings,
+                        "opencli." + alias.opencli.replace("/", "."),
+                        cheap,
+                        dry_run=dry_run,
+                        allow_write=False,
+                    )
+                elif name == "yt-dlp":
+                    from soota.pipeline import inspect
 
-            try:
-                result = inspect(settings, str(values["url"]), provider="yt-dlp", fetch=not dry_run, max_cost=0)
-                result.data = {
-                    "provider": "yt-dlp",
-                    "operation": alias.opencli,
-                    "output_contract": "soota_metadata",
-                    "response": result.data,
-                }
+                    result = inspect(settings, str(values["url"]), provider=name, fetch=not dry_run, max_cost=0)
+                    result.data = {
+                        "provider": name,
+                        "operation": alias.opencli,
+                        "output_contract": "soota_metadata",
+                        "response": result.data,
+                    }
+                else:
+                    result = call_endpoint(
+                        settings,
+                        alias.tikhub,
+                        params=paid_pairs,
+                        dry_run=dry_run,
+                        max_cost=max_cost,
+                        requester=requester,
+                        output=output,
+                        provider_name=name,
+                    )
+                    result.data.update(provider=name, operation=alias.tikhub, output_contract="provider_native")
+                break
             except RuntimeUnavailable as exc:
-                if chosen == "yt-dlp":
+                if chosen != "auto":
                     raise
                 unavailable.append(exc.message)
         if result is None:
-            result = call_endpoint(
-                settings,
-                alias.tikhub,
-                params=paid_pairs,
-                dry_run=dry_run,
-                max_cost=max_cost,
-                requester=requester,
-                output=output,
-            )
-            result.data.update(provider="tikhub", operation=alias.tikhub, output_contract="provider_native")
-        plans = alias_view(settings, alias)["plans"]
+            raise SourceError("所选来源尚未接入此功能或没有可用方案。")
+        plans = alias_view(settings, alias, preferred=chosen)["plans"]
         if chosen != "auto":
             plans.sort(key=lambda plan: plan["provider"] != chosen)
         result.data["feature"] = {"id": alias.id, "plans": plans}

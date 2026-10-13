@@ -48,7 +48,7 @@ soota ingest --operation opencli.youtube.search --param query=example \
 
 `native` means the raw operation is callable under its contract; `standard` means a reviewed result conversion exists. Neither proves live site success. `--expand` needs a bound list result; do not recursively extract arbitrary URLs from provider JSON. If only native data is supported, deliver that data and report the missing standard contract.
 
-TikHub operations use `tikhub.<endpoint>` and parameters from `api show`. They remain subject to payment policy and the shared task budget. Publicly saved data redacts credentials and signed links. Media acquisition must use the controlled internal descriptor, not URLs copied from a redacted JSON file.
+TikHub operations use `tikhub.<endpoint>` and parameters from `api show`. Optional Monid accepts `monid.<endpoint>` for the covered TikHub read contracts; auto routing of `tikhub.<endpoint>` also follows the platform api priority. Use `providers priority set PLATFORM CAPABILITY --mode cost` or `--mode manual --order ...`, and `providers priority show ... --refresh` for free quote refresh. Explicit `--provider` overrides the rule. They remain subject to payment policy and the shared task budget. Publicly saved data redacts credentials and signed links. Media acquisition must use the controlled internal descriptor, not URLs copied from a redacted JSON file.
 
 ## Continue a saved task
 

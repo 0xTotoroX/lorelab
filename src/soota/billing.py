@@ -24,12 +24,13 @@ class BalancePaused(AuthBudgetError):
 def confirm_payment(details: dict[str, Any]) -> bool:
     if not sys.stdin.isatty():
         raise PaymentRequired(
-            "本次 TikHub 请求需要付费确认，尚未发送。",
+            "本次请求需要付费确认，尚未发送。",
             hint="请在交互终端重跑并确认，或明确配置 soota policy set --mode auto。",
             details=details,
         )
     print(
-        f"TikHub {details['endpoint']}：预计 {details['estimated_cost_usd']:g} USD。允许本次请求？[y/N] ",
+        f"{details.get('provider', 'tikhub')} {details['endpoint']}：预计 "
+        f"{details['estimated_cost_usd']:g} USD。允许本次请求？[y/N] ",
         file=sys.stderr,
         end="",
         flush=True,
@@ -40,7 +41,8 @@ def confirm_payment(details: dict[str, Any]) -> bool:
 class PaymentGate:
     """One authorization per dispatched billed request; cache reads never enter this gate."""
 
-    def __init__(self, settings: SootaSettings, max_cost: float | None = None) -> None:
+    def __init__(self, settings: SootaSettings, max_cost: float | None = None, *, provider: str = "tikhub") -> None:
+        self.provider = provider
         self.policy: PaymentConfig = settings.payment
         self.root = settings.data_dir / "billing"
         self.cap = Decimal(str(max_cost)) if max_cost is not None else None
@@ -59,7 +61,7 @@ class PaymentGate:
             raise AuthBudgetError("下一次请求将超过本次费用上限，未发送请求。")
         if cost > 0:
             details: dict[str, Any] = {
-                "provider": "tikhub",
+                "provider": self.provider,
                 "endpoint": record.endpoint,
                 "estimated_cost_usd": price,
                 "mode": self.policy.mode,
@@ -116,8 +118,22 @@ def selected_provider(settings: SootaSettings, explicit: str | None) -> str:
         raise InputError(f"{chosen} 已在来源策略中停用。")
     if chosen == "opencli-mcp" and not settings.opencli_mcp.enabled:
         raise InputError("MCP 接入已停用；请使用 auto、opencli、yt-dlp 或 tikhub。")
+    if chosen == "monid" and not settings.monid.enabled:
+        raise InputError("Monid 尚未启用；使用 soota providers enable monid。")
     return chosen
 
 
 def provider_enabled(settings: SootaSettings, name: str) -> bool:
-    return name not in settings.routing.disabled_providers and (name != "opencli-mcp" or settings.opencli_mcp.enabled)
+    return (
+        name not in settings.routing.disabled_providers
+        and (name != "opencli-mcp" or settings.opencli_mcp.enabled)
+        and (name != "monid" or settings.monid.enabled)
+    )
+
+
+def actual_cost(records: list[RequestRecord]) -> float | None:
+    """Current dispatch costs only; an old receipt's cost is not charged again."""
+    billed = [r for r in records if r.billed and not r.cache_hit]
+    if any(r.actual_cost_usd is None for r in billed):
+        return None
+    return round(sum(r.actual_cost_usd or 0 for r in billed), 9)

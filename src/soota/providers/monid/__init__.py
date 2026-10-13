@@ -1,0 +1,1 @@
+"""Optional Monid acquisition adapters."""

@@ -13,6 +13,18 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
+def block_external_http(monkeypatch):
+    original = httpx.HTTPTransport.handle_request
+
+    def guarded(transport, request):
+        if request.url.host not in {"localhost", "127.0.0.1", "::1"}:
+            pytest.fail("Tests must use MockTransport; external HTTP could spend the user's balance.")
+        return original(transport, request)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", guarded)
+
+
+@pytest.fixture(autouse=True)
 def block_browser_commands(monkeypatch):
     def blocked(*args, **kwargs):
         raise AssertionError("Tests must stub OpenCLI; never use the user's browser.")

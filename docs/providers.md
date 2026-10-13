@@ -35,7 +35,7 @@ flowchart TD
 
 格式能力、解析限制和新增格式的位置以 [字幕格式与 context](subtitle-formats.md#统一转换层) 为准；获取工具顺序与格式获取偏好都属于内容获取黑盒。
 
-字幕路径按能力使用 OpenCLI → yt-dlp → 经费用授权的 TikHub；媒体、正文和原生数据分别使用对应能力，不能将同一个排序套用于所有步骤。MCP 默认停用。显式来源严格保留，获取失败不会自动重新从其他 Provider 获取。业务入口见 [功能入口与费用策略](features.md)，组合任务和能力发现见 [统一内容任务](tasks.md)。
+字幕路径按平台及能力的费用或手动规则排序，免费来源默认优先，可选 Monid 与 TikHub 均受费用策略约束；媒体、正文和原生数据分别使用对应能力，不能将同一个排序套用于所有步骤。MCP 默认停用。显式来源严格保留，获取失败不会自动重新从其他 Provider 获取。业务入口见 [功能入口与费用策略](features.md)，组合任务和能力发现见 [统一内容任务](tasks.md)。
 
 ## 当前接入范围
 
@@ -53,7 +53,7 @@ flowchart TD
 
 共享 `media/` 还接收本地文件、直接媒体地址、HLS/DASH、分离音视频地址及 yt-dlp 页面提取结果，完成文件获取和验证。下载器能读取某个媒体，不等于该平台已经拥有标准字幕、正文或集合解析。
 
-`capabilities` 从当前运行时清单和受控注册表区分 `discovered`、`native`、`standard`、`blocked`；不会自动标记真实站点 `verified`。`api list/show/call` 仍是显式 TikHub 接口工具。OpenCLI 自带命令只有经过结果绑定后才进入对应的标准正文、媒体或列表流程。
+`capabilities` 从当前运行时清单和受控注册表区分 `discovered`、`native`、`standard`、`blocked`；不会自动标记真实站点 `verified`。`api list/show` 使用受控 TikHub 注册表；`api call` 可按规则使用直连 TikHub 或已启用的 Monid 转发。OpenCLI 自带命令只有经过结果绑定后才进入对应的标准正文、媒体或列表流程。
 
 ### yt-dlp Provider
 
@@ -67,9 +67,13 @@ B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会�
 
 `SOOTA_YTDLP_BINARY` 指定程序，默认 PATH 中的 `yt-dlp`；`SOOTA_YTDLP_COOKIES_BROWSER` 使用 yt-dlp 的浏览器/profile 语法，默认 `chrome`，空字符串关闭 Cookie 读取。若提示 B 站字幕需要登录，先核对实际读取的 Chrome profile；`chrome` 自动选择的 profile 不一定是当前登录 B 站的 profile。个人选择仅从环境变量注入。Provider 适配随 Soota 更新；外部 yt-dlp 由其原安装工具维护，Downie 由应用自身更新。`updates apply` 不升级这两者。
 
+## Monid 与优先级
+
+`providers/priority.py` 根据平台、能力及完整调用链比较报价；`providers_cli.py` 保存启停、密钥和优先级配置。`providers/monid/client.py` 负责报价、预留、HTTP 与异步恢复；`provider.py` 返回原始获取状态和正文，复用已有 TikHub 数据契约，YouTube 字幕使用 Apify。解析仍在 `transcripts/formats/`。配置、范围和费用表见 [Monid 与来源优先级](monid.md)。
+
 ## 路由和费用
 
-`--provider` 选择元数据和字幕来源：`auto` 按 OpenCLI → yt-dlp → 经授权 TikHub 选择，也可显式指定一个来源。只有来源不可用、状态未知或已识别为可兜底的字幕获取失败，才会尝试下一来源。登录、验证码、权限、限流、超时和响应契约错误仍会停止，不盲目重试。
+`--provider` 选择元数据和字幕来源：`auto` 按平台和能力的已知费用排序，或使用保存的手动顺序，也可显式指定一个来源。只有来源不可用、状态未知或已识别为可兜底的字幕获取失败，才会尝试下一来源。登录、验证码、权限、限流、超时和响应契约错误仍会停止，不盲目重试。
 
 字幕结果与后续动作：
 
@@ -87,30 +91,23 @@ B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会�
 
 ```mermaid
 flowchart TD
-    A[视频链接] --> O[OpenCLI 字幕]
-    O -->|取得字幕| R[统一字幕转换]
-    O -->|确认无字幕| D[选择音频来源]
-    O -->|未知或允许兜底的失败| Y[yt-dlp 字幕]
-    Y -->|取得字幕| R
-    Y -->|确认无字幕| D
-    Y -->|未知或不可用| T[TikHub 字幕：受费用策略控制]
-    T -->|取得字幕| R
-    T -->|确认无字幕| D
-    T -->|仍未知或处理中| P[返回未完成]
-    D --> U[yt-dlp：默认]
-    D --> W[Downie：明确选择]
-    D --> K[TikHub 音频：明确选择并检查费用]
-    U --> L[本地 Whisper 转写]
-    W --> C[完成标记与音轨校验]
-    C --> L
-    K --> L
-    L --> R
+    A[视频链接] --> P[按平台与字幕能力排序：报价或手动顺序]
+    P --> N[选择下一个已启用来源]
+    N --> F[免费来源：OpenCLI / yt-dlp]
+    N --> T[付费来源：TikHub / Monid，检查费用授权与预算]
+    F --> C{字幕获取状态}
+    T --> C
+    C -->|取得正文| R[统一转换并缓存]
+    C -->|未知或允许兜底的失败| N
+    C -->|没有剩余来源或处理中| X[返回未完成]
+    C -->|明确无字幕| D[结束字幕查询，按模式选择音频与本地转写]
+    D --> R
     R --> S[保存 context 与源字幕]
 ```
 
 图中允许切换的错误不包括登录、限流、权限、超时或格式契约异常。MCP 默认停用。开启 `--prefer-youtube` 时，先按已有依据选择跨平台对照视频；不同平台不共享“无字幕”的判断。
 
-`--audio-provider` 独立选择转写用的音频来源：默认 `yt-dlp`；`downie` 只在明确选择或用户配置时使用；`tikhub` 仍经过付费授权。显式音频来源获取失败时停止并保留错误，不自动改用另一来源。结果中 `audio_provider_requested` 是所选来源，`audio_provider` 是实际取得音频的来源，旧音频缓存不能核实时保留 `unknown`。
+`--audio-provider` 独立选择转写用的音频来源：默认 `yt-dlp`；`downie` 只在明确选择或用户配置时使用；`tikhub` 和 `monid` 仍经过付费授权；`auto` 按 audio 规则选择。显式音频来源获取失败时停止并保留错误，不自动改用另一来源。结果中 `audio_provider_requested` 是所选来源，`audio_provider` 是实际取得音频的来源，旧音频缓存不能核实时保留 `unknown`。
 
 单视频各阶段共用本次 `--max-cost` 上限；统一任务还将集合枚举与所有条目纳入同一个持久化预留账本，后续请求扣除已经预留的额度，恢复不清零。`--max-cost 0` 禁止计费接口，但允许免费音频下载和本地计算。`estimate` 在选择 TikHub 音频时单列确认无字幕后才触发的 `conditional_audio` 费用，不把整次任务说成零费用。单价为受控快照中的预估，不冒充实际账单；`ask` 每次确认，`auto` 按已配置的余额门槛授权。
 

@@ -25,6 +25,7 @@ from soota.models import (
     ContentBundleManifest,
     MediaItem,
     ProcessingManifest,
+    SourceRef,
     TranscriptDocument,
     TranscriptMode,
     TranscriptSource,
@@ -33,7 +34,9 @@ from soota.models import (
 from soota.providers import opencli_commands
 from soota.providers.downie import DownieProvider
 from soota.providers.mcp_client import StdioMCPClient, require_enabled
+from soota.providers.monid.provider import MonidProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
+from soota.providers.priority import ordered_names
 from soota.providers.tikhub.client import TikHubProvider
 from soota.providers.tikhub.normalize import pick_audio_url
 from soota.providers.tikhub.registry import load_registry
@@ -86,27 +89,44 @@ def public_text(text: str) -> str:
 
 def native_operation(settings: SootaSettings, spec: TaskSpec, seed: InputSpec, work: Path) -> NativeOperation:
     operation = seed.operation or ""
-    if operation.startswith("tikhub."):
-        if spec.provider not in {"auto", "tikhub"}:
+    if operation.startswith(("tikhub.", "monid.")):
+        if spec.provider not in {"auto", "tikhub", "monid"}:
             raise InputError("原生接口与显式 Provider 不一致。")
-        selected_provider(settings, "tikhub")
         from soota.api import _validate
 
-        endpoint = load_registry().resolve(operation.removeprefix("tikhub."))
+        endpoint = load_registry().resolve(operation.split(".", 1)[1])
         if not endpoint.callable or endpoint.deprecated:
             raise InputError("只允许当前已审查的读取接口。")
         _validate(seed.params, endpoint.query_schema, "查询参数")
-        client = TikHubProvider(
-            cache=CacheStore(settings.cache_dir),
-            runtime_python=settings.tikhub.runtime_python,
-            base_url=settings.tikhub.base_url,
-            timeout=settings.tikhub.timeout_seconds,
-            payment_gate=PaymentGate(settings, spec.max_cost),
-            max_retries=0,
+        chosen = spec.provider
+        if operation.startswith("monid."):
+            if chosen not in {"auto", "monid"}:
+                raise InputError("Monid 原生操作与显式 Provider 不一致。")
+            chosen = "monid"
+        if chosen == "auto":
+            source = SourceRef(platform=endpoint.path.split("/")[3], kind="video", id="api", url="", canonical_url="")
+            choices = ordered_names(settings, source, "api", ["tikhub", "monid"], endpoint=endpoint.path)
+            if not choices and provider_enabled(settings, "tikhub"):
+                choices = ["tikhub"]
+            if not choices:
+                raise SourceError("没有可用的原生接口来源。")
+            chosen = choices[0]
+        selected_provider(settings, chosen)
+        client = (
+            MonidProvider(settings, spec.max_cost, purpose="api")
+            if chosen == "monid"
+            else TikHubProvider(
+                cache=CacheStore(settings.cache_dir),
+                runtime_python=settings.tikhub.runtime_python,
+                base_url=settings.tikhub.base_url,
+                timeout=settings.tikhub.timeout_seconds,
+                payment_gate=PaymentGate(settings, spec.max_cost),
+                max_retries=0,
+            )
         )
         client.endpoint_price(endpoint)
         raw = client.query(endpoint, seed.params)
-        return NativeOperation(raw=raw, provider="tikhub", operation=operation, workdir=work)
+        return NativeOperation(raw=raw, provider=chosen, operation=operation, workdir=work)
     if operation.startswith("opencli-mcp."):
         if spec.provider not in {"auto", "opencli-mcp"}:
             raise InputError("原生接口与显式 Provider 不一致。")
@@ -253,11 +273,16 @@ def _collect_text(
         audio_asset = None
         if media is not None:
             audio_asset = AudioAsset(path=media.path, provider=media.source_provider)
+        caption_settings = settings
+        if spec.strict_language and spec.provider == "auto":
+            # These adapters cannot verify the requested language. Rank the remaining known-language sources.
+            caption_settings = settings.model_copy(deep=True)
+            caption_settings.routing.disabled_providers.update({"opencli", "opencli-mcp"})
         result = ingest(
-            settings,
+            caption_settings,
             seed.value,
             transcript=spec.transcript_mode,
-            provider="yt-dlp" if spec.strict_language and spec.provider == "auto" else spec.provider,
+            provider=spec.provider,
             fallback=spec.fallback,
             audio_provider=spec.audio_provider,
             output=work / "source",
@@ -454,7 +479,15 @@ def collect_media(
         folder = provider._submit_or_resume(item)
         media = provider._wait_for_receipt(folder)
         return MediaBatch([service.from_file(media, kind=kind, source_provider="downie", **options)])
-    if spec.provider in {"auto", "opencli"} and provider_enabled(settings, "opencli"):
+    media_provider = spec.provider
+    if media_provider == "auto" and kind == "audio":
+        choices = ordered_names(
+            settings, source_for(seed), "audio", ["yt-dlp", "tikhub", "monid"], max_cost=spec.max_cost
+        )
+        if not choices:
+            raise SourceError("没有可用音频来源。")
+        media_provider = choices[0]
+    if media_provider in {"auto", "opencli"} and provider_enabled(settings, "opencli"):
         try:
             operation_name, _ = media_binding(seed.value)
         except InputError:
@@ -474,21 +507,27 @@ def collect_media(
             except RuntimeUnavailable:
                 if spec.provider != "auto":
                     raise
-    if spec.provider == "tikhub":
+    if media_provider in {"tikhub", "monid"}:
+        selected_provider(settings, media_provider)
         if kind != "audio":
             raise SourceError("TikHub 标准视频产物尚无已验证分轨契约；可显式提供原生媒体描述。")
-        client = TikHubProvider(
-            cache=CacheStore(settings.cache_dir),
-            runtime_python=settings.tikhub.runtime_python,
-            base_url=settings.tikhub.base_url,
-            timeout=settings.tikhub.timeout_seconds,
-            preferred_language=spec.language,
-            max_retries=0,
-            payment_gate=PaymentGate(settings, spec.max_cost),
+        client = (
+            MonidProvider(settings, spec.max_cost, purpose="audio")
+            if media_provider == "monid"
+            else TikHubProvider(
+                cache=CacheStore(settings.cache_dir),
+                runtime_python=settings.tikhub.runtime_python,
+                base_url=settings.tikhub.base_url,
+                timeout=settings.tikhub.timeout_seconds,
+                preferred_language=spec.language,
+                max_retries=0,
+                payment_gate=PaymentGate(settings, spec.max_cost),
+            )
         )
-        item = client.inspect(source_for(seed))
+        audio_source = source_for(seed)
+        item = client.inspect(audio_source) if audio_source.platform == "bilibili" else MediaItem(source=audio_source)
         payload = client._audio_payload(item)
-        descriptor = MediaDescriptor(url=pick_audio_url(payload), source_provider="tikhub")
+        descriptor = MediaDescriptor(url=pick_audio_url(payload), source_provider=media_provider)
         return MediaBatch([service.from_descriptor(descriptor, kind="audio", expected_duration=item.duration_seconds)])
     if spec.provider not in {"auto", "yt-dlp"}:
         raise SourceError("指定 Provider 不具备该媒体产物能力。")

@@ -25,6 +25,17 @@ def emit(result: CommandResult, json_output: bool) -> None:
         for key in ("policy", "feature", "plan"):
             if key in data:
                 typer.echo(json.dumps(data[key], ensure_ascii=False, indent=2, default=str))
+        if "monid_key_present" in data:
+            typer.echo(json.dumps(data, ensure_ascii=False, indent=2, default=str))
+        if "candidates" in data and "rule" in data:
+            typer.echo(f"{data['platform']} / {data['capability']}  模式：{data['rule']['mode']}")
+            typer.echo("有效顺序：" + " → ".join(data["order"]))
+            for row in data["candidates"]:
+                state = "启用" if row["enabled"] else "停用"
+                cost = f"${row['estimated_cost_usd']:g}" if row["estimated_cost_usd"] is not None else "未知/不支持"
+                typer.echo(f"  {row['provider']:12} {state}  {cost}  {row['price_basis']}")
+                if row.get("reason"):
+                    typer.echo("    " + row["reason"])
         for feature in data.get("features", []):
             typer.echo(f"{feature['id']}  {feature['description']}")
         if data.get("output"):

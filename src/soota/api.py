@@ -16,7 +16,7 @@ from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, InputError, SootaError, SourceError
 from soota.models import CommandResult, RequestRecord
 from soota.providers.tikhub.capability import PLATFORM_CAPABILITIES
-from soota.providers.tikhub.client import TikHubProvider, load_price_snapshot
+from soota.providers.tikhub.client import TikHubProvider
 from soota.providers.tikhub.registry import PLATFORM_NAMES, TASK_NAMES, ApiEndpoint, load_registry
 from soota.secrets import CREDENTIAL_FIELDS, REDACTED, redact_any
 from soota.storage.atomic import atomic_write
@@ -223,11 +223,26 @@ def call_endpoint(
     output: Path | None = None,
     requester: Callable[..., Any] | None = None,
     allow_auxiliary: bool = False,
+    provider_name: str = "tikhub",
 ) -> CommandResult:
-    from soota.billing import selected_provider
+    from soota.billing import actual_cost, provider_enabled, selected_provider
+    from soota.models import SourceRef
+    from soota.providers.monid.provider import MonidProvider
+    from soota.providers.priority import ordered_names, quote_rows
 
-    selected_provider(settings, "tikhub")
     endpoint = load_registry().resolve(selector)
+    platform = endpoint.path.split("/")[3]
+    source = SourceRef(platform=platform, kind="video", id="api", url="", canonical_url="")
+    if provider_name == "auto":
+        names = ordered_names(settings, source, "api", ["tikhub", "monid"], endpoint=endpoint.path)
+        if not names and provider_enabled(settings, "tikhub"):
+            names = ["tikhub"]  # Direct API obtains a live quote before dispatch, including uncached paths.
+        if not names:
+            raise SourceError("没有覆盖此接口的已启用来源。")
+        provider_name = names[0]
+    if provider_name not in {"tikhub", "monid"}:
+        raise InputError("api call --provider 支持 auto/tikhub/monid。")
+    selected_provider(settings, provider_name)
     if (not endpoint.callable and not allow_auxiliary) or endpoint.deprecated:
         raise SourceError("该接口不属于当前可用的内容查询接口。", hint="用 api list 查看 callable 字段。")
     query, body = prepare_request(endpoint, params or [], params_file, body_file)
@@ -238,9 +253,16 @@ def call_endpoint(
         output = output.expanduser().resolve()
         if output.exists() and not dry_run:
             raise InputError("输出文件已存在。", hint="请使用新的 --output 路径，避免覆盖已有结果。")
-    request = {"key": endpoint.key, "method": endpoint.method, "path": endpoint.path, "params": query, "body": body}
+    request = {
+        "provider": provider_name,
+        "key": endpoint.key,
+        "method": endpoint.method,
+        "path": endpoint.path,
+        "params": query,
+        "body": body,
+    }
     if dry_run:
-        price = load_price_snapshot().get("endpoints", {}).get(endpoint.path)
+        price = quote_rows(settings, source, "api", [provider_name], endpoint=endpoint.path)[0]["estimated_cost_usd"]
         return _success(
             "请求已校验；未联网、未创建任务或文件。",
             {
@@ -254,7 +276,11 @@ def call_endpoint(
     reserved: list[RequestRecord] = []
 
     def reserve(record: RequestRecord) -> None:
-        if not record.billed or record.cache_hit or record.endpoint != endpoint.path:
+        if (
+            not record.billed
+            or record.cache_hit
+            or record.endpoint not in {endpoint.path, "monid:tikhub:" + endpoint.path}
+        ):
             return
         price = record.estimated_cost_usd
         if price is None or not math.isfinite(price) or price < 0:
@@ -265,18 +291,24 @@ def call_endpoint(
         CostLedger(settings.ledger_path).append(endpoint.key, [record], {"kind": "api", "reservation": True})
         reserved.append(record)
 
-    provider = TikHubProvider(
-        runtime_python=settings.tikhub.runtime_python,
-        cache=CacheStore(settings.cache_dir),
-        base_url=settings.tikhub.base_url,
-        timeout=settings.tikhub.timeout_seconds,
-        requester=requester,
-        before_request=reserve,
-        max_retries=0,
-        payment_gate=PaymentGate(settings, max_cost),
+    provider = (
+        MonidProvider(settings, max_cost, purpose="api", before_request=reserve)
+        if provider_name == "monid"
+        else TikHubProvider(
+            runtime_python=settings.tikhub.runtime_python,
+            cache=CacheStore(settings.cache_dir),
+            base_url=settings.tikhub.base_url,
+            timeout=settings.tikhub.timeout_seconds,
+            requester=requester,
+            before_request=reserve,
+            max_retries=0,
+            payment_gate=PaymentGate(settings, max_cost),
+        )
     )
     if provider.api_key:
         credentials.append(provider.api_key)
+    if isinstance(provider, MonidProvider):
+        credentials.append(provider.monid.key)
     try:
         price = provider.endpoint_price(endpoint)
         response = provider.query(endpoint, query, body, allow_auxiliary=allow_auxiliary)
@@ -299,7 +331,7 @@ def call_endpoint(
         "request": _protect(request, credentials),
         "response": _protect(response, credentials),
         "reserved_cost_usd": price,
-        "actual_cost_usd": None,
+        "actual_cost_usd": actual_cost(provider.records),
         "requests": [record.model_dump() for record in provider.records],
     }
     if output is not None:

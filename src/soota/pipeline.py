@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-from soota.billing import PaymentGate, provider_enabled, selected_provider
+from soota.billing import PaymentGate, actual_cost, provider_enabled, selected_provider
 from soota.config import SootaSettings, ensure_dirs
 from soota.counterpart import youtube_counterpart
 from soota.errors import AuthBudgetError, CaptionUnavailable, InputError, SootaError, SourceError
@@ -27,11 +27,13 @@ from soota.models import (
 from soota.providers.audio import audio_provider as make_audio_provider
 from soota.providers.audio import conditional_audio_estimate, selected_audio_provider
 from soota.providers.mcp_client import StdioMCPClient
+from soota.providers.monid.provider import MonidProvider
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli import capabilities_for as opencli_capabilities
 from soota.providers.opencli_mcp import OpenCLIMCPProvider
 from soota.providers.opencli_mcp import capabilities_for as mcp_capabilities
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
+from soota.providers.priority import ordered_names, quote_rows
 from soota.providers.router import RequestBudget, inspect_item, remaining_budget, validate_policy
 from soota.providers.tikhub.capability import capabilities_for
 from soota.providers.tikhub.client import TikHubProvider
@@ -216,6 +218,51 @@ def estimate(
         raise InputError("--mode 只支持 ingest 或 catalog。")
     source = recognize(url)
     validate_policy(provider, None, None)
+    ability = "inspect" if transcript in {TranscriptMode.NONE, TranscriptMode.ASR} else "captions"
+    available = [
+        n
+        for n, cap in (
+            ("opencli-mcp", mcp_capabilities(source)),
+            ("opencli", opencli_capabilities(source)),
+            ("yt-dlp", ytdlp_capabilities(source)),
+        )
+        if getattr(cap, ability)
+    ]
+    if capabilities_for(source).inspect:
+        available += ["tikhub", "monid"]
+    rank = ordered_names(settings, source, ability, available) if provider == "auto" else [provider]
+    if not rank:
+        raise SourceError("没有可用来源。")
+    if rank[0] == "monid":
+        row = quote_rows(settings, source, ability, ["monid"])[0]
+        audio_quote = (
+            conditional_audio_estimate(source, settings, audio_name)
+            if (transcript in {TranscriptMode.AUTO, TranscriptMode.ASR} and audio_name in {"tikhub", "monid", "auto"})
+            else None
+        )
+        if audio_quote:
+            audio_cost = audio_quote["estimated_cost_usd"]
+            row["estimated_cost_usd"] = (
+                round(row["estimated_cost_usd"] + audio_cost, 9)
+                if row["estimated_cost_usd"] is not None and isinstance(audio_cost, (int, float))
+                else None
+            )
+        return CommandResult(
+            ok=True,
+            status="success",
+            code="ok",
+            exit_code=0,
+            message="Monid 报价预估；执行前重新核实报价，无字幕结果也可能收费。",
+            data={
+                **row,
+                "source": source.model_dump(),
+                "routing": rank,
+                "audio_provider": audio_name,
+                "conditional_audio": audio_quote,
+            },
+        )
+    if provider == "auto":
+        provider = rank[0]
     mcp = (provider == "opencli-mcp" or provider == "auto" and StdioMCPClient.available(settings.opencli_mcp)) and (
         mcp_capabilities(source).inspect
     )
@@ -228,7 +275,9 @@ def estimate(
     ):
         free_name = "opencli-mcp" if mcp else "opencli" if opencli else "yt-dlp"
         conditional_audio = (
-            conditional_audio_estimate(source) if transcript == TranscriptMode.AUTO and audio_name == "tikhub" else None
+            conditional_audio_estimate(source, settings, audio_name)
+            if transcript in {TranscriptMode.AUTO, TranscriptMode.ASR} and audio_name in {"tikhub", "monid", "auto"}
+            else None
         )
         return CommandResult(
             ok=True,
@@ -293,6 +342,14 @@ def estimate(
         if cache.has(source, "audio") or cache.audio_path(source).is_file():
             endpoints = [e for e in endpoints if "stream" not in e and "playurl" not in e]
     cost, basis = client.estimate_cost(endpoints)
+    other_audio = (
+        conditional_audio_estimate(source, settings, audio_name)
+        if (transcript in {TranscriptMode.AUTO, TranscriptMode.ASR} and audio_name in {"monid", "auto"})
+        else None
+    )
+    if other_audio:
+        amount = other_audio["estimated_cost_usd"]
+        cost = round(cost + amount, 9) if cost is not None and isinstance(amount, (float, int)) else None
     warnings: list[str] = []
     wallet_view: dict[str, Any] | None = None
     try:
@@ -324,6 +381,7 @@ def estimate(
             "request_count": len(endpoints),
             "estimated_cost_usd": cost,
             "price_basis": basis,
+            "conditional_audio": other_audio,
             "cache_hit": not endpoints,
             "wallet": wallet_view,
         },
@@ -355,7 +413,7 @@ def ingest(
     provider = selected_provider(settings, provider)
     audio_name = selected_audio_provider(settings, audio_provider)
     validate_policy(provider, fallback, max_cost)
-    if provider == "tikhub" or transcript == TranscriptMode.ASR:
+    if provider in {"tikhub", "monid"} or transcript == TranscriptMode.ASR:
         if prefer_youtube or exclude_promotions or exclude_ranges:
             raise InputError("跨平台字幕选择和推广过滤当前用于 auto/opencli 字幕路径；请先以 captions-only 获取。")
         # An explicit provider/ASR choice takes priority over a saved free-caption preference.
@@ -434,18 +492,26 @@ def ingest(
     output_root = (output or settings.output_dir).expanduser()
     cache = CacheStore(settings.cache_dir)
     client = _provider(settings, cache, requester=requester, max_cost=max_cost)
-    downloader = make_audio_provider(settings, audio_name, lambda: client, asset=audio_asset)
-    resolver = TranscriptResolver(client, cache, settings, asr=asr, audio_provider=downloader)
+    downloader = None
     try:
         item = client.inspect(source)
+        downloader = make_audio_provider(
+            settings,
+            audio_name,
+            lambda: client,
+            asset=audio_asset,
+            max_cost=remaining_budget(max_cost, client.records),
+            remaining_cost=lambda: remaining_budget(max_cost, client.records),
+        )
+        resolver = TranscriptResolver(client, cache, settings, asr=asr, audio_provider=downloader)
         document = resolver.resolve(item, transcript)
     except Exception:
-        if downloader is not client:
+        if downloader is not None and downloader is not client:
             client.records.extend(downloader.records)
         if client.records:
             CostLedger(settings.ledger_path).append(source.id, client.records)
         raise
-    if downloader is not client:
+    if downloader is not None and downloader is not client:
         client.records.extend(downloader.records)
     billed = [r for r in client.records if r.billed and not r.cache_hit]
     cost = sum(r.estimated_cost_usd or 0.0 for r in billed)
@@ -509,6 +575,7 @@ def ingest(
             "cache_hit": manifest.processing.cache_hit,
             "request_count": manifest.processing.request_count,
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,
+            "actual_cost_usd": manifest.processing.actual_cost_usd,
             "requests": [r.model_dump() for r in client.records],
         },
     )
@@ -555,7 +622,7 @@ def ingest_free(
         if transcript == TranscriptMode.NONE:
             document = TranscriptDocument(status=TranscriptStatus.NOT_REQUESTED)
     else:
-        candidates: list[tuple[str, type[OpenCLIMCPProvider] | type[OpenCLIProvider] | type[YtDlpProvider]]] = []
+        candidates: list[tuple[str, Any]] = []
         if (
             provider_enabled(settings, "opencli-mcp")
             and provider in {"auto", "opencli-mcp"}
@@ -574,13 +641,41 @@ def ingest_free(
             and ytdlp_capabilities(source).captions
         ):
             candidates.append(("yt-dlp", YtDlpProvider))
+        if provider in {"auto", "monid"} and capabilities_for(source).captions:
+            if provider_enabled(settings, "monid") and (max_cost != 0 or provider == "monid"):
+                candidates.append(("monid", lambda st: MonidProvider(st, remaining_budget(max_cost, records))))
+            if provider == "auto" and fallback == "tikhub" and max_cost != 0:
+                candidates.append(
+                    (
+                        "tikhub",
+                        lambda st: _provider(
+                            st,
+                            CacheStore(st.cache_dir),
+                            requester=requester,
+                            max_cost=remaining_budget(max_cost, records),
+                        ),
+                    )
+                )
+        if provider == "auto":
+            rank = ordered_names(settings, source, "captions", [n for n, _ in candidates], max_cost=max_cost)
+            candidates = sorted([(n, f) for n, f in candidates if n in rank], key=lambda c: rank.index(c[0]))
         for name, factory in candidates:
+            if (
+                provider == "auto"
+                and name in {"tikhub", "monid"}
+                and not ordered_names(
+                    settings, source, "captions", [name], max_cost=remaining_budget(max_cost, records)
+                )
+            ):
+                warnings.append(f"剩余预算不足以覆盖 {name} 的完整字幕请求链，已跳过。")
+                continue
             attempted.append(name)
-            client: OpenCLIMCPProvider | OpenCLIProvider | YtDlpProvider | None = None
+            client: Any = None
             counterpart_fallback: YtDlpProvider | None = None
             try:
                 client = factory(settings)
                 candidate_item = client.inspect(source)
+                candidate_item.provenance.setdefault("provider", name)
                 item = candidate_item
                 captions = None
                 if prefer_youtube and name == "opencli" and source.platform == "bilibili":
@@ -610,13 +705,18 @@ def ingest_free(
             except CaptionUnavailable:
                 if provider != "auto":
                     raise
-                missing_reason = f"{name} 字幕获取失败，尝试下一免费来源。"
+                missing_reason = f"{name} 字幕获取失败，尝试下一允许的来源。"
                 warnings.append(missing_reason)
             except RuntimeUnavailable as exc:
                 if provider != "auto" and fallback != "tikhub":
                     raise
                 missing_reason = f"{name} 不可用：{exc.message}"
                 warnings.append(missing_reason)
+            except Exception:
+                CostLedger(settings.ledger_path).append(
+                    source.id, [*records, *(client.records if client is not None else [])]
+                )
+                raise
             finally:
                 if client is not None:
                     records.extend(client.records)
@@ -624,7 +724,7 @@ def ingest_free(
                     records.extend(counterpart_fallback.records)
                     attempted.append("yt-dlp")
         if not candidates:
-            missing_reason = "所选免费来源尚未接入该视频字幕。"
+            missing_reason = "所选来源尚未接入该视频字幕或费用超过预算。"
     if transcript == TranscriptMode.ASR or confirmed_absent and transcript == TranscriptMode.AUTO:
         assert item is not None
         downloader = make_audio_provider(
@@ -637,6 +737,7 @@ def ingest_free(
                 max_cost=remaining_budget(max_cost, records),
             ),
             asset=audio_asset,
+            max_cost=remaining_budget(max_cost, records),
         )
         try:
             resolver = TranscriptResolver(
@@ -651,7 +752,12 @@ def ingest_free(
         item.provenance["asr_engine"] = (asr or resolve_engine(settings.asr)).name
         missing_reason = None
     if missing_reason and not confirmed_absent:
-        if fallback == "tikhub" and document.status != TranscriptStatus.PENDING:
+        if (
+            fallback == "tikhub"
+            and "tikhub" not in attempted
+            and "monid" not in attempted
+            and document.status != TranscriptStatus.PENDING
+        ):
             if prefer_youtube or exclude_promotions or exclude_ranges:
                 raise SourceError("免费字幕流程未完成；跨平台或过滤任务未自动转入付费路径。")
             result = ingest(
@@ -700,8 +806,8 @@ def ingest_free(
             provider=str(item.provenance["provider"]),
             requests=records,
             cache_hit=bool(records) and all(r.cache_hit for r in records),
-            estimated_cost_usd=sum(r.estimated_cost_usd or 0 for r in records),
-            actual_cost_usd=None,
+            estimated_cost_usd=sum(r.estimated_cost_usd or 0 for r in records if r.billed and not r.cache_hit),
+            actual_cost_usd=actual_cost(records),
             request_count=len([r for r in records if not r.cache_hit]),
             warnings=warnings,
         ),
@@ -756,6 +862,7 @@ def ingest_free(
             "audio_provider_requested": audio_provider,
             "asr_engine": item.provenance.get("asr_engine"),
             "estimated_cost_usd": manifest.processing.estimated_cost_usd,
+            "actual_cost_usd": manifest.processing.actual_cost_usd,
             "cache_hit": manifest.processing.cache_hit,
             "request_count": manifest.processing.request_count,
             "requests": [r.model_dump() for r in records],

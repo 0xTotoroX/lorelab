@@ -165,6 +165,7 @@ class RequestRecord(BaseModel):
     cache_hit: bool = False
     estimated_cost_usd: float | None = None
     note: str | None = None
+    actual_cost_usd: float | None = None
 
 
 class TranscriptManifest(BaseModel):
@@ -239,7 +240,7 @@ class CatalogJob(BaseModel):
     status: Literal["running", "paused", "completed", "failed"] = "running"
     source: SourceRef
     # Defaults preserve persisted v1 TikHub jobs and their cursor semantics.
-    provider: Literal["tikhub", "opencli", "opencli-mcp"] = "tikhub"
+    provider: Literal["tikhub", "monid", "opencli", "opencli-mcp"] = "tikhub"
     profile: str | None = None
     completeness: Literal["unknown", "paginated"] = "paginated"
     warnings: list[str] = Field(default_factory=list)

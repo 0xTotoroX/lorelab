@@ -20,6 +20,7 @@ from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
 from soota.policy_cli import app as policy_app
+from soota.providers_cli import app as providers_app
 from soota.runtime_cli import app as runtime_app
 from soota.tasks.entry import capabilities as capabilities_cmd
 from soota.tasks.entry import ingest as ingest_cmd
@@ -36,6 +37,7 @@ app.add_typer(jobs_app, name="jobs")
 app.add_typer(api_app, name="api")
 app.add_typer(runtime_app, name="runtime")
 app.add_typer(policy_app, name="policy")
+app.add_typer(providers_app, name="providers")
 app.add_typer(features_app, name="features")
 app.add_typer(updates_app, name="updates")
 app.add_typer(mcp_app, name="mcp")
@@ -61,7 +63,9 @@ def doctor(
 @app.command()
 def inspect(
     url: Annotated[str, typer.Argument(help="YouTube 或 Bilibili URL")],
-    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub")] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub/monid")
+    ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="可选 USD 费用上限；0 禁止计费请求")] = None,
@@ -85,7 +89,7 @@ def estimate(
     mode: Annotated[str, typer.Option("--mode")] = "ingest",
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     audio_provider: Annotated[
-        str | None, typer.Option("--audio-provider", help="音频来源：yt-dlp/downie/tikhub")
+        str | None, typer.Option("--audio-provider", help="音频来源：auto/yt-dlp/downie/tikhub/monid")
     ] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="目录任务的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="目录任务的分页上限")] = DEFAULT_MAX_PAGES,
@@ -107,7 +111,9 @@ def estimate(
 @app.command()
 def catalog(
     url: Annotated[str, typer.Argument(help="X、YouTube 频道或 Bilibili UP 主主页")],
-    provider: Annotated[str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub")] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub/monid")
+    ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="本任务累计收录的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="本任务累计读取的页数上限")] = DEFAULT_MAX_PAGES,
@@ -165,12 +171,12 @@ def ingest(
     vault: Annotated[Path | None, typer.Option("--vault", help="显式 Obsidian Vault 目录")] = None,
     subdir: Annotated[str, typer.Option("--subdir", help="Vault 内目录，不猜测分类")] = "Soota",
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/http/local/downie")
+        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/monid/http/local/downie")
     ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     audio_provider: Annotated[
-        str | None, typer.Option("--audio-provider", help="转写用的音频来源：yt-dlp/downie/tikhub")
+        str | None, typer.Option("--audio-provider", help="转写用的音频来源：auto/yt-dlp/downie/tikhub/monid")
     ] = None,
     output: Annotated[Path | None, typer.Option("--output")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,

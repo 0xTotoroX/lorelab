@@ -35,6 +35,27 @@ class TikHubConfig(BaseModel):
     timeout_seconds: float = 60.0
 
 
+class MonidConfig(BaseModel):
+    enabled: bool = False
+    base_url: str = "https://api.monid.ai"
+    timeout_seconds: float = Field(default=60, gt=0)
+    poll_seconds: float = Field(default=2, ge=0)
+    max_polls: int = Field(default=30, ge=1)
+
+
+class PriorityRule(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["cost", "manual"] = "cost"
+    order: list[Literal["opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid"]] = Field(default_factory=list)
+
+    @field_validator("order")
+    @classmethod
+    def unique_order(cls, value: list[str]) -> list[str]:
+        if len(value) != len(set(value)):
+            raise ValueError("来源顺序不能重复")
+        return value
+
+
 class OpenCLIConfig(BaseModel):
     binary: str | None = None
     profile: str | None = None
@@ -65,15 +86,16 @@ class LocalProviderConfig(BaseModel):
 
 
 class AudioConfig(BaseModel):
-    provider: Literal["yt-dlp", "downie", "tikhub"] = "yt-dlp"
+    provider: Literal["auto", "yt-dlp", "downie", "tikhub", "monid"] = "yt-dlp"
     timeout_seconds: float = Field(default=900, gt=0)
 
 
 class RoutingConfig(BaseModel):
-    disabled_providers: set[Literal["opencli-mcp", "opencli", "yt-dlp", "tikhub", "downie", "http"]] = Field(
+    disabled_providers: set[Literal["opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid", "downie", "http"]] = Field(
         default_factory=set
     )
-    default_provider: Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub"] = "auto"
+    default_provider: Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid"] = "auto"
+    priorities: dict[str, dict[str, PriorityRule]] = Field(default_factory=dict)
 
     @field_validator("default_provider", mode="before")
     @classmethod
@@ -95,6 +117,7 @@ class SootaSettings(BaseModel):
     cache_dir: Path
     data_dir: Path
     tikhub: TikHubConfig = Field(default_factory=TikHubConfig)
+    monid: MonidConfig = Field(default_factory=MonidConfig)
     opencli: OpenCLIConfig = Field(default_factory=OpenCLIConfig)
     opencli_mcp: OpenCLIMCPConfig = Field(default_factory=OpenCLIMCPConfig)
     local: LocalProviderConfig = Field(default_factory=LocalProviderConfig)
@@ -172,7 +195,14 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
                 ),
             }
         )
-        routing_config = RoutingConfig.model_validate(data.get("routing") or {})
+        routing_data = dict(data.get("routing") or {})
+        provider_path = config_dir / "providers.json"
+        provider_data = json.loads(provider_path.read_text()) if provider_path.is_file() else {}
+        if not isinstance(provider_data, dict):
+            raise ValueError("providers.json 必须为对象")
+        routing_data.update(provider_data.get("routing", {}))
+        routing_config = RoutingConfig.model_validate(routing_data)
+        monid_config = MonidConfig.model_validate({**(data.get("monid") or {}), **provider_data.get("monid", {})})
         audio_config = AudioConfig.model_validate(data.get("audio") or {})
         mcp_config = OpenCLIMCPConfig.model_validate(
             {
@@ -184,7 +214,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
                 ),
             }
         )
-    except (TypeError, ValidationError) as exc:
+    except (TypeError, ValueError) as exc:
         raise InputError("来源或 opencli-mcp 配置无效，未执行任何请求。") from exc
     output = _env_path("SOOTA_OUTPUT_DIR")
     settings = SootaSettings(
@@ -196,6 +226,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         payment=payment_config,
         updates=updates_config,
         routing=routing_config,
+        monid=monid_config,
         audio=audio_config,
         content_selection=selection_config,
         tikhub=TikHubConfig(

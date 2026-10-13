@@ -11,6 +11,7 @@ from soota.transcripts.formats.common import Cue
 FORMATS = frozenset(
     {
         "json3",
+        "youtube-transcript",
         "bilibili-json",
         "opencli-youtube",
         "opencli-bilibili",
@@ -40,6 +41,7 @@ def read_cues(format: str, body: Any) -> list[Cue]:
         return structured.opencli(body, format)
     readers = {
         "json3": structured.json3,
+        "youtube-transcript": structured.youtube_transcript,
         "bilibili-json": structured.bilibili,
         "whisper-json": structured.whisper,
         "soota-segments": structured.saved_segments,

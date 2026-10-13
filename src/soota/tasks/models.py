@@ -92,7 +92,17 @@ class TaskSpec(BaseModel):
     def validate_task(self) -> TaskSpec:
         if len(self.outputs) != len(self.wants):
             raise ValueError("duplicate output kinds")
-        if self.provider not in {"auto", "opencli", "opencli-mcp", "yt-dlp", "tikhub", "local", "http", "downie"}:
+        if self.provider not in {
+            "auto",
+            "opencli",
+            "opencli-mcp",
+            "yt-dlp",
+            "tikhub",
+            "monid",
+            "local",
+            "http",
+            "downie",
+        }:
             raise ValueError("unsupported provider")
         if self.destination is not None and self.vault is not None:
             raise ValueError("choose destination or vault")

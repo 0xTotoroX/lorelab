@@ -1,5 +1,7 @@
 # 功能入口与费用策略
 
+业务别名的 auto 路由遵守按平台保存的费用/手动优先级：视频详情使用 inspect 规则，其他别名使用 api 规则。可显式使用 `--provider monid`，或通过 `features list --provider monid` 查看受控覆盖范围。`monid.<key>` 原生入口固定使用 Monid，`tikhub.<key>` 固定直连；不能指定矛盾的 Provider。配置和报价查看见 [Monid 与来源优先级](monid.md)。
+
 Soota 保留自己的采集、字幕、目录、任务、费用与运行时命令，以及已核验的 11 个统一业务入口和 TikHub 接口封装。`features` 不再批量导入 OpenCLI 的原生命令；旧的 `opencli.*` 功能 ID 已移除，调用时会提示改用上游 CLI。
 
 ## 按任务发现能力

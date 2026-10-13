@@ -13,6 +13,7 @@ from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, InputError, SootaError, SourceError, StorageError
 from soota.models import CatalogJob, CommandResult, RequestRecord
 from soota.providers.mcp_client import StdioMCPClient
+from soota.providers.monid.provider import MonidProvider
 from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_context import resolve_profile
 from soota.providers.opencli_mcp import OpenCLIMCPProvider
@@ -68,7 +69,10 @@ def estimate_catalog(
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
     selected = catalog_provider(
-        source, provider, mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp)
+        source,
+        provider,
+        mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp),
+        settings=settings,
     )
     selected_provider(settings, selected)
     if fallback:
@@ -103,6 +107,13 @@ def estimate_catalog(
     if source.platform == "youtube" and not is_channel_id(source.id):
         counts[YOUTUBE_CHANNEL_ID] = 1
     prices = snapshot.get("endpoints", {})
+    if selected == "monid":
+        from soota.providers.priority import quote_rows
+
+        prices = {
+            path: quote_rows(settings, source, "api", [selected], endpoint=path)[0]["estimated_cost_usd"]
+            for path in counts
+        }
     values = [prices.get(path) for path in counts]
     known = all(value is not None and math.isfinite(value) and value >= 0 for value in values)
     cost = sum((Decimal(str(prices[path])) * count for path, count in counts.items()), Decimal(0)) if known else None
@@ -149,7 +160,10 @@ def catalog(
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
     selected = catalog_provider(
-        source, provider, mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp)
+        source,
+        provider,
+        mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp),
+        settings=settings,
     )
     if fallback:
         raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
@@ -274,18 +288,28 @@ def _provider(
         _save(job, store)
         CostLedger(settings.ledger_path).append(job.source.id, [record], {"job_id": job.id, "reservation": True})
 
-    provider = TikHubProvider(
-        runtime_python=settings.tikhub.runtime_python,
-        cache=CacheStore(settings.cache_dir),
-        base_url=settings.tikhub.base_url,
-        timeout=settings.tikhub.timeout_seconds,
-        preferred_language=settings.default_language,
-        requester=requester,
-        before_request=reserve,
-        max_retries=0,
-        payment_gate=PaymentGate(
-            settings, float(Decimal(str(job.max_cost)) - _reserved_cost(job)) if job.max_cost is not None else None
-        ),
+    provider = (
+        MonidProvider(
+            settings,
+            float(Decimal(str(job.max_cost)) - _reserved_cost(job)) if job.max_cost is not None else None,
+            purpose="catalog",
+            before_request=reserve,
+            run_scope="catalog:" + job.id,
+        )
+        if job.provider == "monid"
+        else TikHubProvider(
+            runtime_python=settings.tikhub.runtime_python,
+            cache=CacheStore(settings.cache_dir),
+            base_url=settings.tikhub.base_url,
+            timeout=settings.tikhub.timeout_seconds,
+            preferred_language=settings.default_language,
+            requester=requester,
+            before_request=reserve,
+            max_retries=0,
+            payment_gate=PaymentGate(
+                settings, float(Decimal(str(job.max_cost)) - _reserved_cost(job)) if job.max_cost is not None else None
+            ),
+        )
     )
     return provider
 
