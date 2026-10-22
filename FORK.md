@@ -18,6 +18,9 @@ cubox-cli card read --id ID[,ID2,...]            # batch mark as read
 cubox-cli card move --id ID[,ID2] --folder-id FID  # batch move to folder
 cubox-cli card tag --id ID[,ID2] --add name,name [--delete-tag-ids ID]
 
+# Batch card detail reads (CLI group, read-only)
+cubox-cli card batch --id CARD1,CARD2 [--ids-file card-ids.txt] --workers 2
+
 # Recycle bin
 cubox-cli recycle list [--page N]
 cubox-cli recycle recover --id ID[,ID2,...]
@@ -100,8 +103,41 @@ tree, requiring official repair):
    to operate on the account's system "Uncategorized" group (the one with an
    empty name / the collectionBox) — deleting it corrupts the server group
    tree. Applies to `--dry-run` too.
-2. **Global request throttle**: every CLI/API request is spaced at least
-   500 ms apart, process-wide.
+2. **Shared Client request throttle**: requests using the same Client are
+   admitted at least 500 ms apart. All `card batch` workers share that Client.
+3. **Batch circuit breaker**: `card batch` latches a stop after three consecutive
+   completed errors, including transport, HTTP, API, payload, and ID-validation
+   failures. Already admitted requests finish; a late success cannot reopen the
+   batch. Other commands retain their existing error behavior.
+4. `folder delete` keeps its **safe mode** (cards moved to Uncategorized
+   before the folder is deleted) and `--dry-run` preview.
+
+### Batch card detail reads / 批量详情读取
+
+`card batch` reads one detail per deduplicated ID with bounded concurrency
+(`--workers 2` by default, allowed 1..4). Combine comma-separated `--id` entries
+with `--ids-file` (one ID per line); flag IDs precede file IDs. Output order is
+fixed even when responses finish out of order. A stopped batch retains successes,
+errors, and the reason each remaining request was skipped.
+
+Stdout always has `schema_version: 1`, `kind: "cubox_card_batch"`, `items`, and
+`counts`. Partial failure writes the result and exits 1. Update notices stay on
+stderr, and `-o text` still emits JSON. The command validates returned card IDs
+and exposes only fixed error messages plus numeric HTTP/API codes. It performs
+no writes, retries, redirects, or original-site fetches. `card detail` keeps its
+existing semantics.
+
+`content_status` is `body_available`, `description_only`, `link_only`, or `empty`
+on success, and null on errors/skips. Empty/null, pure links, and recognized login
+placeholders do not count as body text. `body_available` never means the original
+post is complete; navigation and interface instructions may still count as text.
+See the [complete batch contract and workflow](skills/cubox/references/card-batch.md).
+
+The implementation separates `cmd/card_batch.go` (flags, local ID files, JSON)
+from `internal/client/card_batch.go` (workers, stop, validation) and
+`internal/client/card_content.go` (conservative Markdown classification). They
+reuse the existing Client transport/throttle and CardDetail type. Goldmark parses
+Markdown locally; neither classification nor tests require an account.
 
 ### Save hardening / 保存加固
 
@@ -119,10 +155,6 @@ tree, requiring official repair):
 - `folder move --id X` (no --parent) moves a folder to the root level via
   move/another with a JSON-null parentGroupId. WARNING: `group/update` with
   an EMPTY parentGroupId DELETES the group — never send that.
-3. **Circuit breaker**: 3 consecutive API errors abort the run instead of
-   hammering the server.
-4. `folder delete` keeps its **safe mode** (cards moved to Uncategorized
-   before the folder is deleted) and `--dry-run` preview.
 
 ### Request-encoding notes (reverse-engineered)
 

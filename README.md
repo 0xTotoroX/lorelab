@@ -373,6 +373,24 @@ cubox-cli card detail --id 7247925101516031380 -o pretty
 
 Use `-o text` to output only the markdown content.
 
+### `cubox-cli card batch` (fork)
+
+```bash
+cubox-cli card batch --id CARD1,CARD2 --workers 2
+cubox-cli card batch --ids-file card-ids.txt -o pretty
+```
+
+Read multiple details using one Client, a shared 500 ms throttle, and 1..4 workers
+(default 2). IDs are deduplicated in first-seen order; `--id` entries precede file
+entries (one ID per line). Stdout is always a top-level `cubox_card_batch` JSON
+document with `schema_version: 1`, ordered `items`, and `counts`, including with
+`-o text`. Partial failure still writes JSON, then exits 1. Three consecutive
+completed errors stop new requests while retaining in-flight results and skipped
+reasons. `body_available` indicates saved text, never original-post completeness.
+No mutations, retries, redirects, or source-site fetches are performed.
+
+See the [batch JSON contract and content limits](skills/cubox/references/card-batch.md).
+
 ### `cubox-cli card rag --query TEXT`
 
 Semantic search using natural language via RAG (Retrieval-Augmented Generation). Unlike keyword search, RAG understands intent and returns conceptually relevant cards even when exact words don't match.
@@ -628,6 +646,7 @@ cubox-cli/
     folder.go             # folder list
     tag.go                # tag list/update/delete/merge
     card.go               # card list/detail/rag
+    card_batch.go         # read-only batch detail command and ordered JSON
     save.go               # save web pages
     update.go             # update card
     archive.go            # batch archive / unarchive cards
@@ -636,6 +655,8 @@ cubox-cli/
     version.go            # version
   internal/
     client/               # HTTP client + API types
+      card_batch.go       # bounded workers, latched stop, response-ID validation
+      card_content.go     # conservative content evidence classification
     config/               # config file management
     timefmt/              # flexible time parsing
     update/               # npm update check

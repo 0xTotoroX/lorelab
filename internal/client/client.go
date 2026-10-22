@@ -1,9 +1,15 @@
+// [INPUT]: HTTP transport, API response types, and shared request admission.
+// [OUTPUT]: Client API operations; sendRequestAuth is reused by card batches.
+// [POS]: Shared transport for CLI and web/app API groups.
+// [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 package client
 
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -37,12 +43,33 @@ const (
 
 // throttle enforces a global minimum interval between requests.
 func (c *Client) throttle() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if wait := minRequestInterval - time.Since(c.lastReq); wait > 0 {
-		time.Sleep(wait)
+	_ = c.throttleContext(context.Background())
+}
+
+// throttleContext shares the same clock across every worker. Waiting never
+// holds mu, so response completion and batch cancellation remain observable.
+func (c *Client) throttleContext(ctx context.Context) error {
+	for {
+		c.mu.Lock()
+		if err := ctx.Err(); err != nil {
+			c.mu.Unlock()
+			return err
+		}
+		wait := minRequestInterval - time.Since(c.lastReq)
+		if wait <= 0 {
+			c.lastReq = time.Now()
+			c.mu.Unlock()
+			return nil
+		}
+		c.mu.Unlock()
+		timer := time.NewTimer(wait)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
-	c.lastReq = time.Now()
 }
 
 // noteError records an API error for the circuit breaker; noteSuccess resets it.
@@ -122,6 +149,21 @@ func (c *Client) doRequest(req *http.Request) (json.RawMessage, error) {
 // commands that use the web group.
 func (c *Client) doRequestAuth(req *http.Request, bare bool) (json.RawMessage, error) {
 	c.throttle()
+	data, err := c.sendRequestAuth(req, bare, c.httpClient)
+	var apiErr *apiError
+	if errors.As(err, &apiErr) {
+		if cbErr := c.noteError(); cbErr != nil {
+			return nil, cbErr
+		}
+	} else if err == nil {
+		c.noteSuccess()
+	}
+	return data, err
+}
+
+// sendRequestAuth performs an already admitted request. Ordinary commands keep
+// their error semantics; batches count complete, ID-validated outcomes instead.
+func (c *Client) sendRequestAuth(req *http.Request, bare bool, httpClient *http.Client) (json.RawMessage, error) {
 	if bare {
 		req.Header.Set("Authorization", c.token)
 		req.Header.Set("User-Agent", "Cubox/8.3.1 (com.linnk.Linnk; build:668; macOS(Catalyst) 27.0.0) Alamofire/5.10.2")
@@ -130,7 +172,7 @@ func (c *Client) doRequestAuth(req *http.Request, bare bool) (json.RawMessage, e
 		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
@@ -142,7 +184,7 @@ func (c *Client) doRequestAuth(req *http.Request, bare bool) (json.RawMessage, e
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))
+		return nil, &httpError{status: resp.StatusCode, body: string(data)}
 	}
 
 	var apiResp APIResponse
@@ -150,14 +192,24 @@ func (c *Client) doRequestAuth(req *http.Request, bare bool) (json.RawMessage, e
 		return nil, fmt.Errorf("parsing response: %w", err)
 	}
 	if apiResp.Code != 200 {
-		if cbErr := c.noteError(); cbErr != nil {
-			return nil, cbErr
-		}
-		return nil, fmt.Errorf("API error %d: %s", apiResp.Code, apiResp.Message)
+		return nil, &apiError{code: apiResp.Code, message: apiResp.Message}
 	}
-	c.noteSuccess()
 	return apiResp.Data, nil
 }
+
+type apiError struct {
+	code    int
+	message string
+}
+
+func (e *apiError) Error() string { return fmt.Sprintf("API error %d: %s", e.code, e.message) }
+
+type httpError struct {
+	status int
+	body   string
+}
+
+func (e *httpError) Error() string { return fmt.Sprintf("HTTP %d: %s", e.status, e.body) }
 
 func (c *Client) ListFolders() ([]Folder, error) {
 	data, err := c.get("/c/api/cli/folder/list", nil)

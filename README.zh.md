@@ -347,6 +347,22 @@ cubox-cli card detail --id 7247925101516031380 -o pretty
 
 使用 `-o text` 仅输出 Markdown 内容。
 
+### `cubox-cli card batch`（fork）
+
+```bash
+cubox-cli card batch --id CARD1,CARD2 --workers 2
+cubox-cli card batch --ids-file card-ids.txt -o pretty
+```
+
+用一个 Client 批量读取详情，所有 worker 共享 500 ms 节流。默认 2 个 worker，允许 1..4。
+文件每行一个 ID；先合并 `--id`，再合并文件，去重保序。始终输出顶层
+`schema_version: 1`、`kind: "cubox_card_batch"`、`items`、`counts` JSON，
+`-o text` 也不改变这一契约。部分失败先输出完整批次结果，再以退出码 1 结束。
+连续三次完成结果为错误后停止新请求，保留已发请求的结果及未启动原因。
+`body_available` 仅说明保存了正文文本，不能证明原帖完整。命令不写入、不重试、不跟随跳转，也不抓取原站。
+
+详见[批量输入、JSON 契约和正文分类边界](skills/cubox/references/card-batch.md)。
+
 ### `cubox-cli card rag --query TEXT`
 
 通过 RAG（检索增强生成）进行自然语言语义搜索。与关键词搜索不同，RAG 理解查询意图，即使精确词汇不匹配也能返回概念相关的卡片。
@@ -603,6 +619,7 @@ cubox-cli/
     folder.go             # folder list
     tag.go                # tag list/update/delete/merge
     card.go               # card list/detail/rag
+    card_batch.go         # 只读批量详情命令与固定顺序 JSON
     save.go               # save 保存网页
     update.go             # update 更新卡片
     archive.go            # 批量归档 / 恢复归档
@@ -611,6 +628,8 @@ cubox-cli/
     version.go            # version
   internal/
     client/               # HTTP 客户端 + API 类型
+      card_batch.go       # 有界并发、锁存停止、回传 ID 校验
+      card_content.go     # 保守判断保存的正文证据
     config/               # 配置文件管理
     timefmt/              # 灵活时间解析
     update/               # npm 更新检查
