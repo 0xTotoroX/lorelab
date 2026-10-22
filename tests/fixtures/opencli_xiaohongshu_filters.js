@@ -141,4 +141,3 @@ function buildApplySearchFiltersJs(requestedFilters) {
       })()
     `;
 }
-
