@@ -100,6 +100,7 @@ class MlxWhisperEngine:
             if self.config.model != "base":
                 raise TranscriptError("MLX 非 base 模型需设置 asr.mlx_model_path。")
             model = "mlx-community/whisper-base-mlx"
+        model = _mlx_model_path(model)
         with tempfile.TemporaryDirectory(prefix="soota-mlx-") as folder:
             cmd = [
                 binary,
@@ -134,6 +135,29 @@ class MlxWhisperEngine:
             except (OSError, ValueError) as exc:
                 raise TranscriptError("MLX Whisper 没有生成有效 JSON。") from exc
             return CaptionPayload(format="whisper-json", body=payload)
+
+
+def _mlx_model_path(model: str) -> str:
+    # MLX treats a nonexistent path as a Hugging Face repo ID. Keep explicit
+    # local paths local, without exposing private paths in public diagnostics.
+    path = Path(model).expanduser()
+    if not (path.is_absolute() or model.startswith(("./", "../", "~")) or path.exists()):
+        return model
+    if not path.is_dir():
+        raise TranscriptError(
+            "MLX Whisper 本地模型目录缺失或不是目录。",
+            hint="检查 asr.mlx_model_path，指向已有本地模型目录；未调用 MLX、下载或切换远程模型。",
+            details={"reason": "local_model_missing", "dispatched": False},
+        )
+    if not (path / "config.json").is_file() or not any(
+        (path / name).is_file() for name in ("weights.safetensors", "weights.npz")
+    ):
+        raise TranscriptError(
+            "MLX Whisper 本地模型文件不完整。",
+            hint="目录需要 config.json 和 weights.safetensors 或 weights.npz；未自动补下载。",
+            details={"reason": "local_model_incomplete", "dispatched": False},
+        )
+    return str(path.resolve())
 
 
 def resolve_engine(config: AsrConfig) -> AsrEngine:

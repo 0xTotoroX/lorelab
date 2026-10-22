@@ -34,7 +34,9 @@ mlx_whisper_bin = "/path/to/runtime/bin/mlx_whisper"
 mlx_model_path = "/path/to/downloaded/whisper-base-mlx"
 ```
 
-MLX 使用 Metal GPU 和 FP16，采用 greedy 解码，不使用原 Whisper CLI 的 beam search。`mlx_model_path` 指向含 `config.json` 和权重的模型目录；省略时 `base` 明确映射到 `mlx-community/whisper-base-mlx`，不会使用上游 CLI 的其他默认模型。其他模型需显式指定目录。运行环境和模型放在长期用户目录，不依赖实验或聊天目录。
+MLX 使用 Metal GPU 和 FP16，采用 greedy 解码，不使用原 Whisper CLI 的 beam search。`mlx_model_path` 可指定本地模型目录或显式 Hugging Face repo ID；省略时 `base` 明确映射到 `mlx-community/whisper-base-mlx`，不会使用上游 CLI 的其他默认模型。其他模型需显式指定。运行环境和模型放在长期用户目录，不依赖实验或聊天目录。
+
+绝对路径、`./`、`../`、`~` 前缀或已存在的路径按本地模型处理。Soota 在调用 MLX 前检查目录、`config.json` 和 `weights.safetensors` / `weights.npz`：目录缺失返回 `local_model_missing`，关键文件缺失返回 `local_model_incomplete`，不会将失效本地路径解释为远程仓库，也不自动下载或切换模型。该检查只确认文件存在，不验证权重内容。显式 `组织/模型名` repo ID 保持原有 MLX 加载行为，可能访问 Hugging Face；相对本地路径请明确写 `./` 或 `../`。
 
 `doctor --json` 的 `asr_engine`、`asr_model` 和 `mlx_whisper_cli` 可核对选择与命令是否存在。切回原命令行引擎时将 `engine` 改为 `whisper-cli`；`auto` 沿用原来的引擎选择顺序。MLX 命令的临时 JSON 输出在读取后清理，音频与转写缓存仍按现有规则保存。
 

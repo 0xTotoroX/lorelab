@@ -5,10 +5,12 @@ import math
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from soota.config import SootaSettings
 from soota.errors import ContractError, InputError, SourceError
 from soota.providers.opencli_context import preflight, resolve_profile
+from soota.providers.opencli_errors import failure, invalid_json, process_failure
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
 from soota.providers.process import run_process
 
@@ -106,6 +108,7 @@ def command_arguments(command: dict[str, Any], params: dict[str, Any]) -> list[s
 
 
 def execute(settings: SootaSettings, command: dict[str, Any], params: dict[str, Any], *, allow_write: bool) -> Any:
+    validate_note_url(command["command"], params)
     runtime = OpenCLIRuntime(settings)
     with runtime.lock():
         binary, _ = runtime.resolve()
@@ -127,13 +130,46 @@ def execute(settings: SootaSettings, command: dict[str, Any], params: dict[str, 
             preflight(version.stdout.strip(), profile)
             argv.extend(["--profile", profile])
         argv.extend([command["site"], command["name"], "-f", "json", *argv_args])
-        result = run_process(
-            argv, timeout=settings.opencli.timeout_seconds, max_bytes=settings.opencli.max_output_bytes
-        )
+        try:
+            result = run_process(
+                argv, timeout=settings.opencli.timeout_seconds, max_bytes=settings.opencli.max_output_bytes
+            )
+        except SourceError as exc:
+            raise process_failure(exc, read_only=command["access"] == "read") from exc
     if result.returncode:
         # No retries/fallback after dispatch: a write or upstream charge may already have happened.
-        raise SourceError("OpenCLI 执行失败；未自动重试。", details={"exit_code": result.returncode})
+        raise failure(result, operation=command["command"], read_only=command["access"] == "read")
     try:
         return json.loads(result.stdout)
     except ValueError as exc:
-        raise ContractError("OpenCLI 没有返回有效 JSON；操作可能已执行，请先核对状态。") from exc
+        raise invalid_json() from exc
+
+
+def validate_note_url(operation: str, params: dict[str, Any]) -> None:
+    if operation != "xiaohongshu/note":
+        return
+    value = params.get("note-id")
+    try:
+        parsed = urlsplit(value.strip()) if isinstance(value, str) else None
+        signed = (
+            parsed is not None
+            and parsed.scheme in {"http", "https"}
+            and parsed.hostname in {"xiaohongshu.com", "www.xiaohongshu.com"}
+            and not parsed.username
+            and not parsed.password
+            and any(token.strip() for token in parse_qs(parsed.query).get("xsec_token", []))
+        )
+    except ValueError:
+        signed = False
+    if not signed:
+        raise InputError(
+            "xiaohongshu/note 需要带 xsec_token 的完整笔记链接；当前输入缺少可用签名链接。",
+            hint="从常规搜索结果或作者页取得同一笔记的完整链接后创建新任务；不要伪造 token。",
+            details={
+                "category": "input",
+                "reason": "missing_signed_note_url",
+                "retryable": False,
+                "dispatched": False,
+                "attempts": 0,
+            },
+        )

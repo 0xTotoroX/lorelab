@@ -152,6 +152,79 @@ def test_native_data_and_resume_only_read_once(settings, monkeypatch):
     assert json.loads((Path(first.data["output"]) / "data.json").read_text())[0]["title"] == "item"
 
 
+def test_native_transient_resume_reuses_success_and_keeps_typed_errors(settings, tmp_path, monkeypatch):
+    from soota.providers import opencli_commands
+    from soota.providers.opencli_runtime import OpenCLIRuntime
+    from soota.providers.process import ProcessResult
+
+    row = {
+        "command": "youtube/search",
+        "site": "youtube",
+        "name": "search",
+        "access": "read",
+        "browser": False,
+        "args": [{"name": "query", "type": "str"}],
+    }
+    monkeypatch.setattr(opencli_commands, "commands", lambda settings: [row])
+    monkeypatch.setattr(OpenCLIRuntime, "resolve", lambda self: ("fixture", "managed"))
+    calls = []
+    recovered = False
+
+    def process(argv, **kwargs):
+        query = next(arg.split("=", 1)[1] for arg in argv if arg.startswith("--query="))
+        calls.append(query)
+        if query == "pending" and not recovered:
+            return ProcessResult(1, "", "error:\n  code: COMMAND_EXEC\n  message: Navigation rejected")
+        return ProcessResult(0, json.dumps([{"title": query, "url": "https://example.test/" + query}]), "")
+
+    monkeypatch.setattr(opencli_commands, "run_process", process)
+    inputs = tmp_path / "inputs.json"
+    inputs.write_text(
+        json.dumps(
+            {
+                "inputs": [
+                    {"kind": "operation", "operation": "opencli.youtube.search", "params": {"query": query}}
+                    for query in ("complete", "pending")
+                ]
+            }
+        )
+    )
+    first = ingest(settings, inputs_file=inputs, want="data", provider="opencli", max_cost=0)
+    assert not first.ok and first.data["job_status"] == "partial"
+    assert calls == ["complete", "pending"]
+    error = first.data["items"][1]["steps"]["native"]["error"]
+    assert error["details"]["reason"] == "navigation_rejected" and error["details"]["retryable"]
+    assert error["details"]["attempts"] == 1
+    completed = Path(first.data["items"][0]["bundle"]) / "data.json"
+    before = (completed.read_bytes(), completed.stat().st_mtime_ns)
+    failed = Path(first.data["items"][1]["bundle"])
+    assert not (failed / "data.json").exists()
+    recovered = True
+    second = resume(settings, first.data["job_id"], max_cost=0)
+    assert second.ok and calls == ["complete", "pending", "pending"]
+    assert (completed.read_bytes(), completed.stat().st_mtime_ns) == before
+    assert first.data["reserved_cost_usd"] == second.data["reserved_cost_usd"] == 0
+
+
+def test_resume_rejects_historical_thread_cache_without_target(settings, monkeypatch):
+    # Model a pre-fix job which incorrectly cached a parent post as success.
+    def capture(*args, **kwargs):
+        return NativeOperation(
+            raw=[{"id": "100", "text": "Parent"}],
+            provider="opencli",
+            operation="twitter/thread",
+            workdir=settings.data_dir,
+        )
+
+    monkeypatch.setattr("soota.tasks.runner.native_operation", capture)
+    first = ingest(settings, operation="opencli.twitter.thread", params=["tweet-id=101", "limit=1"], want="data")
+    assert first.ok
+    monkeypatch.setattr("soota.tasks.runner.native_operation", lambda *a, **kw: pytest.fail("must not replay"))
+    second = resume(settings, first.data["job_id"])
+    assert not second.ok
+    assert second.data["items"][0]["errors"][0]["details"]["reason"] == "target_not_returned"
+
+
 def test_signed_content_references_are_private_and_creator_survives(settings, monkeypatch):
     signed = "https://example.test/article?token=fixture-secret-access"
 

@@ -76,6 +76,8 @@ Read the actual `context.md`, `analysis-request.json` and neighboring provenance
 
 Use concise topic headings and paragraphs or bullets. Do not add an introduction, a second summary, a glossary or empty sections unless requested. If nothing reusable remains, report that result and retain the source; do not manufacture knowledge to complete a `note` target. The source can be saved with `--want context`, while a previously created note task remains unfinished and must be reported as such.
 
+Finalize the evidence-backed knowledge body before generating an outline. Derive the outline's branches, depth and number of points from that body's actual structure; do not fit it into a fixed count or let a preset outline dictate the prose. Read personal writing prompts only through the destination's applicable rules, without copying their text or paths here.
+
 For a batch, group sources by the question/topic they address before assigning parallel Agent work. Give each Agent only the relevant contexts, provenance, existing-note excerpts and applicable local prompt. Agents write to distinct draft/submission files and return proposed points, evidence mappings, duplicate candidates and unresolved gaps. They do not edit the same knowledge file, run concurrent resume on one job, or write Mubu. Keep source-specific submissions traceable to their own task/item/fingerprint; cross-source synthesis belongs in the final topic draft, without attaching another source's paragraph IDs to a single-item submission. Limit Agent concurrency separately from Soota's `--workers` according to the available authorized runtime.
 
 ## Complete the source task, then place the knowledge

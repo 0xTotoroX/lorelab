@@ -31,6 +31,8 @@ Comments and danmaku are not captions. Bilibili `ai-*` tracks are automatic subt
 
 `--max-cost 0` blocks billed requests. Unified batch jobs share durable reservations, including enumeration and later audio requests; resume does not reset them. In ask mode, noninteractive paid calls stop with `payment_required`. Do not bypass that gate or enable automatic payment for the user. Login, permission, rate-limit, timeout and contract errors do not authorize blind retries or manual paid fallback.
 
+For OpenCLI failures, inspect the safe `details.category/reason/upstream_code/exit_code/retryable` and fixed `hint`; never copy raw stderr or signed links into shared logs. Soota does not automatically replay commands. A known transient free read may be resumed explicitly after checking all unfinished job items; `jobs resume` does not select only retryable items. Xiaohongshu note reads require a signed URL from normal search/author-page navigation; do not invent tokens. A bound `twitter/thread` read must contain the requested post ID; adjust an insufficient explicit limit in a new task, without treating a parent post as the source. See [recovery](references/tasks.md#continue-a-saved-task).
+
 MCP is disabled by default; do not enable, discover or start it for an ordinary task. `capabilities --json` inspects local capabilities without querying websites or checking login. Distinguish discovered/native/standard capabilities from actual site and artifact verification. A listed command does not imply standard content, media or collection support. For broader API queries, read [API reference](references/api.md); for catalog pagination and incremental snapshots, read [catalog reference](references/catalog.md).
 
 ## Optional subtitle selection

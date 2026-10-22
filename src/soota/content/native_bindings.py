@@ -5,7 +5,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 from soota.content.native_types import NativeEntry
-from soota.errors import InputError
+from soota.errors import ContractError, InputError
 
 # These are result contracts, not an exhaustive catalogue of upstream commands.
 CONTENT_BINDINGS = {
@@ -17,6 +17,33 @@ CONTENT_BINDINGS = {
 }
 MEDIA_BINDINGS = {"xiaohongshu/download", "twitter/download", "bilibili/download"}
 URL_ROW_BINDINGS = {"youtube/search", "bilibili/search", "bilibili/user-videos", "twitter/tweets"}
+
+
+def validate_target_result(operation: str, params: dict[str, Any], data: Any) -> None:
+    """A bound thread read must include its focal post, including on resume."""
+    if operation.removeprefix("opencli.").replace(".", "/") != "twitter/thread":
+        return
+    value = params.get("tweet-id")
+    target = value.strip() if isinstance(value, str) else ""
+    if not re.fullmatch(r"[0-9]+", target):
+        parsed = urlsplit(http_url(target))
+        match = re.fullmatch(r"/[^/]+/status/([0-9]+)/?", parsed.path)
+        if parsed.hostname not in {"x.com", "www.x.com", "twitter.com", "www.twitter.com"} or not match:
+            raise InputError("twitter/thread 需要数字 tweet-id 或完整帖子链接。")
+        target = match[1]
+    if not isinstance(data, list) or any(not isinstance(row, dict) for row in data):
+        raise ContractError("twitter/thread 结果需要对象数组。")
+    if not any(row.get("id") == target for row in data):
+        raise ContractError(
+            "twitter/thread 未返回请求的目标帖，不能把父帖或空数组当作目标帖获取成功。",
+            hint="检查帖子可见性；提高 limit（例如 50），检查 top-by-engagement 是否排除了目标，再创建新任务。",
+            details={
+                "category": "contract",
+                "reason": "target_not_returned",
+                "retryable": False,
+                "returned_count": len(data),
+            },
+        )
 
 
 def http_url(value: Any) -> str:

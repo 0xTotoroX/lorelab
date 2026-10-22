@@ -48,6 +48,14 @@ it is not an alternative license grant for newly authored GPL-covered changes.
   are not modified. User-installed or Soota-managed runtimes retain
   their own license files; this reference copy does not describe every later release.
 
+- The Xiaohongshu search compatibility patch additionally uses source fragments
+  from OpenCLI v1.8.8 and adapts [PR #2446](https://github.com/jackwener/OpenCLI/pull/2446)
+  and [PR #2563](https://github.com/jackwener/OpenCLI/pull/2563), under Apache-2.0.
+  `tests/fixtures/opencli_xiaohongshu_filters.js` retains the upstream filter
+  function and attribution; a separate synthetic DOM harness supplies no account data.
+  Soota additions retain their modification notices, and the managed compatibility
+  manifest records the upstream references and modified-file hashes.
+
 ## opencli-mcp 0.0.22 (external runtime, disabled by default)
 
 - Integration: separately installed local MCP process and Chrome extension; no upstream code or runtime is bundled in Soota's Python wheel.

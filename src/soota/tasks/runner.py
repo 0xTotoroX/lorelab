@@ -1,6 +1,6 @@
 """Execute and resume unified artifact tasks.
 
-[INPUT]: TaskSpec, enumeration, bounded scheduler, acquisition and artifact services.
+[INPUT]: TaskSpec, enumeration, bounded scheduler, native identity checks and artifact services.
 [OUTPUT]: Per-item artifacts/checkpoints and one ordered CommandResult.
 [POS]: tasks orchestration; owns budget scope, job lock and interruption recovery.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -216,7 +216,7 @@ def _run_item(settings: SootaSettings, spec: TaskSpec, job: TaskJob, row: TaskIt
 def _run_item_locked(
     settings: SootaSettings, spec: TaskSpec, job: TaskJob, row: TaskItem, seed: InputSpec, folder: Path
 ) -> None:
-    from soota.content.native_bindings import media_binding
+    from soota.content.native_bindings import media_binding, validate_target_result
     from soota.content.native_types import NativeOperation
 
     row.bundle, row.errors = str(folder), []
@@ -241,6 +241,7 @@ def _run_item_locked(
                 files=[Path(p) for p in saved.get("files", [])],
                 warnings=saved.get("warnings", []),
             )
+            validate_target_result(seed.operation or "", seed.params, operation.raw)
         else:
             operation = _step(
                 settings, job, row, "native", lambda: native_operation(settings, spec, seed, work / "native")

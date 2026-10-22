@@ -195,6 +195,7 @@ uv run soota runtime rollback --json
 - 未选择受管版本时使用 PATH 中现有 OpenCLI；Soota 不覆盖、修补或 `npm -g` 更新全局安装。
 - `update` 省略版本号时查询最新稳定版；也可 `--version 完整版本号` 固定版本。从官方 npm 下载并验证包的 SHA-512，安装到 Soota `data_dir/runtimes/opencli/versions/版本号`，禁用 npm 安装脚本，再检查版本、只读命令和 JSON 列契约；成功后原子切换指针。网络、安装或契约失败不切换。
 - 受管安装可应用已确认的局部兼容修复，包括媒体导航和 YouTube JSON3 字幕请求不带 `pot` 时被误过滤的问题。字幕补丁仅移除强制 `pot` 检查，保留视频 ID、字幕格式和原有语言筛选；不删除实际请求上的令牌。只匹配已知上游代码，标记修改来源并记录 `soota-compatibility.json`；上游代码变化时不猜测替换，也不仅因版本变新拒绝安装。全局安装不改动。
+- 小红书搜索补丁适配已核对的 1.8.8 筛选代码：排除 `aria-hidden` / 热图标记、极低透明度和禁用指针的 ghost；仅合并文字、激活状态及矩形完全一致的逻辑选项。不同位置、状态或缺失选项仍失败；默认筛选、点击后激活检查及结果稳定等待保留。两处锚点必须各唯一，部分补丁或上游漂移跳过，重复应用幂等。来源为 [#2445](https://github.com/jackwener/OpenCLI/issues/2445)、[#2446](https://github.com/jackwener/OpenCLI/pull/2446)、[#2563](https://github.com/jackwener/OpenCLI/pull/2563)，记录在兼容清单并保留许可证。可显式 `soota runtime update --version 1.8.8 --json` 对已有受管版本应用；不要用省略版本的升级命令代替局部修复。合成 JavaScript 行为测试不等于真实站点验收。
 - 保留上一受管版本；OpenCLI 第一次受管安装的 rollback 返回原有 PATH 安装。`runtime update/rollback` 仅管理 OpenCLI，关闭自动更新后才能持续固定旧版本。独立更新仍受接口兼容性约束。
 - 运行时互斥锁避免 Soota 正在执行命令时升级。外部 OpenCLI 不受该锁管理；采集前只读检查 daemon 版本，若不同立即停止，防止 OpenCLI 自动接管用户的旧 daemon。应等待外部采集结束后运行 `soota runtime connect` 切换空闲 daemon，或 rollback。不要为了使用新版本中断已有任务。
 - 升级检查不访问网站，不证明站点可用；更新后用一条已知公开视频的零预算 `inspect` 验证。全局程序有本地补丁时，不会把补丁复制到受管官方包。
@@ -227,10 +228,13 @@ uv run soota runtime rollback --json
 | `providers/downie_complete.sh` | Downie 下载完成后的受限目录回调 |
 | `transcripts/resolver.py` | 字幕状态决策、本地 ASR 与未完成音频任务恢复 |
 | `providers/opencli.py` | 只读命令白名单、输出规范化、缓存与快照 |
+| `providers/opencli_commands.py` | 动态原生命令派发、权限门禁和小红书签名链接预检 |
+| `providers/opencli_errors.py` | 原生与标准 OpenCLI 共用的安全类型诊断；不输出上游敏感正文，不自动重放 |
+| `content/native_bindings.py` | 已核实的结果绑定和目标线程身份校验；搜索空结果保持有效 |
 | `providers/opencli_context.py` | 浏览器上下文绑定与 daemon 版本门禁 |
 | `providers/process.py` | 无 shell 的 argv 调用、输出上限、超时和取消 |
 | `providers/opencli_runtime.py` | 外部/受管运行时选择、完整性校验、安装与回滚 |
-| `providers/opencli_patches.py` | 对受管运行时应用已匹配的媒体导航与 YouTube 字幕过滤修复 |
+| `providers/opencli_patches.py` | 对受管运行时应用已匹配的媒体导航、YouTube 字幕和小红书搜索筛选修复 |
 | `counterpart.py` | 同名频道发现、身份与同一期视频验证 |
 | `transcripts/promotions.py` | 社区及人工区间过滤，保留原片段编号与时间 |
 | `runtime_cli.py` | 对外暴露运行时管理命令 |

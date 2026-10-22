@@ -110,6 +110,77 @@ YOUTUBE_LIVE_TRACK = """        try {
           }
           if (boundOriginalFetch) {"""
 
+# Adapted from OpenCLI PRs #2446 and #2563 (Apache-2.0).
+# Keep filter application/settling intact; only disambiguate the same logical chip.
+XIAOHONGSHU_FILTER_SOURCES = [
+    "https://github.com/jackwener/OpenCLI/issues/2445",
+    "https://github.com/jackwener/OpenCLI/pull/2446",
+    "https://github.com/jackwener/OpenCLI/pull/2563",
+]
+XIAOHONGSHU_FILTERS = (
+    (
+        """        const visible = (element) => {
+          if (!element) return false;
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          return rect.width > 0 && rect.height > 0 &&
+            style.display !== 'none' && style.visibility !== 'hidden';
+        };""",
+        """        // Copyright 2026 Soota contributors; GPL-3.0-only.
+        // Modified by Soota; adapted from OpenCLI #2563 (Apache-2.0).
+        const visible = (element) => {
+          if (!element) return false;
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          if (element.closest('[data-hp-kind], [aria-hidden="true"]')) return false;
+          return rect.width > 0 && rect.height > 0 &&
+            style.display !== 'none' && style.visibility !== 'hidden' &&
+            Number(style.opacity) > 0.01 && style.pointerEvents !== 'none';
+        };""",
+    ),
+    (
+        """          if (options.length !== 1) {
+            return { status: 'layout', detail: options.length ? 'ambiguous_option' : 'option_not_found' };
+          }
+          return { status: 'ok', option: options[0] };""",
+        """          // Copyright 2026 Soota contributors; GPL-3.0-only.
+          // Modified by Soota; adapted from OpenCLI #2446 (Apache-2.0).
+          if (options.length !== 1) {
+            const first = options[0];
+            const rect = first?.getBoundingClientRect();
+            const keys = ['left', 'top', 'width', 'height'];
+            const sameOption = rect && keys.every(key => Number.isFinite(rect[key])) &&
+              options.every(option => {
+                const other = option.getBoundingClientRect();
+                return keys.every(key => other[key] === rect[key]) &&
+                  option.classList.contains('active') === first.classList.contains('active');
+              });
+            if (!sameOption) {
+              return { status: 'layout', detail: options.length ? 'ambiguous_option' : 'option_not_found' };
+            }
+          }
+          return { status: 'ok', option: options[0] };""",
+    ),
+)
+
+
+def _patch_xiaohongshu_filters(install: Path) -> str | None:
+    relative = "node_modules/@jackwener/opencli/clis/xiaohongshu/search.js"
+    path = install / relative
+    if not path.is_file():
+        return None
+    original = path.read_text()
+    if original.count("function buildApplySearchFiltersJs(requestedFilters) {") != 1:
+        return None
+    if all(original.count(new) == 1 and old not in original for old, new in XIAOHONGSHU_FILTERS):
+        return relative
+    if not all(original.count(old) == 1 and new not in original for old, new in XIAOHONGSHU_FILTERS):
+        return None
+    for old, new in XIAOHONGSHU_FILTERS:
+        original = original.replace(old, new, 1)
+    atomic_write(path, original)
+    return relative
+
 
 def _patch_youtube_live_track(install: Path) -> str | None:
     relative = "node_modules/@jackwener/opencli/clis/youtube/transcript.js"
@@ -167,6 +238,7 @@ def apply_managed_fixes(install: Path) -> None:
             ("media-owned-tab-navigation", _patch_navigation(install)),
             ("youtube-timedtext-optional-pot", _patch_youtube(install)),
             ("youtube-live-player-caption-url", _patch_youtube_live_track(install)),
+            ("xiaohongshu-search-filter-options", _patch_xiaohongshu_filters(install)),
         )
         if relative is not None
     }
@@ -180,6 +252,9 @@ def apply_managed_fixes(install: Path) -> None:
                 "patches": list(applied),
                 "modified_by": "Soota",
                 "soota_modification_license": "GPL-3.0-only",
+                "upstream_sources": {"xiaohongshu-search-filter-options": XIAOHONGSHU_FILTER_SOURCES}
+                if "xiaohongshu-search-filter-options" in applied
+                else {},
                 "files": [
                     {"file": relative, "sha256": hashlib.sha256((install / relative).read_bytes()).hexdigest()}
                     for relative in dict.fromkeys(applied.values())

@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import Any
 
 from soota.config import SootaSettings
-from soota.content.native_bindings import CONTENT_BINDINGS, content_candidates, media_binding, normalize_rows
+from soota.content.native_bindings import (
+    CONTENT_BINDINGS,
+    content_candidates,
+    media_binding,
+    normalize_rows,
+    validate_target_result,
+)
 from soota.content.native_types import NativeContent, NativeMedia, NativeOperation
 from soota.errors import ContractError, InputError, SourceError
 from soota.providers import opencli_commands
@@ -93,6 +99,7 @@ def _dispatch(
     if "download-images" in names and "download-images" not in arguments:
         arguments["download-images"] = False
     raw = opencli_commands.execute(settings, command, arguments, allow_write=False)
+    validate_target_result(command["command"], arguments, raw)
     return NativeOperation(
         raw=raw,
         provider="opencli",

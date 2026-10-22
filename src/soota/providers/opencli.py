@@ -9,7 +9,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 
 from soota.config import SootaSettings
-from soota.errors import AuthBudgetError, CaptionsAbsent, CaptionUnavailable, ContractError, InputError, SourceError
+from soota.errors import CaptionsAbsent, ContractError, InputError, SourceError
 from soota.models import (
     CapabilitySet,
     CaptionAcquisition,
@@ -22,6 +22,7 @@ from soota.models import (
     TranscriptStatus,
 )
 from soota.providers.opencli_context import preflight, resolve_profile
+from soota.providers.opencli_errors import failure, invalid_json, process_failure
 from soota.providers.opencli_runtime import OpenCLIRuntime, RuntimeUnavailable
 from soota.providers.process import run_process
 from soota.storage.cache import CacheStore
@@ -83,53 +84,19 @@ class OpenCLIProvider:
                 )
             except FileNotFoundError as exc:
                 raise RuntimeUnavailable("OpenCLI 程序已不可用。") from exc
+            except SourceError as exc:
+                raise process_failure(exc, read_only=True) from exc
         self.records.append(
             RequestRecord(
                 endpoint=f"opencli:{site}/{command}", billed=False, estimated_cost_usd=0, note=f"version:{self.version}"
             )
         )
         if result.returncode:
-            # Never return raw stderr: extensions and pages may include login/account details.
-            message = result.stderr.lower()
-            if result.returncode == 77 or any(
-                token in message
-                for token in (
-                    "429",
-                    "rate_limit",
-                    "rate limit",
-                    "captcha",
-                    "login_required",
-                    "auth_required",
-                    "unauthorized",
-                    "forbidden",
-                )
-            ):
-                raise AuthBudgetError("OpenCLI 登录、限流或访问限制，需要处理浏览器状态后再试；不会切换付费来源。")
-            code = re.search(r"(?m)^\s*code:\s*['\"]?([A-Z_]+)", result.stderr)
-            if result.returncode == 66 and code and code[1] == "EMPTY_RESULT" and (site, command) in CAPTION_COMMANDS:
-                if site == "bilibili" and "此视频没有发现外挂或智能字幕。" in result.stderr:
-                    raise CaptionsAbsent("B 站已返回空字幕轨道列表。")
-                raise CaptionUnavailable("OpenCLI 返回空字幕结果，但尚不能确认视频没有字幕轨道。")
-            bridge_missing = any(phrase in message for phrase in ("extension not connected", "daemon not running"))
-            if result.returncode == 69 and code and code[1] == "BROWSER_CONNECT" and bridge_missing:
-                raise RuntimeUnavailable(
-                    "OpenCLI Browser Bridge 不可用。", hint="检查 Chrome 和 Browser Bridge 扩展连接。"
-                )
-            if "navigation rejected" in message:
-                raise SourceError(
-                    "OpenCLI 浏览器导航被拒绝，采集未完成。",
-                    hint="检查浏览器页面和 Bridge 状态，稍后手动重试；不会自动重试或切换付费来源。",
-                )
-            if (site, command) == ("youtube", "transcript") and "caption url returned empty response" in message:
-                raise CaptionUnavailable(
-                    "OpenCLI 字幕地址返回空响应，采集未完成。",
-                    hint="auto 模式可继续 yt-dlp 免费兜底；TikHub 仍受费用策略控制。",
-                )
-            raise SourceError("OpenCLI 采集失败，未自动重试或切换来源。", details={"exit_code": result.returncode})
+            raise failure(result, operation=f"{site}/{command}", read_only=True)
         try:
             rows = json.loads(result.stdout)
         except ValueError as exc:
-            raise ContractError("OpenCLI 未返回有效 JSON。") from exc
+            raise invalid_json() from exc
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             raise ContractError("OpenCLI JSON 必须是对象数组。")
         return rows

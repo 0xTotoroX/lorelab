@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -63,3 +64,54 @@ def test_private_mlx_settings_and_explicit_cli_fallback(monkeypatch, tmp_path) -
     assert settings.asr.mlx_model_path == "/path/to/model"
     assert isinstance(resolve_engine(settings.asr), MlxWhisperEngine)
     assert isinstance(resolve_engine(AsrConfig(engine="whisper-cli")), WhisperCliEngine)
+
+
+@pytest.mark.parametrize("relative", [False, True])
+def test_missing_local_model_fails_before_cli_without_exposing_path(monkeypatch, tmp_path, relative) -> None:
+    monkeypatch.chdir(tmp_path)
+    model = "./private-model-missing" if relative else str(tmp_path / "private-model-missing")
+    monkeypatch.setattr("soota.transcripts.asr.shutil.which", lambda _: "synthetic-mlx")
+    monkeypatch.setattr("soota.transcripts.asr.subprocess.run", lambda *a, **k: pytest.fail("must not invoke MLX"))
+    engine = MlxWhisperEngine(AsrConfig(mlx_model_path=model))
+    with pytest.raises(TranscriptError, match="本地模型目录缺失") as caught:
+        engine.transcribe(tmp_path / "audio.wav", language=None)
+    assert caught.value.details == {"reason": "local_model_missing", "dispatched": False}
+    assert "asr.mlx_model_path" in caught.value.hint
+    assert "private-model-missing" not in json.dumps(caught.value.to_dict())
+
+
+@pytest.mark.parametrize("files", [[], ["config.json"], ["weights.npz"], ["config.json", "unrelated.bin"]])
+def test_incomplete_local_model_does_not_invoke_cli(monkeypatch, tmp_path, files) -> None:
+    model = tmp_path / "model"
+    model.mkdir()
+    for name in files:
+        (model / name).write_text("synthetic")
+    monkeypatch.setattr("soota.transcripts.asr.shutil.which", lambda _: "synthetic-mlx")
+    monkeypatch.setattr("soota.transcripts.asr.subprocess.run", lambda *a, **k: pytest.fail("must not invoke MLX"))
+    with pytest.raises(TranscriptError, match="模型文件不完整") as caught:
+        MlxWhisperEngine(AsrConfig(mlx_model_path=str(model))).transcribe(tmp_path / "audio.wav", language=None)
+    assert caught.value.details == {"reason": "local_model_incomplete", "dispatched": False}
+
+
+@pytest.mark.parametrize("model_kind", ["local-npz", "local-safetensors", "repo-id"])
+def test_valid_local_model_and_explicit_repo_id_keep_cli_contract(monkeypatch, tmp_path, model_kind) -> None:
+    model = "synthetic-org/whisper-tiny-mlx"
+    if model_kind.startswith("local-"):
+        directory = tmp_path / "model"
+        directory.mkdir()
+        (directory / "config.json").write_text("{}")
+        (directory / ("weights." + model_kind.removeprefix("local-"))).write_bytes(b"synthetic weights")
+        model = str(directory)
+    calls = []
+    monkeypatch.setattr("soota.transcripts.asr.shutil.which", lambda _: "synthetic-mlx")
+
+    def run(cmd, **kwargs):
+        calls.append(cmd)
+        folder = Path(cmd[cmd.index("--output-dir") + 1])
+        (folder / "transcript.json").write_text('{"segments": [{"start": 0, "end": 1, "text": "Synthetic"}]}')
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr("soota.transcripts.asr.subprocess.run", run)
+    result = MlxWhisperEngine(AsrConfig(mlx_model_path=model)).transcribe(tmp_path / "audio.wav", language="en")
+    assert result.body["segments"][0]["text"] == "Synthetic"
+    assert len(calls) == 1 and calls[0][calls[0].index("--model") + 1] == model

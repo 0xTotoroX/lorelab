@@ -22,6 +22,34 @@ def command(operation, names=(), access="read"):
     }
 
 
+@pytest.mark.parametrize("rows", [[], [{"id": "100", "text": "Parent"}], [{"text": "Missing ID"}]])
+def test_thread_requires_target_and_preserves_explicit_limit(settings, tmp_path, install, rows):
+    calls = []
+    install(
+        [command("twitter/thread", ["tweet-id", "limit"])],
+        lambda settings, cmd, params, **kwargs: calls.append(params) or rows,
+    )
+    with pytest.raises(ContractError) as caught:
+        native.capture_operation(settings, "opencli.twitter.thread", {"tweet-id": "101", "limit": 1}, tmp_path)
+    assert caught.value.details["reason"] == "target_not_returned"
+    assert "limit" in caught.value.hint
+    assert calls == [{"tweet-id": "101", "limit": 1}]
+
+
+@pytest.mark.parametrize("target", ["101", "https://x.com/example/status/101"])
+def test_thread_accepts_target_anywhere_without_reordering(settings, tmp_path, install, target):
+    rows = [{"id": "100", "text": "Parent"}, {"id": "101", "text": "Target"}]
+    install([command("twitter/thread", ["tweet-id", "limit"])], lambda *a, **kw: rows)
+    result = native.capture_operation(settings, "twitter/thread", {"tweet-id": target, "limit": 50}, tmp_path)
+    assert result.raw == rows
+
+
+def test_generic_search_keeps_legitimate_empty_result(settings, tmp_path, install):
+    install([command("youtube/search", ["query"])], lambda *a, **kw: [])
+    result = native.capture_operation(settings, "youtube/search", {"query": "synthetic empty query"}, tmp_path)
+    assert result.raw == [] and result.entries == []
+
+
 @pytest.fixture
 def install(monkeypatch):
     def setup(commands, execute):
