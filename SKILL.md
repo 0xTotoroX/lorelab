@@ -32,7 +32,7 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 新增命令：`nodes`、`node-update`、`node-create`、`node-import`、`node-delete`、`node-move`、`node-link`、`image-upload`、`attachment-upload`、`attachments`、`auth-status`、`operations`、`operation-status`。以 `--help` 和上述文档为准。图片属于节点，附件属于文档；不假定 Mubu Sync 已支持导出全部媒体。
 
-批量大纲使用 `node-import DOC_ID --root|--node-id PARENT_ID --file outline.json`，文件为 `{"nodes":[{"text":"主题","children":[{"text":"要点"}]}]}`，可选纯文本 `note`。默认预览，执行携带同一输入与预览版本；一次提交整组子树，回读核对旧内容与所有新增节点。输入上限、重复追加和失败恢复见节点说明。不要用旧 `save` 替代安全追加，不把 `body_available` 或生成大纲等同于源内容完整。
+批量大纲使用 `node-import DOC_ID --root|--node-id PARENT_ID --file outline.json`，文件为 `{"nodes":[{"text":"主题","children":[{"text":"要点"}]}]}`，可选纯文本 `note`。默认预览，执行携带同一输入与预览版本；一次提交整组子树，回读核对旧内容与所有新增节点。输入上限、重复追加和失败恢复见节点说明。不要用旧 `save` 替代安全追加。
 
 ## 功能概览
 
