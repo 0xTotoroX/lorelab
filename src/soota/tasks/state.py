@@ -1,3 +1,11 @@
+"""Private task persistence and bundle exclusion.
+
+[INPUT]: Task models, atomic storage, JobStore and resolved source identities.
+[OUTPUT]: Request/input checkpoints, locked item merges and bundle file locks.
+[POS]: tasks persistence; worker-local rows merge into one shared job snapshot.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import fcntl
@@ -48,8 +56,14 @@ def save_spec(settings: SootaSettings, job_id: str, spec: TaskSpec) -> None:
     atomic_write(task_folder(settings, job_id) / "request.json", spec.model_dump_json(indent=2) + "\n")
 
 
-def save_job(settings: SootaSettings, job: TaskJob) -> None:
-    JobStore(settings.jobs_dir).save(job.model_dump(mode="json"))
+def save_job(settings: SootaSettings, job: TaskJob, *, item: TaskItem | None = None) -> None:
+    # Merge only the caller's row, then serialize and replace under one lock.
+    # A detached snapshot prevents subsequent worker edits during serialization.
+    with job._save_lock:
+        if item is not None:
+            index = next(i for i, row in enumerate(job.items) if row.item_id == item.item_id)
+            job.items[index] = item.model_copy(deep=True)
+        JobStore(settings.jobs_dir).save(job.model_dump(mode="json"))
 
 
 def resolved_inputs(settings: SootaSettings, job: TaskJob) -> list[InputSpec]:

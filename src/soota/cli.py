@@ -1,3 +1,11 @@
+"""Public Typer entry points.
+
+[INPUT]: Command arguments, settings and application command functions.
+[OUTPUT]: CLI commands including validated ingest/resume --workers options.
+[POS]: soota CLI adapter; task execution contracts live in tasks/ and docs/tasks.md.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -167,6 +175,7 @@ def ingest(
     allow_silent: Annotated[bool, typer.Option("--allow-silent", help="允许无音轨的视频")] = False,
     max_bytes: Annotated[int, typer.Option("--max-bytes", help="单个媒体文件字节上限")] = 2 * 1024**3,
     max_pages: Annotated[int, typer.Option("--max-pages")] = 10,
+    workers: Annotated[int, typer.Option("--workers", min=1, max=8, help="独立条目并发数；枚举仍有序")] = 1,
     destination: Annotated[Path | None, typer.Option("--destination", help="另外导出到指定目录")] = None,
     vault: Annotated[Path | None, typer.Option("--vault", help="显式 Obsidian Vault 目录")] = None,
     subdir: Annotated[str, typer.Option("--subdir", help="Vault 内目录，不猜测分类")] = "Soota",
@@ -218,6 +227,7 @@ def ingest(
         allow_silent=allow_silent,
         max_bytes=max_bytes,
         max_pages=max_pages,
+        workers=workers,
         max_items=max_items,
         destination=destination,
         vault=vault,
@@ -262,6 +272,9 @@ def jobs_resume(
     max_items: Annotated[int | None, typer.Option("--max-items", help="新的累计条数上限")] = None,
     max_pages: Annotated[int | None, typer.Option("--max-pages", help="新的累计页数上限")] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="新的总费用上限，已有预留不会清零")] = None,
+    workers: Annotated[
+        int | None, typer.Option("--workers", min=1, max=8, help="覆盖并保存条目并发数；默认沿用任务设置")
+    ] = None,
     analysis: Annotated[Path | None, typer.Option("--analysis", help="带任务身份与正文指纹的分析提交")] = None,
     force: Annotated[bool, typer.Option("--force")] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
@@ -273,6 +286,7 @@ def jobs_resume(
         max_items=max_items,
         max_pages=max_pages,
         max_cost=max_cost,
+        workers=workers,
         analysis=analysis,
         force=force,
     )

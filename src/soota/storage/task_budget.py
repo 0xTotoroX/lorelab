@@ -1,3 +1,11 @@
+"""Durable task-wide request reservations.
+
+[INPUT]: RequestRecord prices, optional payment guard, task folder and total cap.
+[OUTPUT]: TaskBudget and context-scoped reserve_active_task before billed sends.
+[POS]: storage budget ledger; thread/file locks serialize reserve and persistence.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import fcntl
@@ -8,6 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from decimal import Decimal
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from soota.errors import AuthBudgetError
@@ -23,6 +32,7 @@ class TaskBudget:
         self.folder.mkdir(parents=True, exist_ok=True)
         self.path = folder / "budget.json"
         self.cap = Decimal(str(cap)) if cap is not None else None
+        self._lock = RLock()
 
     def snapshot(self) -> dict[str, Any]:
         if not self.path.is_file():
@@ -37,7 +47,7 @@ class TaskBudget:
         price = record.estimated_cost_usd
         if price is None or not math.isfinite(price) or price < 0 or self.cap == 0:
             raise AuthBudgetError("任务禁止该计费请求：预算为零或价格未知。")
-        with (self.folder / "budget.lock").open("a") as handle:
+        with self._lock, (self.folder / "budget.lock").open("a") as handle:
             fcntl.flock(handle, fcntl.LOCK_EX)
             try:
                 saved = self.snapshot()

@@ -1,11 +1,21 @@
+"""Unified task contracts.
+
+[INPUT]: Validated inputs/targets, acquisition settings and execution limits.
+[OUTPUT]: TaskSpec (persistent workers/scope), TaskItem and TaskJob checkpoints.
+[POS]: tasks data contracts; TaskJob owns private checkpoint/export locks.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import hashlib
 import json
 from pathlib import Path
+from threading import RLock
 from typing import Any, Literal
+from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, model_validator
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, PrivateAttr, model_validator
 
 from soota.models import TranscriptMode
 
@@ -50,6 +60,7 @@ class TaskSpec(BaseModel):
     language: str = "zh"
     strict_language: bool = False
     execution_context: str = ""
+    execution_scope: str = Field(default_factory=lambda: uuid4().hex)
     transcript_mode: TranscriptMode = TranscriptMode.AUTO
     subtitle_formats: list[Literal["srt", "vtt", "txt", "json"]] = ["srt"]
     input_format: str | None = None
@@ -57,6 +68,7 @@ class TaskSpec(BaseModel):
     allow_silent: bool = False
     max_items: int = Field(default=100, ge=1)
     max_pages: int = Field(default=10, ge=1)
+    workers: int = Field(default=1, ge=1, le=8, strict=True)
     max_bytes: int = Field(default=2 * 1024**3, ge=1)
     max_cost: FiniteFloat | None = Field(default=None, ge=0)
     force: bool = False
@@ -132,6 +144,9 @@ class TaskItem(BaseModel):
 
 
 class TaskJob(BaseModel):
+    # Worker rows are private copies; only checkpoint merging holds this lock.
+    _save_lock: RLock = PrivateAttr(default_factory=RLock)
+    _export_lock: RLock = PrivateAttr(default_factory=RLock)
     schema_version: Literal[2] = 2
     kind: Literal["content-task"] = "content-task"
     id: str

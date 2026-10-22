@@ -6,26 +6,32 @@
 
 ```mermaid
 flowchart TD
-    A[输入与目标] --> B[任务编排]
-    B --> C[内容获取]
+    A[输入与目标] --> B[有序枚举与来源去重]
+    B --> H[有界条目调度：1–8 workers]
+    H --> C[内容获取]
+    H -.逐项进度合并与同目录串行.-> S[任务状态与内容包锁]
+    C -.计费请求前持久预留.-> Q[全批共享预算]
     C --> D[内容处理]
     D --> E[校验与保存产物]
-    E -.明确要求分析或文章.-> F[Agent 分析与整理]
+    E -.明确要求分析或文章.-> F[Agent 按主题分析与独立草稿]
     F --> E
     E -.指定目的地.-> G[导出]
+    F -.明确要求知识落地.-> K[单写者合并知识与 Mubu CLI 导入回读]
 ```
 
 | 黑盒 | 职责 | 代码入口 |
 | --- | --- | --- |
 | 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py` |
-| 任务编排 | 展开集合，组合步骤，复用产物，维护逐项进度及全批费用预留 | `tasks/runner.py`、`tasks/enumeration.py`、`storage/task_budget.py` |
+| 任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py` |
 | 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |
 | 内容处理 | 字幕格式统一、本地转写、正文结构转换及媒体处理；默认不做语义改写 | `transcripts/`、`content/`、`media/` |
 | 校验与保存产物 | 校验文件与媒体，登记 v2 产物、来源及校验值，保护既有源文和文章 | `media/probe.py`、`artifacts/bundle.py` |
-| Agent 分析与整理 | 按明确目标读取 context；CLI 接收结果并检查正文指纹与证据 | `skills/soota/`、`tasks/outputs.py`、`artifacts/analysis.py` |
+| Agent 分析与整理 | 按明确目标读取 context，按主题并行产出独立草稿；单写者提交任务结果、合并知识及调用外部 CLI；Soota 检查正文指纹、任务身份与证据 | `skills/soota/`、`tasks/outputs.py`、`artifacts/analysis.py` |
 | 导出 | 写入指定目录，维持相对附件链接并检查人工修改冲突 | `artifacts/export.py` |
 
 `docs/tasks.md` 是统一输入、产物目标、任务恢复和分析提交的操作契约。职责、阶段顺序或能力改变时，同步更新本图、受影响的表和对应 Skill；不以未来目标代替当前实现。
+
+Cubox → 本地不改写的 source 快照 → Soota context/note/outline → 知识与幕布的组合流程属于 Skill。Cubox 与 Mubu 由各自 CLI 执行，Soota 不接入其私有 API。图中 Agent 的主题并行与 CLI 的 `--workers` 分属不同阶段；语义分析、知识库修改和云端写入都需要对应请求。单元测试验证调度、共享预算、恢复和写入隔离，不代表真实站点或收藏批次已验收。
 
 ### 字幕边界
 

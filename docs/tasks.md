@@ -60,7 +60,7 @@ soota ingest "/path/to/audio.m4a" --want transcript,context --json
 soota ingest "/path/to/captions.vtt" --want transcript --subtitle-format srt,json --json
 soota ingest "/path/to/article.md" --want context,images --json
 soota ingest "/path/to/bundle/manifest.json" --want note --json
-soota ingest --inputs-file "/path/to/links.txt" --want context --max-items 20 --max-cost 0 --json
+soota ingest --inputs-file "/path/to/links.txt" --want context --workers 2 --max-items 20 --max-cost 0 --json
 ```
 
 本地处理保留用户原文件，在任务目录处理转换和转写所需的中间文件。普通文本 TXT 按无时间正文读取；若需要将它明确作为字幕输入，可指定 `--input-format txt`。JSON 字幕后缀相同、内部结构可能不同，必要时使用 `--input-format` 指定已支持的格式，详见 [统一字幕转换层](subtitle-formats.md#统一转换层)。
@@ -94,6 +94,20 @@ soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
 Agent 读取本次 context、目标目录规则和最新 prompt，按主题拆分、精炼、检查相关已有笔记并选择存放位置，再提交带证据的 `note_markdown`，通过 `jobs resume --analysis` 完成来源笔记。不同主题的知识文件由 Agent 按知识库约定创建或补充；无法分类的内容进入约定的收件目录。写入后核对实际文件和来源链接，分别报告来源包与知识归档的结果。流程见 [Skill 知识归纳](../skills/soota/references/knowledge.md)。
 
 CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 的单份 `note.md` 与整包导出不代替多主题分类，也不会调用模型或自动合并已有知识。
+
+已授权的 Cubox 知识批次也可通过 Skill 接续：用 Cubox CLI 取得批量 CardDetail，将实际正文原样保存为稳定的本地 source 文件，旁存来源记录；再将文件路径写入输入清单，执行 `--provider local --want context,note,outline --workers 2`。`body_available` 只表示有正文，不能推断原文完整。只有描述、链接或空正文的条目保留缺失状态；需要补取时使用 Soota 已有原站／字幕入口，不能把描述作为完整原文。
+
+Agent 按主题并行提炼独立草稿，由一个写入者核对证据、合并知识文件并串行提交分析；用户要求幕布时再通过 Mubu CLI `node-import` 预览、绑定版本执行并回读整篇。Soota 不调用这两个服务的私有 API，也不替用户决定收藏删除、分类、路径或写作 prompt；这些规则从目的地 `AGENTS.md` 读取。详细契约与恢复检查见 [知识提炼流程](../skills/soota/references/knowledge.md)。
+
+## 有界条目并行
+
+统一任务使用 `--workers N` 指定同时处理的独立条目数，范围 **1–8**，默认 **1**。集合枚举与分页保持顺序；去重保留来源第一次出现的位置，结果 `items` 按输入顺序返回，完成顺序可能不同。非默认 `--workers` 也会选择统一任务入口；省略它的旧单视频命令保持原契约。
+
+并行的是每个条目的完整获取／转换／保存流程，不会让单条目的多个步骤同时写入。调度器最多提交 N 个在途条目，每次提交独立复制 `contextvars`，保留共享预算和调用上下文。同一实际内容包目录的不同输入按原顺序处理；跨进程内容包锁继续防止其他任务同时修改。任务内导出串行执行，并锁定导出目标目录；若目标正在作为另一个任务的源内容包使用，该次导出报告冲突并保留已有文件。
+
+worker 修改自己的条目副本，保存时在锁内合并该行、序列化并原子替换任务记录，保留其他条目的最新进度。单项获取、格式或本地输入变化错误只阻塞对应条目；枚举、任务记录或分析提交错误仍可能阻塞任务级步骤。并发竞争付费额度时以实际预留顺序分配，不能保证输入靠前者优先获得预算。
+
+Ctrl-C 停止新条目调度，取消尚未开始的调用，等待已经开始的 worker 完成写入后保存 `paused` 并释放任务锁。收尾期间再次 Ctrl-C 不提前释放锁；等待时间取决于在途 Provider 的超时。强制终止进程不具备同样的收尾保证；已有预算预留仍保留。此实现使用标准库线程池，不新增任务服务或模型调用。
 
 ## 集合与原生操作
 
@@ -153,10 +167,15 @@ soota ingest --inputs-file "/path/to/links.txt" --want video,context --dry-run -
 
 soota jobs list --json
 soota jobs resume JOB_ID --json
+soota jobs resume JOB_ID --workers 2 --json
 soota jobs resume JOB_ID --max-items 40 --max-pages 6 --max-cost 0.10 --json
 ```
 
-恢复参数表示新的总上限。已有目录的 Provider 和游标语义继续保留，不把一个来源的游标交给另一个。下载或导出失败时，已经保存的有效产物保留；再次运行会校验文件与采集条件，补做未满足的步骤。输入文件在任务创建后变化时，使用新任务处理新的输入。
+条数、页数和费用恢复参数表示新的总上限。`workers` 保存在任务请求中；resume 省略时沿用，显式值校验后保存，旧请求缺少此字段时按 1 处理。单独改变 workers 不重置预算、不改变费用上限，也不重做已经完成的枚举；旧 `catalog` 任务不接受这个覆盖选项。
+
+已有目录的 Provider 和游标语义继续保留，不把一个来源的游标交给另一个。下载或导出失败时，已经保存的有效产物保留；再次运行会校验文件与采集条件，补做未满足的步骤。新任务将未绑定浏览器的随机执行作用域一并持久化，重复恢复不会仅因新建随机标识而重新采集；不同新任务仍隔离，已知 profile、采集设置或有效文件变化时会重新校验。没有此作用域的历史请求沿用首次恢复时的重新校验行为。输入文件在任务创建后变化时，仅该条目阻塞，使用新任务处理新的输入。
+
+有效缓存和现有产物不会重复采集或重复预留；失败或结果不确定的付费调用仍保留原预留，重新尝试也必须从剩余额度预留。此账本不能证明上游恰好执行一次，也不把估算当作账单。
 
 | 状态 | 如何理解 |
 | --- | --- |
@@ -164,8 +183,9 @@ soota jobs resume JOB_ID --max-items 40 --max-pages 6 --max-cost 0.10 --json
 | `waiting_analysis` | 原文已准备，仍需 Agent 提交用户要求的分析产物 |
 | `partial` | 部分目标已保存，还有缺失产物或未完成的枚举 |
 | `blocked` / `failed` | 查看条目的 `steps`、`errors` 和任务警告，处理对应原因后恢复 |
+| `paused` | 中断已收尾并保存；使用同一任务编号恢复 |
 
-JSON 中 `items` 分别记录每项的 `bundle`、`steps`、`errors`，`items[].data.missing_outputs` 列出缺失目标，`items[].data.artifacts` 列出产物。整个任务只返回一份状态文档，不将某一步成功当作全部目标完成。
+JSON 中 `workers` 表示本次并发设置，`items` 分别记录每项的 `bundle`、`steps`、`errors`，`items[].data.missing_outputs` 列出缺失目标，`items[].data.artifacts` 列出产物。整个任务只返回一份状态文档，不将某一步成功当作全部目标完成。Ctrl-C 通过中断退出，`paused` 从保存的任务记录或 `jobs list` 查看。
 
 ## 分析接续
 

@@ -1,3 +1,11 @@
+"""Task entry and offline capability discovery.
+
+[INPUT]: CLI options, settings, input parsing and provider selection.
+[OUTPUT]: ingest/capabilities; validated persistent task settings or legacy ingest.
+[POS]: tasks entry; runner executes explicit goals and bounded batches.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import hashlib
@@ -19,7 +27,9 @@ from soota.tasks.models import InputSpec, TaskSpec
 from soota.tasks.runner import execute
 
 
-def execution_context(settings: SootaSettings, provider: str, inputs: list[InputSpec] | None = None) -> str:
+def execution_context(
+    settings: SootaSettings, provider: str, inputs: list[InputSpec] | None = None, *, scope: str | None = None
+) -> str:
     from soota.providers.opencli_context import profile_config
 
     local_only = inputs is not None and all(item.kind in {"file", "bundle"} for item in inputs)
@@ -32,7 +42,7 @@ def execution_context(settings: SootaSettings, provider: str, inputs: list[Input
     actual = (
         "local-input"
         if local_only
-        else actual or ("unbound-" + uuid4().hex if provider in {"auto", "opencli", "opencli-mcp"} else None)
+        else actual or ("unbound-" + (scope or uuid4().hex) if provider in {"auto", "opencli", "opencli-mcp"} else None)
     )
     identity = [
         provider,
@@ -63,6 +73,7 @@ def ingest(
     max_cost: float | None = None,
     max_items: int | None = None,
     max_pages: int = 10,
+    workers: int = 1,
     max_bytes: int = 2 * 1024**3,
     min_height: int | None = None,
     allow_silent: bool = False,
@@ -78,6 +89,8 @@ def ingest(
     exclude_promotions: bool | None = None,
     exclude_ranges: list[str] | None = None,
 ) -> CommandResult:
+    if type(workers) is not int or not 1 <= workers <= 8:
+        raise InputError("workers 必须为 1–8 的整数。")
     # Keep the established single-video default command contract. Explicit
     # goals and new input types use the shared artifact task executor.
     legacy = (
@@ -90,6 +103,7 @@ def ingest(
         and vault is None
         and max_items in {None, 1}
         and input_format is None
+        and workers == 1
     )
     if legacy and url:
         try:
@@ -147,6 +161,7 @@ def ingest(
             input_format=input_format,
             max_items=max_items if max_items is not None else 100,
             max_pages=max_pages,
+            workers=workers,
             max_cost=max_cost,
             max_bytes=max_bytes,
             min_height=min_height,
@@ -160,10 +175,10 @@ def ingest(
             destination=destination.expanduser().resolve() if destination else None,
             vault=vault.expanduser().resolve() if vault else None,
             subdir=subdir,
-            execution_context=execution_context(settings, chosen, inputs),
         )
     except ValidationError as exc:
         raise InputError("任务参数无效；请检查目标、格式、范围和输出位置。") from exc
+    spec.execution_context = execution_context(settings, chosen, inputs, scope=spec.execution_scope)
     settings = settings.model_copy(update={"default_language": spec.language})
     return execute(settings, spec, dry_run=dry_run)
 

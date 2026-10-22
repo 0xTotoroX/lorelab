@@ -1,3 +1,11 @@
+"""Execute and resume unified artifact tasks.
+
+[INPUT]: TaskSpec, enumeration, bounded scheduler, acquisition and artifact services.
+[OUTPUT]: Per-item artifacts/checkpoints and one ordered CommandResult.
+[POS]: tasks orchestration; owns budget scope, job lock and interruption recovery.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import json
@@ -8,6 +16,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
+from pydantic import ValidationError
+
 from soota.artifacts.bundle import (
     file_sha256,
     load_bundle,
@@ -16,6 +26,7 @@ from soota.artifacts.bundle import (
     write_artifact,
     write_bundle,
 )
+from soota.artifacts.export import _target as export_target
 from soota.artifacts.export import export_bundle
 from soota.artifacts.models import BundleV2
 from soota.config import SootaSettings
@@ -32,6 +43,7 @@ from soota.tasks.enumeration import expand_inputs
 from soota.tasks.inputs import file_fingerprint, source_for
 from soota.tasks.models import InputSpec, StepState, TaskItem, TaskJob, TaskSpec
 from soota.tasks.outputs import _apply_analysis, _export_subtitles, _handoff, _images
+from soota.tasks.scheduler import run_items
 from soota.tasks.state import (
     _bundle_lock,
     create_job,
@@ -60,11 +72,11 @@ def _error(exc: SootaError | OSError) -> dict[str, Any]:
 def _step(settings: SootaSettings, job: TaskJob, row: TaskItem, name: str, action: Callable[[], Any]) -> Any:
     row.steps[name] = StepState(status="running")
     row.status = "running"
-    save_job(settings, job)
+    save_job(settings, job, item=row)
     try:
         result = action()
         row.steps[name].status = "completed"
-        save_job(settings, job)
+        save_job(settings, job, item=row)
         return result
     except (SootaError, OSError) as exc:
         error = _error(exc)
@@ -75,7 +87,7 @@ def _step(settings: SootaSettings, job: TaskJob, row: TaskItem, name: str, actio
             error=error,
         )
         row.errors.append({"step": name, **error})
-        save_job(settings, job)
+        save_job(settings, job, item=row)
         return None
 
 
@@ -480,12 +492,24 @@ def _run_item_locked(
     bundle.metadata["task"] = {"task_id": job.id, "item_id": row.item_id}
     save_bundle(folder, bundle)
     if spec.destination is not None or spec.vault is not None:
+
+        def export() -> Path:
+            # Distinct input bundles can share a source/export destination.
+            # Keep export's collision preflight and writes together.
+            with job._export_lock:
+                target = export_target(folder, spec.destination, spec.vault, spec.subdir)
+                if target.resolve() == folder.resolve():
+                    raise InputError("导出目标与原内容包相同。")
+                # A destination may also be another running task's input bundle.
+                with _bundle_lock(target):
+                    return export_bundle(folder, destination=spec.destination, vault=spec.vault, subdir=spec.subdir)
+
         result = _step(
             settings,
             job,
             row,
             "export",
-            lambda: export_bundle(folder, destination=spec.destination, vault=spec.vault, subdir=spec.subdir),
+            export,
         )
         if result is not None:
             row.data["export"] = str(result)
@@ -518,7 +542,30 @@ def _run_item_locked(
             if any(step.status == "blocked" for step in row.steps.values())
             else "failed"
         )
-    save_job(settings, job)
+    save_job(settings, job, item=row)
+
+
+def _execute_item(settings: SootaSettings, spec: TaskSpec, job: TaskJob, row: TaskItem, seed: InputSpec) -> None:
+    row.status, row.errors = "running", []
+    save_job(settings, job, item=row)
+    try:
+        if seed.kind == "file" and file_fingerprint(Path(seed.value)) != row.input_fingerprint:
+            raise InputError("本地输入自任务创建后已变化，请创建新任务或明确更新输入。")
+        _run_item(settings, spec, job, row, seed)
+    except Exception as exc:
+        # Provider/format bugs are isolated to this item too. Do not expose raw
+        # exception text, which may contain credentials or signed URLs.
+        error = (
+            _error(exc)
+            if isinstance(exc, (SootaError, OSError))
+            else SootaError("条目处理发生未预期错误。", details={"exception_type": type(exc).__name__}).to_dict()
+        )
+        row.status = "blocked" if isinstance(exc, (InputError, AuthBudgetError)) else "failed"
+        row.errors.append(error)
+        for step in row.steps.values():
+            if step.status == "running":
+                step.status, step.error = row.status, error
+        save_job(settings, job, item=row)
 
 
 def execute(
@@ -542,28 +589,37 @@ def execute(
     if not spec.execution_context:
         from soota.tasks.entry import execution_context
 
-        spec = spec.model_copy(update={"execution_context": execution_context(settings, spec.provider, spec.inputs)})
+        spec = spec.model_copy(
+            update={
+                "execution_context": execution_context(settings, spec.provider, spec.inputs, scope=spec.execution_scope)
+            }
+        )
     job = job or create_job(settings, spec)
     budget = TaskBudget(task_folder(settings, job.id), spec.max_cost)
     guard = nullcontext() if _locked else JobStore(settings.jobs_dir).lock(job.id)
     with guard, task_budget_scope(budget):
         try:
+            job.status = "running"
+            save_job(settings, job)
             if not job.expanded:
                 set_inputs(settings, job, expand_inputs(settings, spec, job))
             if analysis is not None:
                 _apply_analysis(settings, job, analysis, force=spec.force)
             inputs = resolved_inputs(settings, job)
-            for row in job.items[: spec.max_items]:
-                seed = inputs[row.input_index]
-                if seed.kind == "file" and file_fingerprint(Path(seed.value)) != row.input_fingerprint:
-                    raise InputError("本地输入自任务创建后已变化，请创建新任务或明确更新输入。")
-                try:
-                    _run_item(settings, spec, job, row, seed)
-                except (SootaError, OSError) as exc:
-                    row.status = "blocked" if isinstance(exc, (InputError, AuthBudgetError)) else "failed"
-                    row.errors.append(_error(exc))
-                    save_job(settings, job)
+            run_items(
+                job.items[: spec.max_items],
+                workers=spec.workers,
+                folder=lambda row: _folder(spec, inputs[row.input_index]),
+                action=lambda row: _execute_item(settings, spec, job, row, inputs[row.input_index]),
+            )
         except KeyboardInterrupt:
+            # The scheduler has drained workers before this checkpoint/lock exit.
+            for row in job.items:
+                if row.status == "running":
+                    row.status = "pending"
+                for step in row.steps.values():
+                    if step.status == "running":
+                        step.status = "pending"
             job.status = "paused"
             save_job(settings, job)
             raise
@@ -596,6 +652,7 @@ def execute(
     data: dict[str, Any] = {
         "job_id": job.id,
         "job_status": job.status,
+        "workers": spec.workers,
         "item_count": len(selected),
         "discovered": len(job.items),
         "limit_reached": len(job.items) > spec.max_items
@@ -630,15 +687,20 @@ def resume(
     max_items: int | None = None,
     max_pages: int | None = None,
     max_cost: float | None = None,
+    workers: int | None = None,
     analysis: Path | None = None,
     force: bool = False,
 ) -> CommandResult:
+    if workers is not None and (type(workers) is not int or not 1 <= workers <= 8):
+        raise InputError("workers 必须为 1–8 的整数。")
     record = JobStore(settings.jobs_dir).get(job_id)
     if record.get("kind") != "content-task":
         from soota.catalog import resume_catalog
 
         if analysis is not None:
             raise InputError("旧目录任务不接受分析提交。")
+        if workers is not None:
+            raise InputError("--workers 仅适用于统一内容任务；目录枚举仍按顺序执行。")
         return resume_catalog(settings, job_id, max_items=max_items, max_pages=max_pages, max_cost=max_cost)
     with JobStore(settings.jobs_dir).lock(job_id):
         record = JobStore(settings.jobs_dir).get(job_id)
@@ -646,7 +708,12 @@ def resume(
         spec = load_spec(settings, job_id)
         updates = {
             key: value
-            for key, value in {"max_items": max_items, "max_pages": max_pages, "max_cost": max_cost}.items()
+            for key, value in {
+                "max_items": max_items,
+                "max_pages": max_pages,
+                "max_cost": max_cost,
+                "workers": workers,
+            }.items()
             if value is not None
         }
         incomplete_enumeration = any(
@@ -654,20 +721,23 @@ def resume(
             for info in job.enumeration.values()
             if isinstance(info, dict)
         )
-        if job.enumeration and (updates or incomplete_enumeration) and analysis is None:
+        if job.enumeration and (updates.keys() - {"workers"} or incomplete_enumeration) and analysis is None:
             job.expanded = False
         from soota.tasks.entry import execution_context
 
-        spec = TaskSpec.model_validate(
-            {
-                **spec.model_dump(),
-                **updates,
-                "force": force,
-                "execution_context": spec.execution_context
-                if analysis is not None
-                else execution_context(settings, spec.provider, spec.inputs),
-            }
-        )
+        try:
+            spec = TaskSpec.model_validate(
+                {
+                    **spec.model_dump(),
+                    **updates,
+                    "force": force,
+                    "execution_context": spec.execution_context
+                    if analysis is not None
+                    else execution_context(settings, spec.provider, spec.inputs, scope=spec.execution_scope),
+                }
+            )
+        except ValidationError as exc:
+            raise InputError("续跑参数无效；请检查范围和费用上限。") from exc
         save_spec(settings, job_id, spec)
         settings = settings.model_copy(update={"default_language": spec.language})
         return execute(settings, spec, job=job, analysis=analysis, _locked=True)

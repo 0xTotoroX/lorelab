@@ -1,6 +1,6 @@
 ---
 name: soota
-description: Use the local Soota CLI to collect content, download media and subtitles, transcribe files, or export bundles. Also use when the user asks to save pasted text as concise, classified knowledge in a chosen collection. Save unprocessed context by default; analysis and writing require a request. Ordinary explanations of supplied text do not require collection.
+description: Use the local Soota CLI to collect content, download media and subtitles, transcribe files, or export bundles. Also use for requested knowledge extraction from pasted text or Cubox batches, with optional Mubu outline delivery. Save unprocessed context by default; analysis and destination writes require a request. Ordinary explanations do not require collection.
 ---
 
 # Soota
@@ -11,9 +11,13 @@ Use an installed `soota` command. For a source checkout, resolve this SKILL.md s
 
 Use `ingest INPUT --want ... --json` for explicit artifacts and combinations: `video`, `audio`, `transcript`, `context`, `markdown`, `images`, `data`, `analysis`, `note`, `outline`, `article`. `--optional` declares outputs whose failure does not block the required ones. Inputs can be URLs, local files, a bundle directory or manifest, and `--inputs-file` lists. For batch processing, existing bundles, explicit native operations, analysis handoffs or exports, read [task workflow](references/tasks.md).
 
+Unified tasks accept `--workers 1..8` (default 1). Start with the requested bound, or a small bound such as 2 for an authorized batch; enumeration and result ordering remain stable. Resume retains the saved bound unless overridden. All workers share one durable budget; increasing concurrency does not increase the cap. Ctrl-C drains started workers before releasing the job lock, so shutdown can take until provider timeouts.
+
 Default collection ends at unprocessed context. Saving an existing article uses `context` or `markdown`; `article` requests a separate reading article written by the Agent. Do not introduce an article step before a summary or analysis. A media-only request does not authorize transcription or summarization; do not load the full body for a download-only request.
 
 For “save this pasted text to my knowledge base”, read [concise knowledge workflow](references/knowledge.md). Preserve the paste as a local text file, use `--provider local --want context,note`, and let the Agent split, deduplicate and classify the requested knowledge using the destination's current rules and prompt. A paste containing URLs is still supplied text; do not turn it into link collection. A summary-only request does not authorize knowledge-base writes.
+
+For a requested Cubox → knowledge/Mubu batch, use the same [knowledge workflow](references/knowledge.md#cubox-batches-and-source-snapshots). Reuse Cubox CLI `card batch`, preserve actual source text and provenance locally, then ingest the source-file list with `--want context,note,outline`. `body_available` is not proof of full original content; supplement missing material through Soota's existing acquisition paths. Topic Agents prepare isolated drafts; one writer merges knowledge and serializes Mubu CLI `node-import` plus readback. Do not implement either service's private API or embed personal paths, deletion rules or prompts.
 
 The existing single-video command without `--want` remains available: `ingest URL --transcript captions-only|auto|asr|none --json`. Use `inspect URL --json` for metadata only. Use `doctor --json` when required runtimes are unknown.
 

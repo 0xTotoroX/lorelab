@@ -61,12 +61,13 @@ uv run soota catalog "频道或 UP 主 URL" --dry-run --json
 uv run soota ingest "URL" --transcript auto --max-cost 0.05 --output PATH --json
 uv run soota ingest "视频 URL" --want video,audio,transcript --max-cost 0 --json
 uv run soota ingest "/path/to/captions.vtt" --want context,transcript --subtitle-format srt,json --json
-uv run soota ingest --inputs-file links.txt --want context --max-items 20 --max-cost 0 --json
+uv run soota ingest --inputs-file links.txt --want context --workers 2 --max-items 20 --max-cost 0 --json
 uv run soota ingest "内容 URL" --want note,outline --max-cost 0 --json
 uv run soota jobs resume JOB_ID --analysis submission.json --json
 uv run soota render --bundle PATH/manifest.json --analysis analysis.json
 uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
+uv run soota jobs resume JOB_ID --workers 2 --json
 ```
 
 字幕模式：`auto`、`captions-only`、`asr`、`none`。视频字幕默认免费来源优先，再按整条请求链报价选择 TikHub 或已启用的 Monid。`policy set --mode auto` 只改变付费来源的授权方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
@@ -78,6 +79,10 @@ B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优
 Soota Skill 也支持将粘贴文字精炼归档到用户选择的知识库：Agent 保存原文，拆分主题、查重并按现有分类写入，CLI 保存来源包并校验笔记提交。使用方式和边界见 [粘贴文字与知识归纳](docs/tasks.md#粘贴文字与知识归纳)。
 
 `--json` 时 stdout 只有一个 JSON 文档；日志和警告在 stderr。统一任务的 `items` 包含逐项产物、错误和缺失目标。`completed` 表示本次范围内的必需产物完成；集合历史完整性另看 `enumeration`。
+
+统一任务支持 `--workers 1..8`，默认 1。枚举和结果列表保持输入顺序，独立条目并行处理，同一内容包目录按顺序写入；条目失败不阻断其他条目。并发设置随任务保存，resume 可以覆盖；所有 worker 共享全批费用预留，恢复不清零。Ctrl-C 会等待在途条目收尾再保存暂停状态，可能需等 Provider 超时。
+
+需要从 Cubox 收藏整理知识时，[Soota Skill](skills/soota/references/knowledge.md) 可接续 Cubox CLI 批量读取、本地原样 source 快照、并行 context/note/outline 任务、Agent 按主题提炼与单写者落地，以及按请求通过 Mubu CLI 导入大纲并回读。正文可用不等于原文完整；缺失内容使用已有原站或字幕获取能力补取，未取得的部分继续报告缺失。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
 
