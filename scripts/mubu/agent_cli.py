@@ -1,4 +1,10 @@
-"""Agent 调用契约：无交互、JSON 结果、稳定错误码；保留原 CLI 默认行为。"""
+"""Agent 调用契约：无交互、JSON 结果、稳定错误码；保留原 CLI 默认行为。
+
+[INPUT]: CLI 状态与请求错误。
+[OUTPUT]: 结构化结果、错误码和写入恢复指引。
+[POS]: 命令行 Agent 契约；node-import 纳入写命令集合。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
 
 import argparse
 import json
@@ -8,7 +14,7 @@ from mubu import __version__
 from mubu.config import DesktopDataAccessError, MubuError
 
 WRITE_COMMANDS = {'mkdir', 'create', 'save', 'delete', 'restore', 'purge', 'move', 'rename',
-                  'node-update', 'node-create', 'node-delete', 'node-move', 'node-link',
+                  'node-update', 'node-create', 'node-delete', 'node-move', 'node-link', 'node-import',
                   'image-upload', 'attachment-upload'}
 
 

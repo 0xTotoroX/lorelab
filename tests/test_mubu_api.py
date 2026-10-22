@@ -68,9 +68,10 @@ def _node_eq(a: dict, b: dict) -> bool:
 
 @pytest.fixture
 def isolated_client(tmp_path):
-    """构造一个 token 文件被隔离、且持有有效 token 的客户端。"""
+    """隔离凭据和本地回收站，测试不能读取用户的真实标记。"""
     tok = tmp_path / "tok.json"
-    with mock.patch.object(mubu.client, "TOKEN_FILE", tok):
+    with mock.patch.object(mubu.client, "TOKEN_FILE", tok), \
+            mock.patch.object(mubu.client, "TRASH_FILE", tmp_path / "trash.json"):
         c = MubuClient(phone="p", password="w")
         c.token = "valid-token"
         c.expires_at = time.time() + 3600  # 远未过期，ensure_valid_token 不应重登

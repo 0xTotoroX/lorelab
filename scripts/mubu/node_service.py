@@ -1,4 +1,10 @@
-"""节点编辑闭环：快照、预览、单次提交、读回核验及本地操作记录。"""
+"""节点编辑闭环：快照、预览、单次提交、读回核验及本地操作记录。
+
+[INPUT]: 现有请求客户端与 nodes 修改计划。
+[OUTPUT]: 节点或整组子树的预览、核验结果和私有操作记录。
+[POS]: 节点写入唯一闭环；不自动重放不确定请求。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
 
 import json
 import os
@@ -65,6 +71,12 @@ class NodeEditor:
                    "version": before["version"], "node_id": plan["node_id"],
                    "action": action, "event": plan["event"],
                    "message": "仅预览；使用 --execute 提交，--expect-version 可绑定本次版本"}
+        import_info = {}
+        if action == "import":
+            roots = plan["event"]["created"]
+            import_info = {"root_ids": [item["node"]["id"] for item in roots],
+                           "node_count": len(list_nodes({"nodes": [item["node"] for item in roots]}))}
+            preview.update(import_info)
         if not execute:
             return preview
         if equivalent(before["definition"], plan["expected"], plan["changed_ids"]):
@@ -96,7 +108,8 @@ class NodeEditor:
             error = {"http_status": exc.status_code,
                      "api_code": exc.body.get("code") if isinstance(exc.body, dict) else None}
         result = {"doc_id": doc_id, "node_id": plan["node_id"], "action": action,
-                  "operation_id": operation_id, "record": str(path), "executed": True}
+                  "operation_id": operation_id, "record": str(path), "executed": True,
+                  **import_info}
         try:
             after = self.snapshot(doc_id)
             record["after"] = after

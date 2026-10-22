@@ -16,6 +16,105 @@ from mubu.config import BASE_URL, MubuError
 from mubu.desktop import DesktopClient, data_root, read_session
 from mubu.node_service import NodeEditor, NodeWriteError
 from mubu.nodes import equivalent, list_nodes, make_plan
+from mubu.outline import read_outline, validate_outline
+
+
+@pytest.fixture
+def outline():
+    return {"nodes": [{"text": "主题 & <正文>", "note": "第一行\n第二行", "children": [
+        {"text": "步骤一", "children": [{"text": "注意事项"}]}]}, {"text": "另一个主题"}]}
+
+
+@pytest.mark.parametrize("parent", [None, "parent", "child"])
+def test_import_tree_preserves_existing_content_and_order(snapshot, outline, parent):
+    original = copy.deepcopy(snapshot)
+    plan = make_plan(snapshot, "import", parent, outline=outline, index=0)
+    assert snapshot == original
+    created = plan["event"]["created"]
+    assert len(created) == 2
+    assert [item["parentId"] for item in created] == [parent, parent]
+    assert [item["index"] for item in created] == [0, 1]
+    imported = list_nodes({"nodes": [item["node"] for item in created]})
+    assert [item["text"] for item in imported] == ["主题 & <正文>", "步骤一", "注意事项", "另一个主题"]
+    assert imported[0]["note"] == "第一行\n第二行"
+    assert len({item["node_id"] for item in imported}) == 4
+    restored = copy.deepcopy(plan["expected"])
+    if parent is None:
+        del restored["nodes"][:2]
+    elif parent == "parent":
+        del restored["nodes"][0]["children"][:2]
+    else:
+        del restored["nodes"][0]["children"][0]["children"][:2]
+    assert restored == snapshot["definition"]
+
+
+@pytest.mark.parametrize("value", [None, [], {"nodes": []}, {"nodes": [{"text": ""}]},
+    {"nodes": [{"text": "a", "id": "injected"}]}, {"nodes": [{"text": "a", "children": {}}]},
+    {"nodes": [{"text": "a", "note": 1}]}, {"nodes": [{"text": "a"}] * 501}])
+def test_import_rejects_invalid_input(value):
+    with pytest.raises(ValueError):
+        validate_outline(value)
+
+
+@pytest.mark.parametrize("action,kwargs", [("import", {"outline": {"nodes": [{"text": "first"}]}}),
+                                        ("create", {"text": "first"})])
+def test_empty_cloud_document_accepts_first_root(action, kwargs):
+    plan = make_plan({"definition": {}, "version": 0}, action, None, **kwargs)
+    assert list_nodes(plan["expected"])[0]["text"] == "first"
+
+
+def test_import_bounds_file_size_and_depth(tmp_path):
+    path = tmp_path / "outline.json"
+    path.write_bytes(b" " * (512 * 1024 + 1))
+    with pytest.raises(ValueError):
+        read_outline(path)
+    root = {"text": "root"}
+    node = root
+    for _ in range(32):
+        child = {"text": "child"}
+        node["children"] = [child]
+        node = child
+    with pytest.raises(ValueError):
+        validate_outline({"nodes": [root]})
+
+
+@pytest.mark.parametrize("partial,transport_error", [(False, False), (True, False), (False, True)])
+def test_import_submits_once_and_requires_all_descendants(snapshot, outline, tmp_path, partial, transport_error):
+    class Client:
+        writes = 0
+        state = copy.deepcopy(snapshot)
+
+        def _request(self, method, endpoint, **kwargs):
+            if endpoint != "/colla/events":
+                return {"definition": json.dumps(self.state["definition"]),
+                        "baseVersion": self.state["version"], "name": self.state["name"]}
+            self.writes += 1
+            assert kwargs["max_retries"] == kwargs["_network_retries"] == 0
+            events = kwargs["json"]["events"]
+            assert len(events) == 1
+            for entry in events[0]["created"]:
+                self.state["definition"]["nodes"].insert(entry["index"], entry["node"])
+            if partial:
+                self.state["definition"]["nodes"][0]["children"] = []
+            self.state["version"] += 1
+            if transport_error:
+                raise MubuError("timeout")
+            return {}
+
+    client = Client()
+    editor = NodeEditor(client, tmp_path)
+    preview = editor.mutate("doc", "import", None, outline=outline, index=0)
+    assert preview["node_count"] == 4 and client.writes == 0
+    if partial:
+        with pytest.raises(NodeWriteError) as exc:
+            editor.mutate("doc", "import", None, outline=outline, index=0, execute=True, expect_version=8)
+        assert exc.value.result["status"] == "uncertain"
+    else:
+        result = editor.mutate("doc", "import", None, outline=outline, index=0, execute=True, expect_version=8)
+        assert result["status"] == "verified" and result["node_count"] == 4
+        with pytest.raises(NodeWriteError):
+            editor.mutate("doc", "import", None, outline=outline, execute=True, expect_version=8)
+    assert client.writes == 1
 
 
 @pytest.fixture

@@ -1,4 +1,10 @@
-"""节点定位与单事件计划；保留原始 definition，绝不经 Markdown 整篇重建。"""
+"""节点定位与单事件计划；保留原始 definition，绝不经 Markdown 整篇重建。
+
+[INPUT]: 快照、目标 ID、纯文本或已校验大纲。
+[OUTPUT]: 单事件修改计划、预期文档、整篇等价比较。
+[POS]: 节点操作的纯计划层；大纲转换调用 outline。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
 
 import copy
 import html
@@ -7,6 +13,7 @@ import time
 from html.parser import HTMLParser
 
 from mubu.config import MubuError
+from mubu.outline import build_outline
 from mubu.rich_text import append_html, link_html, replace_text
 
 
@@ -111,10 +118,11 @@ def _position(index, size):
 
 
 def make_plan(snapshot, action, node_id, text=None, field="text", note=None, index=None,
-              parent_id=None, replace=None, append=False, url=None, label=None, image=None):
+              parent_id=None, replace=None, append=False, url=None, label=None, image=None,
+              outline=None):
     definition = snapshot["definition"]
     entries = indexed(definition)
-    if node_id not in entries and not (action == "create" and node_id is None):
+    if node_id not in entries and not (action in {"create", "import"} and node_id is None):
         raise MubuError("目标节点 ID 不存在；未进行写入")
     node, path, old_parent = entries[node_id] if node_id is not None else ({}, (), None)
     expected = copy.deepcopy(definition)
@@ -156,7 +164,7 @@ def make_plan(snapshot, action, node_id, text=None, field="text", note=None, ind
     elif action == "create":
         if not isinstance(text, str):
             raise MubuError("新节点内容必须为字符串")
-        children = target.setdefault("children", []) if target is not None else expected["nodes"]
+        children = target.setdefault("children", []) if target is not None else expected.setdefault("nodes", [])
         index = _position(index, len(children))
         result_id = secrets.token_hex(5)
         if result_id in entries:
@@ -170,6 +178,18 @@ def make_plan(snapshot, action, node_id, text=None, field="text", note=None, ind
         new_path = api_path(path) + ["children", index] if path else ["nodes", index]
         event = {"name": "create", "created": [{"index": index, "parentId": node_id,
                  "node": copy.deepcopy(child), "path": new_path}]}
+    elif action == "import":
+        children = target.setdefault("children", []) if target is not None else expected.setdefault("nodes", [])
+        index = _position(index, len(children))
+        imported, new_ids = build_outline(outline, entries, now, as_html)
+        children[index:index] = imported
+        changed_ids.update(new_ids)
+        event = {"name": "create", "created": [
+            {"index": index + offset, "parentId": node_id, "node": copy.deepcopy(child),
+             "path": (api_path(path) + ["children", index + offset] if path else
+                      ["nodes", index + offset])}
+            for offset, child in enumerate(imported)]}
+        result_id = imported[0]["id"]
     elif action == "delete":
         _siblings(expected, path).pop(path[-1])
         event = {"name": "delete", "deleted": [{"parentId": old_parent, "index": path[-1],

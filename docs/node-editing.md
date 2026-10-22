@@ -67,7 +67,27 @@ python3 -m venv .venv
 
 正文/描述按纯文本替换，转义 `<>&` 和换行。兄弟节点、子节点、另一字段及未知属性不进入更新 payload，读回还会检查整篇 definition。服务端省略叶子空 children/默认 taskStatus，以及受影响节点 modified 的变化，被视为等价。旧发布版仅做图片/未知字段离线保留测试。1.4.0 已在含图片、加粗正文、链接及文档附件的合成文档中验收局部替换与图片追加；不能推广为所有格式的无损编辑。
 
-没有隐式全树覆盖、批量编辑、自动撤销、任意富文本格式编辑或 MCP。
+没有隐式全树覆盖、批量修改既有节点、自动撤销、任意富文本格式编辑或 MCP。批量新增分支见下文。
+
+## 批量追加大纲分支
+
+`node-import` 读取 JSON 大纲，将多个根及其完整子树作为一个 `create` 事件提交。输入只含纯文本 `text`、可选 `note` 和 `children`，不接受已有节点 ID、HTML、图片或其他字段。示例见 [outline.json](../examples/outline.json)。
+
+```sh
+# 在目标父节点下追加，默认预览；--root 表示文档顶层
+.venv/bin/python scripts/mubu_api.py --agent --auth desktop node-import DOC_ID \
+  --node-id PARENT_ID --file outline.json
+.venv/bin/python scripts/mubu_api.py --agent --auth desktop node-import DOC_ID \
+  --node-id PARENT_ID --file outline.json --expect-version VERSION --execute
+```
+
+`--index` 从 0 开始，省略为末尾。预览返回 `node_count`、`root_ids` 和完整事件；执行返回实际新建 ID。预览与执行会重新生成 ID，调用方应使用执行结果。两次使用同一份已审核输入文件；版本改变时重新读取和预览。
+
+客户端每批限制 500 个节点、32 层、512 KiB 输入；这些不是服务端容量保证。超过限制先按分支拆批，每批成功回读后才处理下一批。同一文档仍只允许一个写入者。
+
+执行沿用原有日志、二次快照检查、单次发送和整篇回读；`verified` 要求全部新增后代、旧节点和文档字段符合预期，且版本恰好增加一次。超时也会尝试只读核验；`uncertain` 时用 `operation-status OPERATION_ID --verify` 排查，不能直接重发。它是追加命令，同一份输入再次绑定新版本执行会新增重复节点。
+
+实机验证覆盖空文档的两个根与三层树、在已有父节点指定位置批量插入、保留兄弟节点、过期版本拒绝。每批一条写请求、一次版本增量；最大容量和各客户端视觉呈现未据此声称已验收。
 
 ## 实现与证据
 
