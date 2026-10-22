@@ -5,7 +5,7 @@ import json
 import sys
 
 from mubu import __version__
-from mubu.config import MubuError
+from mubu.config import DesktopDataAccessError, MubuError
 
 WRITE_COMMANDS = {'mkdir', 'create', 'save', 'delete', 'restore', 'purge', 'move', 'rename',
                   'node-update', 'node-create', 'node-delete', 'node-move', 'node-link',
@@ -50,6 +50,8 @@ class Parser(argparse.ArgumentParser):
 def error_info(error, command):
     if isinstance(error, AgentError):
         return error.code, str(error), error.next_action
+    if isinstance(error, DesktopDataAccessError):
+        return 'DESKTOP_ACCESS_DENIED', str(error), 'grant_desktop_data_access'
     body = error.body if isinstance(error, MubuError) and isinstance(error.body, dict) else {}
     status = getattr(error, 'status_code', None)
     message = str(error).lower()

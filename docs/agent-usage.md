@@ -46,8 +46,9 @@ stdout 始终是一份 JSON；日志在 stderr，参数错误和 `--help` 也输
 | `2` | 参数错误或版本冲突 | 修正参数，或重新读取并预览 |
 | `3` | 节点/媒体写入被拒绝、结果不确定，或复核证据不足 | 查操作记录与云端状态，不直接重试 |
 
-常用错误码：`AUTH_REQUIRED`、`INPUT_REQUIRED`、`VERSION_REQUIRED`、`INVALID_ARGUMENTS`、`VERSION_CONFLICT`、`WRITE_UNCONFIRMED`、`WRITE_UNCERTAIN`、`WRITE_REJECTED`、`PARTIAL_FAILURE`。
+常用错误码：`AUTH_REQUIRED`、`DESKTOP_ACCESS_DENIED`、`INPUT_REQUIRED`、`VERSION_REQUIRED`、`INVALID_ARGUMENTS`、`VERSION_CONFLICT`、`WRITE_UNCONFIRMED`、`WRITE_UNCERTAIN`、`WRITE_REJECTED`、`PARTIAL_FAILURE`。
 
+- `DESKTOP_ACCESS_DENIED` 表示系统拒绝读取桌面数据，尚未发送网络请求。检查运行 CLI 的宿主应用对幕布数据目录的访问权限；macOS 在“系统设置 → 隐私与安全性”中检查。不要误导用户重新登录，也不要改用其他账号或绕过系统访问控制。权限恢复后再运行 `auth-status`。
 - `login` 缺凭据立即失败，不调用 `input/getpass`。桌面会话失效仍需在幕布端登录；不接管验证码等登录交互。
 - `save` 必须显式提供 `--file`、`--md` 或 `--content`，不等待标准输入。
 - `search` 保留 `truncated`、`limit`、`max_depth`、`errors` 和失败对象；`truncated: true` 不能解释成完整搜索。

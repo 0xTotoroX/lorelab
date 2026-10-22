@@ -14,6 +14,7 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 - 在用户已授权的范围内完成读取、预览与执行，不为 `--execute` 再次索要相同授权。
 - 节点/媒体执行必须带预览的 `--expect-version`；同一文档串行操作。
 - `AUTH_REQUIRED` 时停止写入并报告需要登录；不等待交互输入，不绕过登录。
+- `DESKTOP_ACCESS_DENIED` 是操作系统拒绝读取桌面数据，尚未发出网络请求。先处理宿主应用的文件访问权限，再检查 `auth-status`；不要把它当成登录过期或转去操作界面。
 - `uncertain` 时先用 `operations` 找记录，再用 `operation-status ID --verify` 只读复核；不直接重传，也不以未观察到变化认定可以重试。
 - `search` 的截断及 `export-tree` 的部分失败必须显式报告；不能把部分结果当成整个库。
 - 下方继承的命令与配置说明仍适用，但 Agent 模式不进行错误后的自动重登/重发。

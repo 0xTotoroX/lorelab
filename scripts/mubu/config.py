@@ -162,6 +162,17 @@ class MubuError(Exception):
         self.body = body
 
 
+class DesktopDataAccessError(MubuError):
+    """桌面会话读取在网络请求前被系统权限阻止。"""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "操作系统拒绝访问幕布桌面数据，尚未发送网络请求。"
+            "请允许运行 CLI 的宿主应用访问幕布数据目录后重试；"
+            "macOS 请检查系统设置中的隐私与安全性。重新登录不能修复此权限问题。"
+        )
+
+
 def _safe_local_path(path: str) -> Path:
     """校验并解析本地文件路径，仅允许当前工作目录或其子目录（安全官 #3）。
 

@@ -3,19 +3,45 @@
 import json
 import os
 import platform
+import stat
 from pathlib import Path
 from typing import Optional
 
 import requests
 
 from mubu.client import MubuClient
-from mubu.config import MubuError
+from mubu.config import DesktopDataAccessError, MubuError
+
+
+def _has_storage(root: Path) -> bool:
+    # is_dir/glob 在部分 Python 版本会吞掉访问错误，不能据此判断未登录。
+    try:
+        return stat.S_ISDIR((root / ".storage").stat().st_mode)
+    except FileNotFoundError:
+        return False
+    except PermissionError:
+        raise DesktopDataAccessError() from None
+
+
+def _session_files(root: Path):
+    """显式遍历以保留系统访问错误；不读取其他文档集合。"""
+    try:
+        for collection in (root / ".storage").iterdir():
+            if not collection.name.startswith("mubu_desktop_app-rxdb-1-users"):
+                continue
+            if not stat.S_ISDIR(collection.stat().st_mode):
+                continue
+            for path in collection.iterdir():
+                if path.suffix in {".log", ".ldb"} and stat.S_ISREG(path.stat().st_mode):
+                    yield path
+    except PermissionError:
+        raise DesktopDataAccessError() from None
 
 
 def data_root(override: Optional[str] = None) -> Path:
     if override or os.getenv("MUBU_DATA_ROOT"):
         root = Path(override or os.environ["MUBU_DATA_ROOT"]).expanduser()
-        if not (root / ".storage").is_dir():
+        if not _has_storage(root):
             raise MubuError("指定的幕布数据目录中没有 .storage")
         return root
     home = Path.home()
@@ -27,7 +53,7 @@ def data_root(override: Optional[str] = None) -> Path:
         home / ".config/mubu/mubu_data",
     ]
     for root in candidates:
-        if (root / ".storage").is_dir():
+        if _has_storage(root):
             return root
     raise MubuError("未找到幕布桌面数据；请先登录桌面端，或使用 --data-root 指定目录")
 
@@ -36,10 +62,11 @@ def read_session(root: Path) -> dict:
     """只扫描 users 集合，不修改 LevelDB、不读取文档、不保存 Token 副本。"""
     records = {}
     decoder = json.JSONDecoder()
-    for path in (root / ".storage").glob("mubu_desktop_app-rxdb-1-users*/*"):
-        if path.suffix not in {".log", ".ldb"} or not path.is_file():
-            continue
-        text = path.read_bytes().decode("utf-8", errors="ignore")
+    for path in _session_files(root):
+        try:
+            text = path.read_bytes().decode("utf-8", errors="ignore")
+        except PermissionError:
+            raise DesktopDataAccessError() from None
         cursor = 0
         while (start := text.find('{"', cursor)) >= 0:
             try:
