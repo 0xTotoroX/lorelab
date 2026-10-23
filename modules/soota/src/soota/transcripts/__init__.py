@@ -1,0 +1,1 @@
+"""Transcript resolution helpers."""

@@ -1,0 +1,10 @@
+{
+  "code": 200,
+  "data": {
+    "video_id": "dQw4w9WgXcQ",
+    "captions": [
+      {"language_code": "en", "language_name": "English"},
+      {"language_code": "a.en", "language_name": "English (auto)"}
+    ]
+  }
+}

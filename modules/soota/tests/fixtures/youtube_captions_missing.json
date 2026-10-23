@@ -1,0 +1,9 @@
+{
+  "code": 200,
+  "data": {
+    "video_id": "aaaaaaaaaaa",
+    "captions": [],
+    "message": "No transcript is available for this video",
+    "message_zh": "该视频没有可用字幕"
+  }
+}

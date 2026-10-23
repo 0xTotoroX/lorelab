@@ -1,0 +1,16 @@
+{
+  "code": 200,
+  "data": {
+    "archives": [
+      {
+        "aid": 101,
+        "bvid": "BV1EXAM00000",
+        "title": "Fixture Bilibili video",
+        "pubdate": 1788256800,
+        "duration": 125,
+        "stat": { "view": 100 }
+      }
+    ],
+    "page": { "total": 2 }
+  }
+}

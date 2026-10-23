@@ -1,0 +1,17 @@
+{
+  "code": 200,
+  "message": "Request successful. This request will incur a charge.",
+  "data": {
+    "video_id": "dQw4w9WgXcQ",
+    "title": "Never Gonna Give You Up",
+    "author": "Rick Astley",
+    "channel_id": "UCuAXFkgsw1L7xaCfnd5JJOw",
+    "published_at": "2009-10-25T00:00:00+00:00",
+    "length_seconds": 213,
+    "caption_count": 2,
+    "captions": [
+      {"language_code": "en", "language_name": "English"},
+      {"language_code": "a.en", "language_name": "English (auto)"}
+    ]
+  }
+}

@@ -1,0 +1,568 @@
+[
+  {
+    "command": "bilibili/video",
+    "site": "bilibili",
+    "name": "video",
+    "aliases": [],
+    "description": "Get Bilibili video metadata (title, author, duration, stats, etc.)",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "bvid",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "BV ID, video URL, or b23.tv short link"
+      }
+    ],
+    "columns": [
+      "field",
+      "value"
+    ],
+    "domain": null,
+    "example": "opencli bilibili video <bvid> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "hackernews/top",
+    "site": "hackernews",
+    "name": "top",
+    "aliases": [],
+    "description": "Hacker News top stories",
+    "access": "read",
+    "strategy": "public",
+    "browser": false,
+    "args": [
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": 20,
+        "help": "Number of stories"
+      }
+    ],
+    "columns": [
+      "rank",
+      "id",
+      "title",
+      "score",
+      "author",
+      "comments",
+      "url"
+    ],
+    "domain": "news.ycombinator.com",
+    "example": "opencli hackernews top -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "instagram/profile",
+    "site": "instagram",
+    "name": "profile",
+    "aliases": [],
+    "description": "Get Instagram user profile info",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "username",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Instagram username"
+      }
+    ],
+    "columns": [
+      "username",
+      "name",
+      "followers",
+      "following",
+      "posts",
+      "verified",
+      "bio"
+    ],
+    "domain": "www.instagram.com",
+    "example": "opencli instagram profile <username> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "instagram/search",
+    "site": "instagram",
+    "name": "search",
+    "aliases": [],
+    "description": "Search Instagram users",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Search query"
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": 10,
+        "help": "Number of results"
+      }
+    ],
+    "columns": [
+      "rank",
+      "username",
+      "name",
+      "verified",
+      "private",
+      "url"
+    ],
+    "domain": "www.instagram.com",
+    "example": "opencli instagram search <query> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "reddit/user",
+    "site": "reddit",
+    "name": "user",
+    "aliases": [],
+    "description": "View a Reddit user profile",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "username",
+        "type": "string",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Reddit username (no `u/` prefix needed)"
+      }
+    ],
+    "columns": [
+      "field",
+      "value"
+    ],
+    "domain": "reddit.com",
+    "example": "opencli reddit user <username> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "tiktok/profile",
+    "site": "tiktok",
+    "name": "profile",
+    "aliases": [],
+    "description": "Get TikTok user profile info",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "username",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "TikTok username (without @)"
+      }
+    ],
+    "columns": [
+      "username",
+      "name",
+      "followers",
+      "following",
+      "likes",
+      "videos",
+      "verified",
+      "bio"
+    ],
+    "domain": "www.tiktok.com",
+    "example": "opencli tiktok profile <username> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "twitter/post",
+    "site": "twitter",
+    "name": "post",
+    "aliases": [],
+    "description": "Post a new tweet/thread",
+    "access": "write",
+    "strategy": "ui",
+    "browser": true,
+    "args": [
+      {
+        "name": "text",
+        "type": "string",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "The text content of the tweet"
+      },
+      {
+        "name": "images",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": null,
+        "help": "Image paths, comma-separated, max 4 (jpg/png/gif/webp)"
+      }
+    ],
+    "columns": [
+      "status",
+      "message",
+      "text",
+      "id",
+      "url"
+    ],
+    "domain": "x.com",
+    "example": "opencli twitter post <text> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "twitter/profile",
+    "site": "twitter",
+    "name": "profile",
+    "aliases": [],
+    "description": "Fetch a Twitter user profile — bio, stats, etc. (defaults to the logged-in user when no username is given)",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "username",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Twitter screen name (with or without @). Defaults to the logged-in user when omitted."
+      }
+    ],
+    "columns": [
+      "screen_name",
+      "name",
+      "bio",
+      "location",
+      "url",
+      "followers",
+      "following",
+      "tweets",
+      "likes",
+      "verified",
+      "created_at"
+    ],
+    "domain": "x.com",
+    "example": "opencli twitter profile -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "twitter/search",
+    "site": "twitter",
+    "name": "search",
+    "aliases": [],
+    "description": "Search Twitter/X for tweets, with optional --from / --has / --exclude / --product filters mapped to X's search operators",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "query",
+        "type": "string",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Search query. Raw X operators (e.g. \"exact phrase\", #tag, OR, lang:en, since:YYYY-MM-DD, from:, since:) are passed through unchanged."
+      },
+      {
+        "name": "filter",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [
+          "top",
+          "live"
+        ],
+        "default": "top",
+        "help": "Legacy alias for --product. Kept for backwards compatibility; if --product is set it wins."
+      },
+      {
+        "name": "product",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [
+          "top",
+          "live",
+          "photos",
+          "videos"
+        ],
+        "default": null,
+        "help": "Which X search tab to read: top (default), live (Latest), photos, videos. Maps to the f= URL param."
+      },
+      {
+        "name": "from",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": null,
+        "help": "Restrict to tweets authored by <user>. Leading @ is stripped. Equivalent to appending `from:<user>` to the query."
+      },
+      {
+        "name": "has",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [
+          "media",
+          "images",
+          "videos",
+          "links",
+          "replies"
+        ],
+        "default": null,
+        "help": "Restrict to tweets that have media|images|videos|links|replies. Maps to X's `filter:<has>` operator."
+      },
+      {
+        "name": "exclude",
+        "type": "string",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [
+          "replies",
+          "retweets",
+          "media",
+          "links"
+        ],
+        "default": null,
+        "help": "Exclude tweets matching <type>: replies|retweets|media|links. Maps to X's `-filter:<x>` operator (retweets → -filter:nativeretweets)."
+      },
+      {
+        "name": "limit",
+        "type": "int",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": 15,
+        "help": "Maximum number of tweets to return (default 15). Result count after server-side filtering."
+      },
+      {
+        "name": "top-by-engagement",
+        "type": "int",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": 0,
+        "help": "When set to N>0, re-rank the results by weighted engagement (likes×1 + retweets×3 + replies×2 + bookmarks×5 + log10(views+1)×0.5) and return the top N. Default 0 keeps X's native ordering."
+      }
+    ],
+    "columns": [
+      "id",
+      "author",
+      "bio",
+      "text",
+      "created_at",
+      "likes",
+      "views",
+      "url",
+      "has_media",
+      "media_urls",
+      "card",
+      "quoted_tweet"
+    ],
+    "domain": "x.com",
+    "example": "opencli twitter search <query> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "weibo/user",
+    "site": "weibo",
+    "name": "user",
+    "aliases": [],
+    "description": "Get Weibo user profile",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "User ID (numeric uid) or screen name"
+      }
+    ],
+    "columns": [
+      "screen_name",
+      "uid",
+      "followers",
+      "following",
+      "statuses",
+      "verified",
+      "description",
+      "location",
+      "url"
+    ],
+    "domain": "weibo.com",
+    "example": "opencli weibo user <id> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "xiaohongshu/note",
+    "site": "xiaohongshu",
+    "name": "note",
+    "aliases": [],
+    "description": "获取小红书笔记正文和互动数据",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "note-id",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Full Xiaohongshu note URL with xsec_token"
+      }
+    ],
+    "columns": [
+      "field",
+      "value"
+    ],
+    "domain": "www.xiaohongshu.com",
+    "example": "opencli xiaohongshu note <note-id> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "youtube/video",
+    "site": "youtube",
+    "name": "video",
+    "aliases": [],
+    "description": "Get YouTube video metadata (title, views, description, etc.)",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "url",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "YouTube video URL or video ID"
+      }
+    ],
+    "columns": [
+      "field",
+      "value"
+    ],
+    "domain": "www.youtube.com",
+    "example": "opencli youtube video <url> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  },
+  {
+    "command": "zhihu/answer-detail",
+    "site": "zhihu",
+    "name": "answer-detail",
+    "aliases": [],
+    "description": "知乎单个回答完整内容（按 answer ID 获取）",
+    "access": "read",
+    "strategy": "cookie",
+    "browser": true,
+    "args": [
+      {
+        "name": "id",
+        "type": "str",
+        "required": true,
+        "valueRequired": false,
+        "positional": true,
+        "choices": [],
+        "default": null,
+        "help": "Answer ID, full Zhihu answer URL, or typed target (answer:<qid>:<aid>)"
+      },
+      {
+        "name": "max-content",
+        "type": "int",
+        "required": false,
+        "valueRequired": false,
+        "positional": false,
+        "choices": [],
+        "default": 0,
+        "help": "Optional cap on stripped content length in characters (0 = no truncation, return the full answer)"
+      }
+    ],
+    "columns": [
+      "id",
+      "author",
+      "votes",
+      "comments",
+      "question_id",
+      "question_title",
+      "url",
+      "created_at",
+      "updated_at",
+      "content"
+    ],
+    "domain": "www.zhihu.com",
+    "example": "opencli zhihu answer-detail <id> -f yaml",
+    "defaultFormat": null,
+    "siteSession": null
+  }
+]

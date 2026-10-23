@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://soota.local/schemas/content-bundle.v1.json",
+  "title": "Soota Content Bundle Manifest",
+  "type": "object",
+  "required": ["schema_version", "source", "transcript"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "source": {
+      "type": "object",
+      "required": ["platform", "kind", "id", "url"],
+      "properties": {
+        "platform": { "type": "string" },
+        "kind": { "type": "string" },
+        "id": { "type": "string" },
+        "url": { "type": "string" },
+        "canonical_url": { "type": "string" }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "properties": {
+        "status": { "enum": ["not_requested", "pending", "ready", "invalid", "stale"] },
+        "path": { "type": ["string", "null"] }
+      }
+    },
+    "transcript": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["ready", "missing", "unknown", "pending", "not_requested"] },
+        "source": { "enum": ["official", "auto", "asr", "unknown", null] },
+        "language": { "type": ["string", "null"] },
+        "path": { "type": ["string", "null"] },
+        "segments": { "type": "integer" }
+      }
+    }
+  }
+}

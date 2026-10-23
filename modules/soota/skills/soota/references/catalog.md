@@ -1,0 +1,15 @@
+# Soota 目录
+
+Use `soota catalog URL --max-items N --max-pages P --dry-run --json` for an offline scope check, then `catalog ... --max-cost USD --json` when the budget is authorized. X catalog is a recent snapshot with unknown historical completeness; OpenCLI snapshots cannot resume. opencli-mcp is disabled. YouTube channels and Bilibili creators use TikHub pagination and can resume with `soota jobs resume JOB_ID`; limits on resume are cumulative ceilings. `--incremental` creates a new snapshot and deduplicates known IDs. A catalog contains links and existing metadata, not bulk transcripts or summaries.
+
+Read `data.catalog` or `data.content` from disk. Report provider, item count, completeness, job status, saved paths, estimated or reserved cost, and stop reason. `actual_cost_usd: null` means the real bill has not been reconciled. See `docs/catalog.md` for the full command contract.
+
+## Creator lists and cross-platform updates
+
+For an update request, read the user-maintained creator list referenced by the destination's local rules and process its enabled accounts. A one-off creator request does not automatically enroll that creator. The Agent orchestrates this workflow; the CLI does not manage a watchlist or schedule updates.
+
+Separate account identity from episode equivalence. Confirm linked accounts using user confirmation or official cross-links and stable account IDs; names alone only identify candidates. Enumerate every confirmed account so platform-exclusive uploads are retained. Preserve each upload's URL, platform ID, publication time and available duration in the creator's video index. Keep publication time separate from discovery/check times, preserve unknown or relative dates, and state catalog completeness. Apply the collection's classification and display rules.
+
+Treat title, episode number, duration and date similarity as candidate evidence, not proof of identical content. When equivalence is confirmed, select a complete source with usable captions, reuse its context and evidence; reuse an existing article/analysis only when that output is requested, and retain alternate URLs and publication times. Inspect both transcripts when comparison requires it. Keep materially different cuts or editions distinct and uncertain matches pending; timestamps must remain tied to the chosen source.
+
+Track catalog discovery separately from transcript/context completion. Article and analysis stages are tracked only when requested for this workflow; not_requested does not mean unfinished. After merging new IDs, revisit known items with unfinished stages; `--incremental` alone will skip them. A later duplicate upload only adds a source link when the matching content is already complete. Incremental collection can stop at a fully known page, so if ordering or historical coverage is uncertain, use a full catalog reconciliation rather than claiming every new upload was found. Report partial source failures without marking the whole creator caught up, preserve existing results, and retain the original fee limits. Do not start recurring updates unless requested.
