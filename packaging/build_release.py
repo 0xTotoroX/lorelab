@@ -55,15 +55,18 @@ def build(root: Path, output_dir: Path) -> Path:
             raise PackagingError(f"refusing to overwrite release: {output}")
         pending = output.with_suffix(".tmp")
         try:
-            with pending.open("wb") as raw, gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as zipped:
-                with tarfile.open(fileobj=zipped, mode="w") as archive:
-                    for entry in sorted([*bundle["files"], "packaging/bundle.json"]):
-                        path = source / entry
-                        info = archive.gettarinfo(str(path), arcname=f"{name}/{entry}")
-                        info.uid = info.gid = info.mtime = 0
-                        info.uname = info.gname = ""
-                        with path.open("rb") as stream:
-                            archive.addfile(info, stream)
+            with (
+                pending.open("wb") as raw,
+                gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=0) as zipped,
+                tarfile.open(fileobj=zipped, mode="w") as archive,
+            ):
+                for entry in sorted([*bundle["files"], "packaging/bundle.json"]):
+                    path = source / entry
+                    info = archive.gettarinfo(str(path), arcname=f"{name}/{entry}")
+                    info.uid = info.gid = info.mtime = 0
+                    info.uname = info.gname = ""
+                    with path.open("rb") as stream:
+                        archive.addfile(info, stream)
             os.replace(pending, output)
         finally:
             pending.unlink(missing_ok=True)

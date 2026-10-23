@@ -19,7 +19,7 @@ from urllib.parse import unquote, urlsplit
 
 PACKAGING = Path(__file__).resolve().parents[1] / "packaging"
 sys.path.insert(0, str(PACKAGING))
-import common  # noqa: E402
+import common
 
 spec = importlib.util.spec_from_file_location("lorehub_installer", PACKAGING / "install.py")
 installer = importlib.util.module_from_spec(spec)
@@ -138,25 +138,34 @@ class InstallTests(unittest.TestCase):
     def test_failure_before_activation_preserves_previous_release_and_skills(self):
         old = self.install()
         old_target = os.readlink(self.prefix / "current")
-        with self.local_dependencies(), patch.object(installer, "smoke_check", side_effect=RuntimeError("broken CLI")):
-            with self.assertRaisesRegex(RuntimeError, "broken CLI"):
-                installer.install(self.source, self.prefix, self.skills)
+        with (
+            self.local_dependencies(),
+            patch.object(installer, "smoke_check", side_effect=RuntimeError("broken CLI")),
+            self.assertRaisesRegex(RuntimeError, "broken CLI"),
+        ):
+            installer.install(self.source, self.prefix, self.skills)
         self.assertEqual(os.readlink(self.prefix / "current"), old_target)
         self.assertEqual(list((self.prefix / "releases").iterdir()), [old])
         self.assertEqual((self.skills / "lorehub").resolve(), old / "source/skills/lorehub")
 
     def test_failed_first_install_publishes_nothing(self):
-        with self.local_dependencies(), patch.object(installer, "smoke_check", side_effect=RuntimeError("bad")):
-            with self.assertRaises(RuntimeError):
-                installer.install(self.source, self.prefix, self.skills)
+        with (
+            self.local_dependencies(),
+            patch.object(installer, "smoke_check", side_effect=RuntimeError("bad")),
+            self.assertRaises(RuntimeError),
+        ):
+            installer.install(self.source, self.prefix, self.skills)
         self.assertFalse(os.path.lexists(self.prefix / "current"))
         self.assertFalse(self.skills.exists())
         self.assertFalse((self.prefix / "bin").exists())
 
     def test_activation_failure_removes_only_links_created_by_transaction(self):
-        with self.local_dependencies(), patch.object(installer.os, "replace", side_effect=OSError("disk failed")):
-            with self.assertRaisesRegex(OSError, "disk failed"):
-                installer.install(self.source, self.prefix, self.skills)
+        with (
+            self.local_dependencies(),
+            patch.object(installer.os, "replace", side_effect=OSError("disk failed")),
+            self.assertRaisesRegex(OSError, "disk failed"),
+        ):
+            installer.install(self.source, self.prefix, self.skills)
         for name in common.COMMANDS:
             self.assertFalse(os.path.lexists(self.prefix / "bin" / name))
         for name in common.SKILLS:
@@ -203,7 +212,7 @@ class InstallTests(unittest.TestCase):
         put(modules, "lorehub/__init__.py", "raise RuntimeError('wrong Python module')\n")
         env = dict(os.environ, PATH=str(poison), PYTHONPATH=str(modules))
         for name in common.COMMANDS:
-            result = subprocess.run([self.prefix / "bin" / name, "--help"], env=env, capture_output=True)
+            result = subprocess.run([self.prefix / "bin" / name, "--help"], env=env, capture_output=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
         (release / "venv/bin/soota").unlink()
         (release / "bin/cubox-cli").unlink()
@@ -211,7 +220,7 @@ class InstallTests(unittest.TestCase):
         for name in ("soota", "cubox-cli", "mubu-cli"):
             with self.subTest(name=name):
                 try:
-                    result = subprocess.run([self.prefix / "bin" / name], env=env, capture_output=True)
+                    result = subprocess.run([self.prefix / "bin" / name], env=env, capture_output=True, check=False)
                     self.assertNotEqual(result.returncode, 0)
                 except FileNotFoundError:
                     pass

@@ -63,9 +63,11 @@ class BundleTests(unittest.TestCase):
 
     def test_missing_bundle_manifest_never_falls_back_to_source_build(self):
         (self.root / common.BUNDLE).unlink()
-        with patch.object(installer, "build_payload", side_effect=AssertionError("must not build")):
-            with self.assertRaisesRegex(common.PackagingError, "no bundle manifest"):
-                installer.install(self.root, self.base / "prefix")
+        with (
+            patch.object(installer, "build_payload", side_effect=AssertionError("must not build")),
+            self.assertRaisesRegex(common.PackagingError, "no bundle manifest"),
+        ):
+            installer.install(self.root, self.base / "prefix")
 
     def test_tracked_worktree_changes_are_copied_but_untracked_files_are_not(self):
         subprocess.run(["git", "init", "-q", self.root], check=True)
