@@ -14,17 +14,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from lorehub.components import PROVENANCE_FILE, export_component, refresh, verify
+from lorelab.components import PROVENANCE_FILE, export_component, refresh, verify
 
 REPOSITORY = Path(__file__).resolve().parents[1]
-
-
-def test_legacy_component_import_is_same_module():
-    import lorehub.components as legacy
-    import lorelab.components as canonical
-
-    assert legacy is canonical
-    assert legacy.PROVENANCE_FILE == "lorehub-provenance.json"
 
 
 def digest(contents: dict[str, bytes]) -> str:
@@ -153,7 +145,7 @@ class ComponentsTest(unittest.TestCase):
     def test_atomic_replace_failure_preserves_old_lock(self):
         (self.component / "main.py").write_text("changed")
         before = (self.root / "components.lock.json").read_bytes()
-        with patch("lorehub.components.os.replace", side_effect=OSError("simulated write failure")):
+        with patch("lorelab.components.os.replace", side_effect=OSError("simulated write failure")):
             self.assertFalse(refresh(self.root)["ok"])
         self.assertEqual((self.root / "components.lock.json").read_bytes(), before)
         self.assertEqual(list(self.root.glob(".components.lock.json.*")), [])

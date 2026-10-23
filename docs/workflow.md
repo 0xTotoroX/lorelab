@@ -1,12 +1,14 @@
-# 知识流程兼容入口
+# 知识流程入口
 
 文章整理、学习大纲、交付核对与授权清理的唯一实现和文档主源已归入 Soota。本文保留旧链接入口；完整字段、状态和恢复规则见 [Soota 知识流程](../modules/soota/docs/knowledge.md)。
 
-| 产品命令（旧 `lorehub` 同样保留） | Soota 命令 |
+| 产品命令 | Soota 命令 |
 | --- | --- |
 | `lorelab init` | `soota knowledge init` |
 | `lorelab batch prepare/submit/publish/verify/cleanup/status` | `soota knowledge prepare/submit/publish/verify/cleanup/status` |
 | `lorelab study prepare/submit/publish/verify/status` | `soota study prepare/submit/publish/verify/status` |
+
+旧 `lorehub` 命令和 Python 兼容入口已移除；旧任务继续使用原 JOB 路径，由表中命令读取，不需要改写任务或恢复旧入口。
 
 ## 默认文章流程
 

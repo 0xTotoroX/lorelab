@@ -21,7 +21,7 @@ PACKAGING = Path(__file__).resolve().parents[1] / "packaging"
 sys.path.insert(0, str(PACKAGING))
 import common
 
-spec = importlib.util.spec_from_file_location("lorehub_installer", PACKAGING / "install.py")
+spec = importlib.util.spec_from_file_location("lorelab_installer", PACKAGING / "install.py")
 installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
 
@@ -35,12 +35,12 @@ def put(root, name, value, executable=False):
     return path
 
 
-def fixture_source(root, product="lorelab"):
+def fixture_source(root):
     put(root, "NOTICE.md", "Synthetic license notice\n")
     put(root, "uv.lock", "# source test lock\n")
     put(root, "docs/overview.md", "[Licenses](../NOTICE.md)\n")
-    put(root, f"src/{product}/__init__.py", "")
-    put(root, f"src/{product}/cli.py", """import json, os, sys
+    put(root, "src/lorelab/__init__.py", "")
+    put(root, "src/lorelab/cli.py", """import json, os, sys
 if __name__ == '__main__':
     print(json.dumps({'root': os.environ['LOREHUB_ROOT'],
         'runtime': os.environ['LOREHUB_RUNTIME_FILE'], 'args': sys.argv[1:],
@@ -49,7 +49,7 @@ if __name__ == '__main__':
         'knowledge_runtime': os.environ.get('SOOTA_KNOWLEDGE_RUNTIME_FILE'),
         'knowledge_lock': os.environ.get('SOOTA_KNOWLEDGE_COMPONENTS_LOCK')}))
 """)
-    put(root, f"src/{product}/components.py", """import hashlib, json
+    put(root, "src/lorelab/components.py", """import hashlib, json
 def verify(root):
     expected = json.loads((root / 'components.lock.json').read_text())['test_sha256']
     actual = hashlib.sha256((root / 'modules/cubox-cli/main.go').read_bytes()).hexdigest()
@@ -57,22 +57,19 @@ def verify(root):
 """)
     code = put(root, "modules/cubox-cli/main.go", "package main\n")
     common.write_json(root / "components.lock.json", {"schema_version": 1,
-        "product": {"name": product, "version": "0.1.0"}, "test_sha256": common.sha256(code)})
-    if product == "lorelab":
-        put(root, "src/lorehub/__init__.py", "")
-        put(root, "src/lorehub/cli.py", "import runpy; runpy.run_module('lorelab.cli', run_name='__main__')\n")
-    for path in common.product_skills(root).values():
+        "product": {"name": "lorelab", "version": "0.1.0"}, "test_sha256": common.sha256(code)})
+    for path in common.SKILLS.values():
         put(root, f"{path}/SKILL.md", "[Guide](docs/guide.md) and [entry](scripts/entry.py)\n")
         put(root, f"{path}/docs/guide.md", "[More](../references/more.md)\n")
         put(root, f"{path}/references/more.md", "Complete guide\n")
         put(root, f"{path}/scripts/entry.py", "# helper\n")
-    with (root / "skills/lorehub/SKILL.md").open("a") as stream:
+    with (root / "skills/lorelab/SKILL.md").open("a") as stream:
         stream.write("[Product overview](../../docs/overview.md)\n")
     put(root, "modules/mubu-cli/scripts/mubu_api.py", "import json,sys; print(json.dumps(sys.argv))\n")
     put(root, "packaging/requirements.lock", "")
     put(root, "packaging/build-requirements.lock", "")
     put(root, "packaging/prebuilt/cubox-cli", "#!/bin/sh\nprintf 'bundled cubox\\n'\n", True)
-    put(root, f"packaging/wheels/{product}-0.1.0-py3-none-any.whl", "fixture only")
+    put(root, "packaging/wheels/lorelab-0.1.0-py3-none-any.whl", "fixture only")
     put(root, "packaging/wheels/soota-0.1.0-py3-none-any.whl", "fixture only")
     common.seal_bundle(root)
 
@@ -86,7 +83,7 @@ def fixture_environment(release, uv):
 
 class InstallTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="lorehub tests '")
+        self.temporary = tempfile.TemporaryDirectory(prefix="lorelab tests '")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name).resolve()
         self.source = self.base / "bundle with spaces"
@@ -103,6 +100,29 @@ class InstallTests(unittest.TestCase):
     def install(self, skills=True):
         with self.local_dependencies():
             return installer.install(self.source, self.prefix, self.skills if skills else None)
+
+    def legacy_install(self, product="lorehub"):
+        """固定的旧安装布局，不经新安装器创建或重新解释旧 bundle。"""
+        release = self.prefix / "releases/legacy-0.1.0"
+        release.mkdir(parents=True)
+        self.prefix.joinpath("current").symlink_to("releases/legacy-0.1.0")
+        self.prefix.joinpath("bin").mkdir()
+        self.skills.mkdir()
+        commands = ["lorehub", "cubox-cli", "soota", "mubu-cli"]
+        skills = ["lorehub", "cubox", "soota", "mubu-integration"]
+        if product == "lorelab":
+            commands.append("lorelab")
+            skills.append("lorelab")
+        for name in commands:
+            put(release, f"bin/{name}", "#!/bin/sh\nprintf 'old release\\n'\n", True)
+            self.prefix.joinpath("bin", name).symlink_to(f"../current/bin/{name}")
+        for name in skills:
+            put(release, f"skills/{name}/SKILL.md", "Old Skill\n")
+            self.skills.joinpath(name).symlink_to(self.prefix / "current/skills" / name)
+        put(release, "source/src/lorehub/__init__.py", "# Previous release remains untouched\n")
+        common.write_json(release / "runtime.json", {"schema_version": 1, "product": product,
+                                                   "release_id": release.name, "tools": {}})
+        return release
 
     def assert_skill_closure(self, release):
         boundary = (release / "source").resolve()
@@ -138,7 +158,7 @@ class InstallTests(unittest.TestCase):
         self.assert_skill_closure(release)
         self.assertTrue((release / "source/NOTICE.md").is_file())
         self.assertTrue((release / "source/uv.lock").is_file())
-        output = subprocess.check_output([self.prefix / "bin/lorehub", "two words", "$(touch nope)"], text=True)
+        output = subprocess.check_output([self.prefix / "bin/lorelab", "two words", "$(touch nope)"], text=True)
         data = json.loads(output)
         self.assertEqual(data["root"], str(release / "source"))
         self.assertEqual(data["runtime"], str(release / "runtime.json"))
@@ -146,13 +166,20 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(data["new_runtime"], data["runtime"])
         self.assertEqual(data["knowledge_runtime"], data["runtime"])
         self.assertEqual(data["knowledge_lock"], str(release / "source/components.lock.json"))
-        new_output = subprocess.check_output([self.prefix / "bin/lorelab", "two words", "$(touch nope)"], text=True)
-        self.assertEqual(json.loads(new_output), data)
         self.assertEqual(data["auto_update"], "false")
         self.assertEqual(data["args"], ["two words", "$(touch nope)"])
+        self.assertEqual({p.name for p in (release / "bin").iterdir()},
+                         {"lorelab", "cubox-cli", "soota", "mubu-cli"})
+        self.assertEqual({p.name for p in (release / "skills").iterdir()},
+                         {"lorelab", "cubox", "soota", "mubu-integration"})
+        for path in (self.prefix / "bin/lorehub", self.skills / "lorehub",
+                     release / "source/src/lorehub", release / "source/skills/lorehub"):
+            self.assertFalse(os.path.lexists(path), path)
+        subprocess.run([release / "venv/bin/python", "-I", "-B", "-c",
+                        "import importlib.util; assert importlib.util.find_spec('lorehub') is None"], check=True)
 
     def test_failure_before_activation_preserves_previous_release_and_skills(self):
-        old = self.install()
+        old = self.legacy_install()
         old_target = os.readlink(self.prefix / "current")
         with (
             self.local_dependencies(),
@@ -162,7 +189,8 @@ class InstallTests(unittest.TestCase):
             installer.install(self.source, self.prefix, self.skills)
         self.assertEqual(os.readlink(self.prefix / "current"), old_target)
         self.assertEqual(list((self.prefix / "releases").iterdir()), [old])
-        self.assertEqual((self.skills / "lorehub").resolve(), old / "source/skills/lorehub")
+        self.assertEqual((self.skills / "lorehub").resolve(), old / "skills/lorehub")
+        self.assertEqual((self.prefix / "bin/lorehub").resolve(), old / "bin/lorehub")
 
     def test_failed_first_install_publishes_nothing(self):
         with (
@@ -197,34 +225,138 @@ class InstallTests(unittest.TestCase):
         for name in common.COMMANDS:
             self.assertEqual(os.readlink(self.prefix / "bin" / name), f"../current/bin/{name}")
 
-    def test_legacy_bundle_and_prefix_upgrade_preserve_old_release(self):
-        legacy_source = self.base / "legacy bundle"
-        fixture_source(legacy_source, product="lorehub")
-        original_bundle = (legacy_source / common.BUNDLE).read_bytes()
-        common.verify_bundle(legacy_source)
-        common.verify_inputs(legacy_source)
-        with self.local_dependencies():
-            old = installer.install(legacy_source, self.prefix, self.skills)
-        # 模拟原安装器生成的四命令 prefix 与旧 runtime，不移动旧 release。
-        legacy_runtime = json.loads((old / "runtime.json").read_text())
-        legacy_runtime["product"] = "lorehub"
-        legacy_runtime.pop("source_root")
-        legacy_runtime.pop("components_lock")
-        common.write_json(old / "runtime.json", legacy_runtime)
-        (self.prefix / "bin/lorelab").unlink()
-        (old / "bin/lorelab").unlink()
+    def assert_legacy_upgrade(self, product):
+        old = self.legacy_install(product)
         old_files = {p.relative_to(old).as_posix(): p.read_bytes()
                      for p in old.rglob("*") if p.is_file() and not p.is_symlink()}
         new = self.install()
         self.assertEqual((self.prefix / "current").resolve(), new)
         self.assertEqual(json.loads((new / "runtime.json").read_text())["product"], "lorelab")
-        self.assertEqual((legacy_source / common.BUNDLE).read_bytes(), original_bundle)
-        for name, content in old_files.items():
-            self.assertEqual((old / name).read_bytes(), content, name)
-        for name in ("lorelab", "lorehub"):
+        self.assertEqual({p.relative_to(old).as_posix(): p.read_bytes()
+                          for p in old.rglob("*") if p.is_file() and not p.is_symlink()}, old_files)
+        output = subprocess.check_output([self.prefix / "bin/lorelab", "--version"], text=True)
+        self.assertEqual(json.loads(output)["root"], str(new / "source"))
+        self.assertFalse(os.path.lexists(self.prefix / "bin/lorehub"))
+        self.assertFalse(os.path.lexists(self.skills / "lorehub"))
+        for name in common.COMMANDS:
             output = subprocess.check_output([self.prefix / "bin" / name, "--version"], text=True)
-            self.assertEqual(json.loads(output)["root"], str(new / "source"))
-            self.assertTrue((self.skills / name / "SKILL.md").is_file())
+            self.assertTrue(output)
+        for name in common.SKILLS:
+            self.assertTrue((self.skills / name / "SKILL.md").is_file(), name)
+
+    def test_legacy_prefix_upgrade_retires_owned_links_and_preserves_release(self):
+        self.assert_legacy_upgrade("lorehub")
+
+    def test_lorelab_prefix_upgrade_retires_owned_links_and_preserves_release(self):
+        self.assert_legacy_upgrade("lorelab")
+
+    def test_failed_activation_restores_retired_links_and_previous_current(self):
+        old = self.legacy_install()
+        legacy = [self.prefix / "bin/lorehub", self.skills / "lorehub"]
+        original_links = {link: os.readlink(link) for link in legacy}
+        current = os.readlink(self.prefix / "current")
+
+        def reject_switch(source, destination):
+            self.assertEqual(destination, self.prefix / "current")
+            for link in legacy:
+                self.assertFalse(os.path.lexists(link))
+            raise OSError("activation failed")
+
+        with patch.object(installer.os, "replace", side_effect=reject_switch), \
+             self.assertRaisesRegex(OSError, "activation failed"):
+            self.install()
+        self.assertEqual(os.readlink(self.prefix / "current"), current)
+        self.assertEqual({link: os.readlink(link) for link in legacy}, original_links)
+        self.assertFalse(os.path.lexists(self.prefix / "bin/lorelab"))
+        self.assertFalse(os.path.lexists(self.skills / "lorelab"))
+        self.assertEqual(list((self.prefix / "releases").iterdir()), [old])
+        self.assertFalse(list(self.prefix.glob(".current-*")))
+        self.assertEqual(subprocess.check_output([legacy[0]], text=True), "old release\n")
+
+    def test_failed_retirement_restores_prior_link_without_switching_current(self):
+        old = self.legacy_install()
+        original_unlink = Path.unlink
+
+        def reject_skill_removal(path, *args, **kwargs):
+            if path == self.skills / "lorehub":
+                self.assertFalse(os.path.lexists(self.prefix / "bin/lorehub"))
+                raise OSError("cannot retire Skill")
+            return original_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", reject_skill_removal), \
+             self.assertRaisesRegex(OSError, "cannot retire Skill"):
+            self.install()
+        self.assertEqual((self.prefix / "current").resolve(), old)
+        self.assertEqual((self.prefix / "bin/lorehub").resolve(), old / "bin/lorehub")
+        self.assertEqual((self.skills / "lorehub").resolve(), old / "skills/lorehub")
+        self.assertEqual(list((self.prefix / "releases").iterdir()), [old])
+        self.assertFalse(os.path.lexists(self.prefix / "bin/lorelab"))
+        self.assertFalse(os.path.lexists(self.skills / "lorelab"))
+
+    def test_legacy_skill_is_only_retired_in_explicit_skills_directory(self):
+        old = self.legacy_install()
+        skill_target = os.readlink(self.skills / "lorehub")
+        new = self.install(skills=False)
+        self.assertNotEqual(old, new)
+        self.assertEqual(os.readlink(self.skills / "lorehub"), skill_target)
+        self.assertFalse(os.path.lexists(self.prefix / "bin/lorehub"))
+
+    def test_retirement_preserves_foreign_legacy_files_directories_and_symlinks(self):
+        self.prefix.joinpath("bin").mkdir(parents=True)
+        self.skills.mkdir()
+        outside = put(self.base, "external/entry", "external content")
+        for kind in ("file", "directory", "external-link", "dangling-link", "other-prefix-link"):
+            with self.subTest(kind=kind):
+                paths = [self.prefix / "bin/lorehub", self.skills / "lorehub"]
+                for path in paths:
+                    if kind == "file":
+                        path.write_text("user content")
+                    elif kind == "directory":
+                        put(path, "keep.txt", "user content")
+                    else:
+                        target = outside if kind == "external-link" else self.base / kind / "current/bin/lorehub"
+                        if kind == "other-prefix-link":
+                            put(target.parent, target.name, "other prefix's entry")
+                        path.symlink_to(target)
+                previous = {p: os.readlink(p) for p in paths if p.is_symlink()}
+                self.install()
+                for path in paths:
+                    if path in previous:
+                        self.assertEqual(os.readlink(path), previous[path])
+                        path.unlink()
+                    elif kind == "directory":
+                        self.assertEqual((path / "keep.txt").read_text(), "user content")
+                        (path / "keep.txt").unlink()
+                        path.rmdir()
+                    else:
+                        self.assertEqual(path.read_text(), "user content")
+                        path.unlink()
+                self.assertEqual(outside.read_text(), "external content")
+
+    def test_symlink_parent_traversal_does_not_establish_legacy_link_ownership(self):
+        self.legacy_install()
+        external = self.base / "external"
+        (external / "child").mkdir(parents=True)
+        (self.prefix / "redirect").symlink_to(external / "child")
+        paths = [(self.prefix / "bin/lorehub", "bin/lorehub"), (self.skills / "lorehub", "skills/lorehub")]
+        for link, name in paths:
+            link.unlink()
+            put(external / "current", name, "foreign target")
+            link.symlink_to(self.prefix / "redirect/../current" / name)
+        original = {link: os.readlink(link) for link, _ in paths}
+        self.install()
+        for link, _ in paths:
+            self.assertEqual(os.readlink(link), original[link])
+            self.assertEqual(link.read_text(), "foreign target")
+
+    def test_owned_broken_links_are_retired_without_modifying_their_targets(self):
+        self.prefix.joinpath("bin").mkdir(parents=True)
+        self.skills.mkdir()
+        self.prefix.joinpath("bin/lorehub").symlink_to("../current/bin/lorehub")
+        self.skills.joinpath("lorehub").symlink_to(self.prefix / "current/skills/lorehub")
+        self.install()
+        self.assertFalse(os.path.lexists(self.prefix / "bin/lorehub"))
+        self.assertFalse(os.path.lexists(self.skills / "lorehub"))
 
     def test_soota_launcher_receives_independent_runtime_binding(self):
         release = self.install()
@@ -291,7 +423,7 @@ class InstallTests(unittest.TestCase):
         for name in common.COMMANDS:
             put(poison, name, f"#!/bin/sh\n/usr/bin/touch {shlex.quote(str(touched))}\nexit 0\n", True)
         modules = self.base / "global modules"
-        put(modules, "lorehub/__init__.py", "raise RuntimeError('wrong Python module')\n")
+        put(modules, "lorelab/__init__.py", "raise RuntimeError('wrong Python module')\n")
         env = dict(os.environ, PATH=str(poison), PYTHONPATH=str(modules))
         for name in common.COMMANDS:
             result = subprocess.run([self.prefix / "bin" / name, "--help"], env=env, capture_output=True, check=False)
@@ -320,7 +452,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(existing.read_text(), "existing user's CLI")
 
     def test_bundle_tamper_and_extra_files_fail_before_prefix_creation(self):
-        for name in ("packaging/prebuilt/cubox-cli", "packaging/requirements.lock", "src/lorehub/cli.py",
+        for name in ("packaging/prebuilt/cubox-cli", "packaging/requirements.lock", "src/lorelab/cli.py",
                      "modules/mubu-cli/docs/guide.md", "packaging/wheels/unlisted.whl"):
             with self.subTest(name=name):
                 target = self.source / name

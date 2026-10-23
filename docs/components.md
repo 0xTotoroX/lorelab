@@ -38,7 +38,7 @@ lorelab components verify
 
 修改源码或 Skill 后先审查 diff，再显式 refresh；不能把 refresh 当成对未知变化的自动认可。`verify` 只读，任何组件指纹不匹配即 `ok=false`，同时保留能计算出的实际指纹。`refresh` 先验证所有路径及 Skill 入口，全部有效才用临时文件和原子替换更新 lock 中的所有 `tree_sha256`。失败不写入部分组件，也不修改源码或导入 revision。操作期间保持组件源码静止；若源码并发变化，最终复核可能失败，应先停止其他写入再检查。
 
-组件 lock 变化后需要重建并安装对应的受管 runtime，不能沿用绑定旧 lock 的运行时。doctor 展示绑定 CLI、四套 Skill 和 `lorehub` 兼容别名，`lorelab skills list` 给出源码入口；这些是本地检查，不证明账号、站点或云端写入已通过验收。
+组件 lock 变化后需要重建并安装对应的受管 runtime，不能沿用绑定旧 lock 的运行时。doctor 展示绑定 CLI 和四套 Skill，`lorelab skills list` 给出源码入口；这些是本地检查，不证明账号、站点或云端写入已通过验收。
 
 ## 独立导出
 
@@ -60,7 +60,7 @@ lorelab components export mubu /path/to/new-mubu-source
 
 Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任何自有 Release 或 npm 发布已存在。Go import path 中保留上游模块名用于现有依赖兼容，不能据此安装上游发行包。版本标记含历史 `+lorehub` 的自有构建关闭原作者版本查询与替换安装提示；更新从 LoreLab 源码重新构建，独立导出也保留这一规则。
 
-安装四套 Skill 与 `lorehub` 兼容入口时允许用户指定 `--skills-dir`。安装器应保留真实 source 入口及相对引用闭包，不能只复制孤立的 `SKILL.md`；Agent 通过 `lorelab skills list` 定位 source。LoreLab Skill 只负责安装、组件维护和路由，需要同份源码中的 `docs/` 与组件 Skill。`lorehub` Skill 是兼容入口。文章流程、schema 和写作提示词仅在 Soota 组件内维护；独立 Soota 导出保留 `docs/knowledge.md`、`skills/soota/references/{process,prompts}.md` 及全部引用，不依赖产品包或其他 Skill 目录。三个组件仍分别保留独立入口。
+安装四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）时允许用户指定 `--skills-dir`。安装器应保留真实 source 入口及相对引用闭包，不能只复制孤立的 `SKILL.md`；Agent 通过 `lorelab skills list` 定位 source。LoreLab Skill 只负责安装、组件维护和路由，需要同份源码中的 `docs/` 与组件 Skill。文章流程、schema 和写作提示词仅在 Soota 组件内维护；独立 Soota 导出保留 `docs/knowledge.md`、`skills/soota/references/{process,prompts}.md` 及全部引用，不依赖产品包或其他 Skill 目录。产品入口与三个独立组件入口合计四个 CLI；旧 `lorehub` 命令、Python 包和 Skill 均不再分发。
 
 ## Python 接口
 
@@ -78,4 +78,4 @@ Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任�
 uv run --no-project --with pyyaml python -m unittest discover -s tests -v
 ```
 
-从源码运行时使用 `uv run python -m lorelab.cli …`，由本地依赖绑定找到 Soota；只做 Python 模块检查时可设置 `PYTHONPATH=src:modules/soota/src`。测试覆盖源码/Skill 篡改、路径与链接越界、原子刷新失败、导出隔离、并发内容变化检测、三组件实际文件闭包、产品、兼容入口及组件 Skill 的 frontmatter 和相对链接。`docs/workflow.md` 仅保留旧链接路由，流程契约主源是 `modules/soota/docs/knowledge.md`；检查应同时覆盖产品 Skill 路由和独立 Soota 的引用闭包。
+从源码运行时使用 `uv run python -m lorelab.cli …`，由本地依赖绑定找到 Soota；只做 Python 模块检查时可设置 `PYTHONPATH=src:modules/soota/src`。测试覆盖源码/Skill 篡改、路径与链接越界、原子刷新失败、导出隔离、并发内容变化检测、三组件实际文件闭包、产品及组件 Skill 的 frontmatter 和相对链接。`docs/workflow.md` 仅保留文档链接路由，流程契约主源是 `modules/soota/docs/knowledge.md`；检查应同时覆盖产品 Skill 路由和独立 Soota 的引用闭包。

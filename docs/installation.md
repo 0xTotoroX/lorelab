@@ -20,7 +20,7 @@ sh install.sh --prefix "$HOME/.local/share/lorelab" \
   --skills-dir "$HOME/.agents/skills"
 ```
 
-四套 Skill 注册为 `lorelab`、`cubox`、`soota`、`mubu-integration`，同时提供旧名称 `lorehub` 兼容 Skill。同名非 LoreLab 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选一个空目录。没有 `--skills-dir` 时，完整 Skills 仍位于 release 内，但不会向 Agent 全局目录注册。
+安装仅提供 `lorelab`、`cubox-cli`、`soota`、`mubu-cli` 四个 CLI，四套 Skill 注册为 `lorelab`、`cubox`、`soota`、`mubu-integration`。同名非 LoreLab 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选一个空目录。没有 `--skills-dir` 时，完整 Skills 仍位于 release 内，但不会向 Agent 全局目录注册。
 
 安装器不修改 shell profile、不执行 `npm install`，也不替换已有全局 CLI。可以一直使用完整命令路径；需要时自行为当前终端设置：
 
@@ -41,16 +41,15 @@ python3 packaging/install.py --prefix "/path/with spaces/LoreLab" \
 PREFIX/
   .install.lock
   current -> releases/ID
-  bin/{lorelab,lorehub,cubox-cli,soota,mubu-cli} -> ../current/bin/NAME
+  bin/{lorelab,cubox-cli,soota,mubu-cli} -> ../current/bin/NAME
   releases/ID/
     source/          # 产品、组件、Skills、固定依赖与 bundle 清单
     venv/            # 该 release 的 Python 包
     toolchain/python/# uv 管理的 Python 3.12.12，位于此 release 内
-    bin/             # 产品新旧入口与三个独立 CLI
+    bin/             # 产品入口与三个独立 CLI
     runtime.json
     skills/
       lorelab -> ../source/skills/lorelab
-      lorehub -> ../source/skills/lorehub
       cubox -> ../source/modules/cubox-cli/skills/cubox
       soota -> ../source/modules/soota/skills/soota
       mubu-integration -> ../source/modules/mubu-cli
@@ -58,7 +57,7 @@ PREFIX/
 
 幕布 Skill 指向整个组件根目录，保留它引用的 `docs/`、`scripts/` 和其他资源。其余 Skills 也保留完整目录，组件完整源码同时留在 `source/modules/`。
 
-安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorelab.components.verify(root)` → 检查目标冲突 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 产品新旧入口及三个 CLI 的离线 help/version 检查及再次组件校验 → 原子替换 `current`。终端安装不会重新解析依赖版本，也不会编译 Cubox。并行安装由 prefix 内的文件锁拒绝。
+安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorelab.components.verify(root)` → 检查目标冲突 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 四个 CLI 的离线 help/version 检查及再次组件校验 → 原子替换 `current`。终端安装不会重新解析依赖版本，也不会编译 Cubox。并行安装由 prefix 内的文件锁拒绝。
 
 安装过程失败时不切换 `current`，清除本次未完成 release；旧 release 保留。已有命令和注册 Skills 都间接指向 `current`，升级后一起切换。原子切换失败会移除本次新建的链接。强制断电或 `SIGKILL` 可能留下未启用 release，`current` 仍指向切换前或已完整检查的新版本。
 
@@ -66,7 +65,7 @@ PREFIX/
 
 ## 产品运行时接口
 
-`release/bin/lorelab` 与旧 `release/bin/lorehub` 均使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`。独立 Soota 通过 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 和 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK` 读取同一绑定，不依赖产品 Python 包；新旧变量或清单路径不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
+`release/bin/lorelab` 使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`。保留历史环境变量名称用于读取既有运行时绑定，不提供旧命令或 Python 包。独立 Soota 通过 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 和 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK` 读取同一绑定，不依赖产品 Python 包；新旧变量或清单路径不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
 
 `runtime.json` 的命令元素全部使用安装后的绝对路径，结构如下（`/prefix/releases/ID` 是占位路径）：
 
@@ -93,11 +92,13 @@ PREFIX/
 
 ## 从 LoreHub 升级
 
-旧命令 `lorehub` 和产品 Python 导入兼容入口保留。可以把新包安装到原 LoreHub prefix：安装器识别旧 `current`，创建新 release 后再切换，不搬动已有 release。需要 Skills 注册时继续使用原 `--skills-dir`；已归属本 prefix 的链接可随升级切换，外部同名内容仍保持冲突保护。
+旧 `lorehub` 命令、产品 Python 导入兼容入口和同名 Skill 已移除。知识与学习任务分别使用 `soota knowledge`、`soota study`，产品管理使用 `lorelab`。
+
+可以把新包安装到原 LoreHub prefix：安装器识别旧 `current`，创建并检查新 release 后再切换。升级清理 `PREFIX/bin/lorehub` 以及 `--skills-dir` 指定目录中的旧 Skill 链接，仅删除能确认属于本 prefix 的链接，外部同名内容仍受保护。未指定 `--skills-dir` 时不检查外部 Skill 注册目录。已有 release 不搬动、不删除，留作历史备份；当前安装不再注册旧入口。
 
 既有 prefix 名称不影响产品名称。安装目录包含绝对路径，不要为了改名直接移动它；需要更换位置时重新安装。组件命令 `soota`、`cubox-cli`、`mubu-cli` 仍独立存在。
 
-知识配置由 Soota 按[配置优先级](../modules/soota/docs/knowledge.md#配置独立组件与兼容入口)读取，可原位沿用旧 LoreHub 配置；升级不会静默复制配置、改写旧任务或放宽删除。旧 JOB 绝对路径可交给新 `soota knowledge` 或旧 `lorehub batch` 继续；新任务状态与旧共享写锁的约定见 [Soota 契约](../modules/soota/docs/knowledge.md#python-接口)。
+知识配置由 Soota 按[配置优先级](../modules/soota/docs/knowledge.md#配置独立组件与兼容入口)读取，可原位沿用旧 LoreHub 配置；升级不会静默复制配置、改写旧任务或放宽删除。旧 JOB 绝对路径可交给 `soota knowledge`、`soota study` 或对应 LoreLab 路由继续。历史 prefix、配置路径、环境变量和共享锁目录保留原名，用于数据兼容；新任务状态与锁的约定见 [Soota 契约](../modules/soota/docs/knowledge.md#python-接口)。
 
 ## 从本地源码构建
 

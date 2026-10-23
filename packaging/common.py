@@ -20,10 +20,9 @@ import sys
 from pathlib import Path, PurePosixPath
 
 PYTHON_VERSION = "3.12.12"
-COMMANDS = ("lorelab", "lorehub", "cubox-cli", "soota", "mubu-cli")
+COMMANDS = ("lorelab", "cubox-cli", "soota", "mubu-cli")
 SKILLS = {
     "lorelab": "skills/lorelab",
-    "lorehub": "skills/lorehub",
     "cubox": "modules/cubox-cli/skills/cubox",
     "soota": "modules/soota/skills/soota",
     "mubu-integration": "modules/mubu-cli",
@@ -61,6 +60,8 @@ def allowed(path: str) -> bool:
     parts = PurePosixPath(path).parts
     if not parts or path.startswith("/") or any(p in EXCLUDED or p in {"..", "."} for p in parts):
         return False
+    if parts[:2] in {("src", "lorehub"), ("skills", "lorehub")} or path.startswith("packaging/wheels/lorehub-"):
+        return False
     if any(p.startswith((".env.", ".coverage."))
            or p.endswith((".pyc", ".pyo", ".log", ".sqlite", ".sqlite3", ".db")) for p in parts):
         return False
@@ -96,15 +97,11 @@ def copy_source(root: Path, destination: Path, files: list[str]) -> None:
 
 def product_name(root: Path) -> str:
     name = json.loads((root / "components.lock.json").read_text())["product"]["name"]
-    if name not in {"lorelab", "lorehub"}:
+    if name == "lorehub":
+        raise PackagingError("LoreHub bundles require their original installer; this installer accepts LoreLab only")
+    if name != "lorelab":
         raise PackagingError("unsupported product in components.lock.json")
     return name
-
-
-def product_skills(root: Path) -> dict[str, str]:
-    # 旧 bundle 的文件清单不可改写；只核对其中原有的完整 Skill 闭包。
-    product = product_name(root)
-    return {name: path for name, path in SKILLS.items() if name != "lorelab" or product == "lorelab"}
 
 
 def verify_components(root: Path, python: str | Path = sys.executable) -> None:
@@ -123,9 +120,9 @@ if not isinstance(result, dict) or result.get('ok') is not True:
 
 
 def verify_inputs(root: Path) -> None:
-    for name in [f"src/{product_name(root)}/cli.py", "src/lorehub/cli.py", "packaging/requirements.lock",
+    for name in [f"src/{product_name(root)}/cli.py", "packaging/requirements.lock",
                  "packaging/build-requirements.lock", "modules/mubu-cli/scripts/mubu_api.py",
-                 *(f"{p}/SKILL.md" for p in product_skills(root).values())]:
+                 *(f"{p}/SKILL.md" for p in SKILLS.values())]:
         if not (root / name).is_file():
             raise PackagingError(f"incomplete product source: missing {name}")
     verify_components(root)
@@ -162,6 +159,7 @@ def seal_bundle(root: Path) -> dict:
 
 
 def verify_bundle(root: Path) -> dict:
+    product_name(root)
     value = json.loads((root / BUNDLE).read_text())
     if value.get("schema_version") != 1 or value.get("platform") != platform_tag():
         raise PackagingError("unsupported bundle schema or platform")

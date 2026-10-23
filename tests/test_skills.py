@@ -17,16 +17,16 @@ from urllib.parse import unquote, urlsplit
 
 import yaml
 
-from lorehub.components import export_component, refresh
+from lorelab.components import export_component, refresh
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = {
-    "lorehub": Path("skills/lorehub"),
+    "lorelab": Path("skills/lorelab"),
     "cubox": Path("modules/cubox-cli/skills/cubox"),
     "soota": Path("modules/soota/skills/soota"),
     "mubu-integration": Path("modules/mubu-cli"),
 }
-WORKFLOW = ROOT / "docs/workflow.md"
+WORKFLOW = ROOT / "modules/soota/docs/knowledge.md"
 
 
 def prose(text: str) -> str:
@@ -95,13 +95,10 @@ class SkillTest(unittest.TestCase):
 
     def test_skill_relative_links_and_heading_anchors(self):
         paths = [path for relative in SKILLS.values() for path in skill_documents(ROOT / relative)]
-        # workflow 由另一个工作树维护；它有独立检查，缺失时明确报告 skip。
-        deferred = {WORKFLOW} if not WORKFLOW.exists() else set()
-        self.assert_local_links(paths, ROOT, deferred=deferred)
+        self.assert_local_links(paths, ROOT)
 
-    @unittest.skipUnless(WORKFLOW.is_file(), "docs/workflow.md is supplied by the workflow integration")
     def test_workflow_document_links_resolve_after_integration(self):
-        links = [target for path in skill_documents(ROOT / SKILLS["lorehub"]) for target, _ in local_links(path)]
+        links = [target for path in skill_documents(ROOT / SKILLS["lorelab"]) for target, _ in local_links(path)]
         self.assertIn(WORKFLOW, links)
         self.assertTrue(WORKFLOW.is_file())
 

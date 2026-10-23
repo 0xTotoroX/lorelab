@@ -6,8 +6,7 @@ import types
 
 import pytest
 
-from lorehub import cli
-from lorelab import runtime
+from lorelab import cli, runtime
 
 
 @pytest.fixture
@@ -85,17 +84,6 @@ def test_cli_tool_passes_arguments_without_shell(monkeypatch):
     monkeypatch.setattr(runtime, "forward", lambda name, args: calls.append((name, args)) or 0)
     assert cli.main(["tool", "cubox", "--", "card", "list", "--keyword", "a; echo b"]) == 0
     assert calls == [("cubox", ["card", "list", "--keyword", "a; echo b"])]
-
-
-def test_old_import_shares_canonical_module_and_version(monkeypatch):
-    import lorehub
-    import lorehub.runtime as legacy
-    import lorelab
-
-    assert legacy is runtime
-    assert lorehub.__version__ == lorelab.__version__ == "0.1.0"
-    monkeypatch.setattr(legacy, "tool_command", lambda _: ["bound"])
-    assert runtime.tool_command("cubox") == ["bound"]
 
 
 @pytest.mark.parametrize("namespace", ["LORELAB", "both"])

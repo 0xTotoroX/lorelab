@@ -63,7 +63,7 @@ Python 接口位于 `soota.knowledge.workflow`，学习接口位于 `soota.knowl
 
 独立 Soota 可以通过 `SOOTA_CUBOX_COMMAND`、`SOOTA_MUBU_COMMAND` 指定外部 CLI 的 **JSON argv 数组**；未指定时分别发现 `cubox-cli`、`mubu-cli`。数组第一项必须是可执行文件的绝对路径，后续项是固定参数；不接受 shell 命令文本，不放账号口令。显式入口无效时停止，不退回 PATH。Cubox 只在收藏输入或对应清理中需要，幕布只在实际选择大纲交付时需要。读取内容包、发布文章不要求安装这两个服务 CLI。
 
-LoreLab 成套安装绑定自己的组件入口。`lorelab init`、`lorelab batch …`、`lorelab study …` 分别转到本页的 `soota knowledge init`、`soota knowledge …`、`soota study …`；旧 `lorehub` 命令保留同样的兼容路由。既有 `soota ingest/jobs/render` 命令及其任务继续使用，不需要改名。
+LoreLab 成套安装绑定自己的组件入口。`lorelab init`、`lorelab batch …`、`lorelab study …` 分别转到本页的 `soota knowledge init`、`soota knowledge …`、`soota study …`。旧 `lorehub` 命令、Python 兼容包和 Skill 已移除；旧任务可直接把原 JOB 路径交给 Soota 或上述 LoreLab 路由，旧配置原位读取。历史 prefix、配置、环境变量与共享锁目录名称保留用于数据兼容，不构成旧入口依赖。既有 `soota ingest/jobs/render` 命令及其任务继续使用，不需要改名。
 
 ## 交付选择与旧任务
 
@@ -190,7 +190,7 @@ knowledge publish 先检查来源、approved 和已完成 Soota 产物；Cubox �
 
 文章模式按目的地使用写入锁；publish/verify/cleanup 只走文章及来源核对，不读取或写入幕布。文章回读通过即可完成选定交付。下列幕布规则仅适用于显式组合交付和独立 `study` 任务。
 
-幕布按文档 ID 取得同进程锁和 OS 文件锁（共享位置为 `$XDG_STATE_HOME/lorehub/locks`，默认 `~/.local/state/lorehub/locks`），新旧 Soota／LoreLab／LoreHub 入口共用该位置，避免升级前后两代写入并发。读取不裁剪的全树和 HTML，拒绝目标父级下的同名主题根。preview 版本必须等于当前版本；保存原树与写入意图并 fsync 后才允许 execute。
+幕布按文档 ID 取得同进程锁和 OS 文件锁（共享位置为 `$XDG_STATE_HOME/lorehub/locks`，默认 `~/.local/state/lorehub/locks`），Soota 与 LoreLab 沿用历史共享位置，保持升级前后的写入互斥；目录名称不表示仍提供旧命令。读取不裁剪的全树和 HTML，拒绝目标父级下的同名主题根。preview 版本必须等于当前版本；保存原树与写入意图并 fsync 后才允许 execute。
 
 **一个 job 最多派发一次 node-import execute。** 返回未知、uncertain、冲突、拒绝或调用前后崩溃，都不重新导入。verify/publish 恢复只读取：
 
@@ -252,7 +252,7 @@ submit 冻结审阅和大纲；后续操作继续核对源文章与快照。原�
 
 | 文件 | 职责 |
 | --- | --- |
-| `cli.py` | knowledge/study 命令与产品兼容参数路由 |
+| `cli.py` | knowledge/study 命令与 LoreLab 参数路由 |
 | `runtime.py` | 配置优先级、独立/受管 CLI 绑定与私有回执 |
 | `bundles.py` | 现有 v2 内容包只读快照、全部登记产物核验与来源身份 |
 | `workflow.py` | knowledge 批次公共接口、选定交付结果与运行时注入点 |
@@ -263,4 +263,4 @@ submit 冻结审阅和大纲；后续操作继续核对源文章与快照。原�
 | `workflow_cleanup.py` | 授权删除门禁、预览与只读恢复 |
 | `study.py` | 现有文章快照、学习审阅与独立幕布交付，不改源文章或清理收藏 |
 
-上述实现位于 `src/soota/knowledge/`，由 Soota 独立维护；LoreLab 的 `init/batch/study` 和旧 `lorehub` 命令只作参数路由。工作流契约测试替换工具 CLI 并使用合成数据；各命令的实际覆盖以当前测试与运行结果为准。历史组合流程测试不代表文章模式或 study 已完成真实验收；mock 契约测试、文档检查均不等于账号、真实站点或真实云写入验收。
+上述实现位于 `src/soota/knowledge/`，由 Soota 独立维护；LoreLab 的 `init/batch/study` 只作参数路由。工作流契约测试替换工具 CLI 并使用合成数据；各命令的实际覆盖以当前测试与运行结果为准。历史组合流程测试不代表文章模式或 study 已完成真实验收；mock 契约测试、文档检查均不等于账号、真实站点或真实云写入验收。

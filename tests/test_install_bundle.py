@@ -15,14 +15,14 @@ from unittest.mock import patch
 
 from test_install import PACKAGING, common, fixture_source, installer, put
 
-spec = importlib.util.spec_from_file_location("lorehub_builder", PACKAGING / "build_release.py")
+spec = importlib.util.spec_from_file_location("lorelab_builder", PACKAGING / "build_release.py")
 builder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(builder)
 
 
 class BundleTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="lorehub bundle ")
+        self.temporary = tempfile.TemporaryDirectory(prefix="lorelab bundle ")
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name).resolve()
         self.root = self.base / "source"
@@ -30,7 +30,8 @@ class BundleTests(unittest.TestCase):
 
     def test_archive_keeps_component_sources_excludes_private_and_is_stable(self):
         for name in [".private/secrets.json", "dist/old.tar.gz", "cache/session.json",
-                     "modules/mubu-cli/.local/token", "modules/soota/docs/private/plan.md"]:
+                     "modules/mubu-cli/.local/token", "modules/soota/docs/private/plan.md",
+                     "src/lorehub/cli.py", "skills/lorehub/SKILL.md"]:
             put(self.root, name, "MUST NOT SHIP")
         subprocess.run(["git", "init", "-q", self.root], check=True)
         subprocess.run(["git", "-C", self.root, "add", "."], check=True)
@@ -61,9 +62,11 @@ class BundleTests(unittest.TestCase):
         common.verify_bundle(unpacked)
         common.verify_components(unpacked)
         for path in ("modules/cubox-cli/main.go", "modules/mubu-cli/scripts/mubu_api.py",
-                     "modules/mubu-cli/docs/guide.md", "skills/lorehub/SKILL.md", "skills/lorelab/SKILL.md",
+                     "modules/mubu-cli/docs/guide.md", "skills/lorelab/SKILL.md",
                      "src/lorelab/cli.py", "NOTICE.md", "uv.lock"):
             self.assertTrue((unpacked / path).is_file(), path)
+        self.assertFalse((unpacked / "src/lorehub").exists())
+        self.assertFalse((unpacked / "skills/lorehub").exists())
 
     def test_missing_bundle_manifest_never_falls_back_to_source_build(self):
         (self.root / common.BUNDLE).unlink()
@@ -73,20 +76,42 @@ class BundleTests(unittest.TestCase):
         ):
             installer.install(self.root, self.base / "prefix")
 
-    def test_product_wheel_contains_new_and_legacy_packages_and_local_soota_dependency(self):
+    def test_product_wheel_has_only_lorelab_entry_and_local_soota_dependency(self):
         metadata = tomllib.loads((PACKAGING.parent / "pyproject.toml").read_text())
         self.assertEqual(metadata["project"]["name"], "lorelab")
         self.assertEqual(metadata["project"]["version"], "0.1.0")
         self.assertEqual(metadata["project"]["dependencies"], ["soota>=0.1.0"])
         scripts = metadata["project"]["scripts"]
-        self.assertEqual(scripts["lorelab"], scripts["lorehub"])
-        self.assertEqual(scripts["lorelab"], "lorelab.cli:main")
+        self.assertEqual(scripts, {"lorelab": "lorelab.cli:main"})
         self.assertEqual(metadata["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"],
-                         ["src/lorelab", "src/lorehub"])
+                         ["src/lorelab"])
         self.assertEqual(metadata["tool"]["uv"]["sources"]["soota"], {"path": "modules/soota"})
         locked = tomllib.loads((PACKAGING.parent / "uv.lock").read_text())
         soota = next(package for package in locked["package"] if package["name"] == "soota")
         self.assertEqual(soota["source"], {"directory": "modules/soota"})
+
+    def test_old_product_bundle_is_rejected_before_touching_existing_prefix(self):
+        lock = json.loads((self.root / "components.lock.json").read_text())
+        lock["product"]["name"] = "lorehub"
+        common.write_json(self.root / "components.lock.json", lock)
+        common.seal_bundle(self.root)
+        prefix = self.base / "existing prefix"
+        sentinel = put(prefix, "keep.txt", "existing installation")
+        before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        with self.assertRaisesRegex(common.PackagingError, "original installer"):
+            installer.install(self.root, prefix)
+        self.assertEqual(list(prefix.iterdir()), [sentinel])
+        self.assertEqual({p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()},
+                         before)
+
+    def test_new_bundle_rejects_retired_source_skill_and_wheel(self):
+        for name in ("src/lorehub/cli.py", "skills/lorehub/SKILL.md",
+                     "packaging/wheels/lorehub-0.1.0-py3-none-any.whl"):
+            with self.subTest(name=name):
+                path = put(self.root, name, "retired content")
+                with self.assertRaisesRegex(common.PackagingError, "forbidden bundle file"):
+                    common.seal_bundle(self.root)
+                path.unlink()
 
     def test_payload_builds_product_and_soota_only_from_local_source(self):
         put(self.root, "modules/cubox-cli/go.mod", "module example.com/synthetic/cubox\n")

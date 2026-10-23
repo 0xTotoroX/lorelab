@@ -1,6 +1,6 @@
 """[INPUT]: 已安装组件清单、固定运行时、新旧产品环境变量与 Soota 配置接口。
 [OUTPUT]: 显式组件调用、私有 JSON 回执和绑定路径；配置委派给 Soota。
-[POS]: LoreLab 分发运行时；LoreHub 使用模块别名，不维护第二份配置或工作流。
+[POS]: LoreLab 分发运行时；历史配置和运行时绑定可读，不提供旧名称命令。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 

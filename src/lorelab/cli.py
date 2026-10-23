@@ -39,7 +39,7 @@ def parser() -> argparse.ArgumentParser:
 def skill_list() -> list[dict]:
     root = runtime.root()
     manifest = json.loads((root / "components.lock.json").read_text())
-    result = [{"name": name, "path": str(root / "skills" / name / "SKILL.md")} for name in ("lorelab", "lorehub")]
+    result = [{"name": "lorelab", "path": str(root / "skills/lorelab/SKILL.md")}]
     for entry in manifest["components"].values():
         result.append({"name": entry["skill"]["name"], "path": str(root / entry["skill"]["path"] / "SKILL.md")})
     return result

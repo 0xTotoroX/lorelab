@@ -2,7 +2,7 @@
 """隔离安装完整 LoreLab，兼容已有 LoreHub prefix，检查成功后原子切换 current。
 
 [INPUT]: 完整源码或校验通过的 bundle、prefix、可选 skills-dir。
-[OUTPUT]: 独立 release、绝对路径 runtime.json 与稳定命令/Skill 链接。
+[OUTPUT]: 独立 release、四个命令/Skill 链接；成功激活时退役本 prefix 的旧入口。
 [POS]: packaging 安装事务；不读写用户账号或调用云端业务接口。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -33,7 +33,6 @@ from common import (
     create_venv,
     get_uv,
     product_name,
-    product_skills,
     run,
     sha256,
     source_files,
@@ -54,15 +53,29 @@ def require_directory(path: Path) -> None:
         raise PackagingError(f"refusing non-directory/symlink: {path}")
 
 
+def link_points_to(path: Path, target: Path) -> bool:
+    # 只认安装器建立的固定路径，不沿任意用户软链接推断归属。
+    if not path.is_symlink():
+        return False
+    destination = path.parent / os.readlink(path)
+    if os.path.abspath(destination) != str(target):
+        return False
+    # 含「其他软链接/..」的目标不能只用字符串归一化后就视作本 prefix。
+    try:
+        return destination.resolve() == target.resolve()
+    except (OSError, RuntimeError):
+        return False
+
+
 def check_link(path: Path, target: Path) -> None:
     if not lexists(path):
         return
-    if path.is_symlink() and os.path.abspath(path.parent / os.readlink(path)) == str(target):
+    if link_points_to(path, target):
         return
     raise PackagingError(f"refusing to overwrite existing non-LoreLab/LoreHub path: {path}")
 
 
-def check_destinations(prefix: Path, skills_dir: Path | None, *, skills: dict[str, str] | None = None) -> None:
+def check_destinations(prefix: Path, skills_dir: Path | None) -> None:
     for directory in [prefix / "releases", prefix / "bin"]:
         require_directory(directory)
     current = prefix / "current"
@@ -84,7 +97,7 @@ def check_destinations(prefix: Path, skills_dir: Path | None, *, skills: dict[st
         if skills_dir == prefix or any(skills_dir.is_relative_to(prefix / part)
                                       for part in ("releases", "current", "bin")):
             raise PackagingError("skills-dir must not overlap releases/current/bin or equal prefix")
-        for name in SKILLS if skills is None else skills:
+        for name in SKILLS:
             check_link(skills_dir / name, prefix / "current/skills" / name)
 
 
@@ -117,14 +130,12 @@ def prepare_runtime(release: Path) -> dict:
                    "SOOTA_KNOWLEDGE_COMPONENTS_LOCK": str(source / "components.lock.json"),
                    "SOOTA_AUTO_UPDATE": "false", "CUBOX_NO_UPDATE_NOTIFIER": "1", "PYTHONNOUSERSITE": "1",
                    "PYTHONDONTWRITEBYTECODE": "1"}
-    # 两个产品命令始终进入同一模块；旧 bundle 仍使用其中已封存的 lorehub 模块。
-    for name in ("lorelab", "lorehub"):
-        write_launcher(release / "bin" / name, [python, "-I", "-B", "-m", f"{product_name(source)}.cli"], environment)
+    write_launcher(release / "bin/lorelab", [python, "-I", "-B", "-m", "lorelab.cli"], environment)
     write_launcher(release / "bin/soota", tools["soota"], environment)
     # 幕布脚本依靠相邻 mubu/ 导入，不能加会移除脚本目录的 -I。
     write_launcher(release / "bin/mubu-cli", tools["mubu"], environment)
     (release / "skills").mkdir()
-    for name, path in product_skills(source).items():
+    for name, path in SKILLS.items():
         (release / "skills" / name).symlink_to(f"../source/{path}", target_is_directory=True)
     return runtime
 
@@ -154,28 +165,38 @@ def smoke_check(release: Path) -> None:
 
 
 def activate(prefix: Path, release: Path, skills_dir: Path | None) -> None:
-    skills = product_skills(release / "source")
-    check_destinations(prefix, skills_dir, skills=skills)
+    check_destinations(prefix, skills_dir)
     links = [(prefix / "bin" / name, Path("../current/bin") / name) for name in COMMANDS]
+    obsolete = [(prefix / "bin/lorehub", prefix / "current/bin/lorehub")]
     if skills_dir is not None:
-        links += [(skills_dir / name, prefix / "current/skills" / name) for name in skills]
+        links += [(skills_dir / name, prefix / "current/skills" / name) for name in SKILLS]
+        obsolete.append((skills_dir / "lorehub", prefix / "current/skills/lorehub"))
     created = []
+    retired = []
     pending = prefix / f".current-{uuid.uuid4().hex}"
     try:
         for link, target in links:
             link.parent.mkdir(parents=True, exist_ok=True)
             if not lexists(link):
                 link.symlink_to(target)
-                created.append(link)
+                created.append((link, target))
         pending.symlink_to(Path("releases") / release.name, target_is_directory=True)
-        # 最后一个可能失败的操作；已有入口与 Skills 都通过 current 同时换代。
+        # 退役发生在切换前，记录原始链接文本，异常时恢复旧入口。
+        for link, target in obsolete:
+            if link_points_to(link, target):
+                original = os.readlink(link)
+                link.unlink()
+                retired.append((link, original))
+        # 最后一个可能失败的操作；此后不再清理旧链接或旧 release。
         os.replace(pending, prefix / "current")
     except BaseException:
-        for link in reversed(created):
-            link.unlink()
-        raise
-    finally:
+        for link, original in reversed(retired):
+            link.symlink_to(original)
+        for link, target in reversed(created):
+            if link_points_to(link, Path(os.path.abspath(link.parent / target))):
+                link.unlink()
         pending.unlink(missing_ok=True)
+        raise
 
 
 def install(root: Path, prefix: Path, skills_dir: Path | None = None) -> Path:
@@ -198,7 +219,7 @@ def install(root: Path, prefix: Path, skills_dir: Path | None = None) -> Path:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise PackagingError("another installation is using this prefix") from error
-        check_destinations(prefix, skills_dir, skills=product_skills(root))
+        check_destinations(prefix, skills_dir)
         (prefix / "releases").mkdir(exist_ok=True)
         files = list(bundle["files"]) + [BUNDLE] if bundle else source_files(root)
         fingerprint = bundle["release_id"] if bundle else "source-" + hashlib.sha256(

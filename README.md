@@ -15,7 +15,7 @@ export PATH="$HOME/.local/share/lorelab/bin:$PATH"
 lorelab doctor
 ```
 
-安装包含产品入口、三个独立 CLI、四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）及 `lorehub` 兼容 Skill。遇到已有的非本产品 Skill 会停止，保护原安装；可以省略 `--skills-dir`，再用 `lorelab skills list` 定位随包 Skill，或使用新的项目 Skill 目录。
+安装包含四个 CLI（`lorelab`、`soota`、`cubox-cli`、`mubu-cli`）和四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）。遇到已有的非本产品 Skill 会停止，保护原安装；可以省略 `--skills-dir`，再用 `lorelab skills list` 定位随包 Skill，或使用新的项目 Skill 目录。
 
 发行包包含 Cubox 二进制、Python 依赖 wheel 和全部组件源码。首次安装仍可能联网获取 uv 和 Python；账号登录、浏览器桥接及可选媒体工具按任务配置。源码构建还需要 Go。详见[安装、更新与恢复](docs/installation.md)。
 
@@ -70,7 +70,7 @@ soota study verify /path/to/study-job
 
 ## 兼容与独立维护
 
-`lorelab init/batch/study` 是上述 Soota 命令的薄路由，旧 `lorehub init/batch/study` 继续可用。已有冻结任务按原绝对路径恢复，旧配置原位沿用；安装升级可以继续使用原 LoreHub prefix，无需搬动历史 release。配置优先级见 [Soota 配置与兼容入口](modules/soota/docs/knowledge.md#配置独立组件与兼容入口)。
+`lorelab init/batch/study` 是上述 Soota 命令的薄路由。旧 `lorehub` 命令、Python 兼容入口和 Skill 已移除；已有冻结任务可交给 `soota knowledge`、`soota study` 或对应 LoreLab 路由，继续按原绝对路径恢复，旧配置原位沿用。安装升级可以继续使用原 LoreHub prefix；安装器清理它拥有的旧命令和 Skill 链接，历史 release 保留作备份。配置优先级见 [Soota 配置与数据兼容](modules/soota/docs/knowledge.md#配置独立组件与兼容入口)。
 
 ```sh
 lorelab tool cubox -- card batch --ids-file /path/to/card-ids.txt
@@ -80,7 +80,7 @@ lorelab components verify
 lorelab components export soota /path/to/new-soota-checkout
 ```
 
-`lorelab tool` 使用当前产品版本绑定的入口，不从 PATH 误选另一份组件。独立导出的 Soota 包含知识流程及完整 Skill 引用，不依赖 LoreLab 或 LoreHub Python 包；Cubox 和幕布按需要使用各自 CLI。开发时直接修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁、重建并安装。导出不自动同步外部仓库。详见[组件维护](docs/components.md)。
+`lorelab tool` 使用当前产品版本绑定的入口，不从 PATH 误选另一份组件。独立导出的 Soota 包含知识流程及完整 Skill 引用，不依赖产品 Python 包；Cubox 和幕布按需要使用各自 CLI。开发时直接修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁、重建并安装。导出不自动同步外部仓库。详见[组件维护](docs/components.md)。
 
 ## 验证与构建
 

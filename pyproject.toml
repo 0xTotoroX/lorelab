@@ -12,7 +12,6 @@ dependencies = ["soota>=0.1.0"]
 
 [project.scripts]
 lorelab = "lorelab.cli:main"
-lorehub = "lorelab.cli:main"
 
 [tool.uv.sources]
 soota = { path = "modules/soota" }
@@ -21,7 +20,7 @@ soota = { path = "modules/soota" }
 dev = ["pytest>=8,<9", "PyYAML>=6,<7", "ruff>=0.14,<1"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lorelab", "src/lorehub"]
+packages = ["src/lorelab"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

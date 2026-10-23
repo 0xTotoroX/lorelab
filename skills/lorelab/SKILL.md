@@ -21,11 +21,11 @@ LoreLab 打包自有 Soota、Cubox CLI、幕布 CLI 及完整 Skill。它负责�
 
 `ORIGINAL_ARGS` 不重复附上可执行文件，幕布 Agent 调用仍须带 `--agent`。正在恢复的知识或学习任务继续走 Soota 的任务接口，不绕过其冻结和写入检查直接重发底层命令。
 
-`lorelab init/batch/study` 分别路由到 `soota knowledge init`、`soota knowledge`、`soota study`；旧 `lorehub` 命令也路由同一份实现。字段、默认行为、旧配置与任务兼容只查 [Soota 知识契约](../../modules/soota/docs/knowledge.md)及当前帮助，本 Skill 不复制流程或提示词。
+`lorelab init/batch/study` 分别路由到 `soota knowledge init`、`soota knowledge`、`soota study`。旧 `lorehub` 命令、Python 兼容入口和 Skill 已移除；恢复旧任务时把原 JOB 路径交给上述现行入口。字段、默认行为、旧配置与任务兼容只查 [Soota 知识契约](../../modules/soota/docs/knowledge.md)及当前帮助，本 Skill 不复制流程或提示词。
 
 ## 安装与组件维护
 
-阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。Skills 注册目录由安装器 `--skills-dir` 指定；保留整个 Skill 及相对引用闭包，不能只复制孤立的 SKILL.md。旧 prefix 可以继续升级，不移动含绝对路径的历史 release。
+阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。产品分发四个 CLI（`lorelab`、`soota`、`cubox-cli`、`mubu-cli`）和四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）。Skills 注册目录由安装器 `--skills-dir` 指定；保留整个 Skill 及相对引用闭包，不能只复制孤立的 SKILL.md。旧 prefix 可以继续升级，安装器清理它拥有的旧命令与 Skill 链接，历史 release 留作备份；不移动含绝对路径的安装目录，也不为名称统一改写旧配置或锁目录。
 
 组件源码和对应 Skill 在 `modules/` 内一起维护。使用 `lorelab components verify` 检查内容指纹；审阅本轮变化并完成相关验证后才 `refresh`，再重建受管 runtime。`components export` 导出自含源码和 Skill，不自动同步其他仓库。CLI 和 Skill 不切换到原作者发行包，不自动合并上游或推送。
 
