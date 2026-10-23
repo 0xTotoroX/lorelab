@@ -11,6 +11,8 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 所有实际调用在子命令前添加 `--agent`，复用桌面会话时加 `--auth desktop`。先读取 [Agent 调用约定](docs/agent-usage.md)，依据 JSON 的 `ok/status/error.code/data` 和退出码处理，不解析中文文案判断成功。
 
+在 LoreHub 中使用 `lorehub tool mubu -- ORIGINAL_ARGS`，例如 `lorehub tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorehub doctor` 和 `lorehub skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。受管批次使用 `lorehub batch` 的发布和核对流程，不能另起写入者绕过批次状态。
+
 - 在用户已授权的范围内完成读取、预览与执行，不为 `--execute` 再次索要相同授权。
 - 节点/媒体执行必须带预览的 `--expect-version`；同一文档串行操作。
 - `AUTH_REQUIRED` 时停止写入并报告需要登录；不等待交互输入，不绕过登录。
@@ -21,7 +23,7 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 ## Fork 能力与调用边界
 
-本项目 Fork 自 [liuboacean/mubu-integration](https://github.com/liuboacean/mubu-integration)。先查看当前 [README](.github/README.zh-CN.md)、[节点说明](docs/node-editing.md) 与 [媒体说明](docs/media.md)，区分已发布功能与待发布的 1.4.0 功能。
+本项目 Fork 自 [liuboacean/mubu-integration](https://github.com/liuboacean/mubu-integration)。先查看当前 [README](README.zh-CN.md)、[节点说明](docs/node-editing.md) 与 [媒体说明](docs/media.md)，区分当前源码能力与已发布功能。
 
 - **读取**：密码模式读取环境变量或仓库外的凭据文件；`--auth desktop` 只读本机幕布已有登录记录。上传仅读取用户指定的本地文件。
 - **本地写入**：上游密码 Token 缓存、本地回收站、显式导出文件，以及节点/媒体操作日志。日志可能含完整文档，禁止提交或公开；桌面 Token 和 TOS 临时凭据不写日志。
@@ -370,9 +372,7 @@ MUBU_MEMBER_ID=你的幕布 colla 成员 ID
 
 ### 脚本路径
 
-```
-~/.workbuddy/skills/mubu-integration/scripts/mubu_api.py
-```
+解析本 `SKILL.md` 的符号链接，从其真实目录定位 `scripts/mubu_api.py`；不要假设 Agent 的安装目录。用户可指定 skills-dir，安装或导出需保留 `scripts/`、`docs/`、依赖文件和本 Skill 的引用闭包。LoreHub 安装优先使用上方 managed 命令入口。
 
 ### 常用命令速查
 

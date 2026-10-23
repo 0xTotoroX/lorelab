@@ -1,7 +1,8 @@
 {
   "name": "cubox-cli",
   "version": "1.0.10",
-  "description": "The official Cubox CLI tool, built for humans and AI Agents",
+  "description": "LoreHub-maintained Cubox CLI, built from bundled Go source",
+  "private": true,
   "bin": {
     "cubox-cli": "scripts/run.js"
   },
@@ -22,11 +23,20 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OLCUBO/cubox-cli.git"
+    "url": "git+https://github.com/0xTotoroX/cubox-cli.git"
   },
   "license": "MIT",
   "files": [
     "scripts/install.js",
-    "scripts/run.js"
+    "scripts/run.js",
+    "go.mod",
+    "go.sum",
+    "main.go",
+    "cmd/",
+    "internal/",
+    "Makefile",
+    "skills/",
+    "LICENSE",
+    "FORK.md"
   ]
 }

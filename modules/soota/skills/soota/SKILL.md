@@ -7,6 +7,8 @@ description: Use the local Soota CLI to collect content, download media and subt
 
 Use an installed `soota` command. For a source checkout, resolve this SKILL.md symlink, locate the repository two directories above its skill directory, verify pyproject.toml belongs to Soota, and run `uv run --project <repository> soota ...`. Do not hard-code a personal checkout path. Codex calls this CLI; Soota chooses its internal Providers. Do not register opencli-mcp as a separate Codex tool for this workflow.
 
+In LoreHub, use `lorehub tool soota -- ORIGINAL_ARGS` and locate the bound source with `lorehub doctor` / `lorehub skills list`; keep the original Soota arguments after `--`. LoreHub's product Skill owns cross-component batch submission, publishing and cleanup. This Skill continues to own collection, conversion, budget, artifacts and Soota task recovery, and remains usable in an independent component export. Managed routing does not authorize extra analysis, destination writes, paid requests or source deletion.
+
 ## Choose the requested output
 
 Use `ingest INPUT --want ... --json` for explicit artifacts and combinations: `video`, `audio`, `transcript`, `context`, `markdown`, `images`, `data`, `analysis`, `note`, `outline`, `article`. `--optional` declares outputs whose failure does not block the required ones. Inputs can be URLs, local files, a bundle directory or manifest, and `--inputs-file` lists. For batch processing, existing bundles, explicit native operations, analysis handoffs or exports, read [task workflow](references/tasks.md).
