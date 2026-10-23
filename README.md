@@ -60,7 +60,7 @@ lorehub components export cubox /path/to/new-cubox-checkout
 ## 验证与构建
 
 ```sh
-uv run --with pytest pytest
+uv run --python 3.12 pytest
 PYTHONPATH=src python3 -m lorehub.cli components verify
 python3 packaging/build_release.py --output-dir dist
 ```
