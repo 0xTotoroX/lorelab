@@ -5,13 +5,13 @@
 
 [English](./README.md) | [中文版](./README.zh.md)
 
-The LoreHub-maintained Cubox CLI fork. Save, search, read, and use what you read with AI. Your personal reading memory, now usable.
+The LoreLab-maintained Cubox CLI fork. Save, search, read, and use what you read with AI. Your personal reading memory, now usable.
 
 [Install](#installation) · [Auth](#authentication) · [Commands](#commands) · [AI Agent](#quick-start-ai-agent) · [Examples](#examples) · [Development](#development)
 
 ## ⭐ Fork Addition: What This Fork Adds Over the Official CLI
 
-> This component is maintained in LoreHub. Installation and updates use the bundled source and Skill, not the original author's releases.
+> This component is maintained in LoreLab. Installation and updates use the bundled source and Skill, not the original author's releases.
 
 Compared with the official CLI (v1.0.10), this fork **unlocks the full web/app API group** that the official CLI does not expose:
 
@@ -56,7 +56,7 @@ Details and reverse-engineering notes: see [FORK.md](./FORK.md).
 
 ### Requirements
 
-- LoreHub release installation: use the product installer; no separate Node.js or Go installation is needed.
+- LoreLab release installation: use the product installer; no separate Node.js or Go installation is needed.
 - Independent source build: Go 1.23+; Node.js 16+ only when using the local npm wrapper.
 
 ### Quick Start (Human Users)
@@ -65,7 +65,7 @@ Details and reverse-engineering notes: see [FORK.md](./FORK.md).
 
 #### Install
 
-Use the LoreHub product installer for the matched CLI and Skill. To install an independently exported component instead:
+Use the LoreLab product installer for the matched CLI and Skill. To install an independently exported component instead:
 
 ```bash
 cd /path/to/exported-cubox-cli
@@ -110,7 +110,7 @@ cubox-cli card detail --id CARD_ID
 
 **Step 1 — Install**
 
-Use LoreHub's installer and `lorehub skills list`, or follow the independent source installation above. Keep the CLI and complete Skill from the same exported version.
+Use LoreLab's installer and `lorelab skills list`, or follow the independent source installation above. Keep the CLI and complete Skill from the same exported version.
 
 **Step 2 — Authenticate**
 

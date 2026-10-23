@@ -104,7 +104,7 @@ python3 scripts/mubu_api.py create "周会" --folder <folder-id> --md examples/w
 
 ## 📦 Install
 
-This LoreHub-maintained component is installed with the product's CLI and Skill bundle. For standalone use, export the component from LoreHub and register that complete directory in your Agent; its root SKILL.md references the included scripts and docs. Updates use the same maintained source, not the original author's Skill package.
+This LoreLab-maintained component is installed with the product's CLI and Skill bundle. For standalone use, export the component from LoreLab and register that complete directory in your Agent; its root SKILL.md references the included scripts and docs. Updates use the same maintained source, not the original author's Skill package.
 
 A standalone source installation requires **Python 3.9+** and the runtime dependencies:
 

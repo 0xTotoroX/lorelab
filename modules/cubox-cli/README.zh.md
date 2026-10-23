@@ -5,7 +5,7 @@
 
 [English](./README.md) | [中文版](./README.zh.md)
 
-LoreHub 维护的 Cubox CLI 二次开发版。收藏、搜索、阅读，并借助 AI 使用你读过的内容。让你的个人阅读记忆，真正被用起来。
+LoreLab 维护的 Cubox CLI 二次开发版。收藏、搜索、阅读，并借助 AI 使用你读过的内容。让你的个人阅读记忆，真正被用起来。
 
 [安装](#安装) · [认证](#认证) · [命令](#命令) · [AI Agent](#ai-agent-快速开始) · [示例](#示例) · [开发](#开发)
 
@@ -30,7 +30,7 @@ LoreHub 维护的 Cubox CLI 二次开发版。收藏、搜索、阅读，并借�
 
 ### 前置要求
 
-- LoreHub 发行包使用产品安装器，无需单独安装 Node.js 或 Go。
+- LoreLab 发行包使用产品安装器，无需单独安装 Node.js 或 Go。
 - 独立源码构建需要 Go 1.23+；只有使用本地 npm 包装器时才需要 Node.js 16+。
 
 ### 快速开始（人类用户）
@@ -39,14 +39,14 @@ LoreHub 维护的 Cubox CLI 二次开发版。收藏、搜索、阅读，并借�
 
 #### 安装
 
-优先使用 LoreHub 产品安装器，成套安装匹配的 CLI 与 Skill。独立导出的组件可在其目录中安装：
+优先使用 LoreLab 产品安装器，成套安装匹配的 CLI 与 Skill。独立导出的组件可在其目录中安装：
 
 ```bash
 cd /path/to/exported-cubox-cli
 make install
 ```
 
-也可在同一目录执行 `npm install -g .`，它会构建随包 Go 源码。把完整的 `skills/cubox` 目录注册到 Agent 的 Skill 目录，保留引用文件，不只复制 `SKILL.md`。本组件是私有源码包，更新同样从 LoreHub 导出和构建，不安装公共 npm 包或原作者发行版。
+也可在同一目录执行 `npm install -g .`，它会构建随包 Go 源码。把完整的 `skills/cubox` 目录注册到 Agent 的 Skill 目录，保留引用文件，不只复制 `SKILL.md`。本组件是私有源码包，更新同样从 LoreLab 导出和构建，不安装公共 npm 包或原作者发行版。
 
 #### 登录
 
@@ -84,7 +84,7 @@ cubox-cli card detail --id CARD_ID
 
 **步骤 1：安装**
 
-使用 LoreHub 安装器与 `lorehub skills list`，或遵照上面的独立源码安装方式；CLI 和完整 Skill 来自同一导出版本。
+使用 LoreLab 安装器与 `lorelab skills list`，或遵照上面的独立源码安装方式；CLI 和完整 Skill 来自同一导出版本。
 
 **步骤 2：认证**
 

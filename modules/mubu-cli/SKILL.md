@@ -11,7 +11,7 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 所有实际调用在子命令前添加 `--agent`，复用桌面会话时加 `--auth desktop`。先读取 [Agent 调用约定](docs/agent-usage.md)，依据 JSON 的 `ok/status/error.code/data` 和退出码处理，不解析中文文案判断成功。
 
-在 LoreHub 中使用 `lorehub tool mubu -- ORIGINAL_ARGS`，例如 `lorehub tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorehub doctor` 和 `lorehub skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。受管批次使用 `lorehub batch` 的发布和核对流程，不能另起写入者绕过批次状态。
+在 LoreLab 中使用 `lorelab tool mubu -- ORIGINAL_ARGS`，例如 `lorelab tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorelab doctor` 和 `lorelab skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。已有知识或学习任务使用 `soota knowledge`、`soota study` 或对应 LoreLab 路由发布与核对，不能另起写入者绕过批次状态。下方 `python3 scripts/mubu_api.py` 示例是独立源码形式；LoreLab 安装中统一把该前缀替换为 `lorelab tool mubu --`，保留其后的 `--agent`、认证选项和子命令，使用产品绑定的解释器与依赖。
 
 - 在用户已授权的范围内完成读取、预览与执行，不为 `--execute` 再次索要相同授权。
 - 节点/媒体执行必须带预览的 `--expect-version`；同一文档串行操作。
@@ -359,6 +359,8 @@ MUBU_MEMBER_ID=你的幕布 colla 成员 ID
 
 ### 前置检查
 
+LoreLab 成套安装先运行 `lorelab doctor`，再用受管入口检查所选认证模式；不另外安装全局 Python 依赖。以下环境准备仅适用于独立源码及密码认证；`--auth desktop` 复用桌面会话，无需手机号密码环境变量。
+
 1. 确认系统已安装 Python 3 和 requests 库：
    ```bash
    python3 -c "import requests; print('OK')"
@@ -372,7 +374,7 @@ MUBU_MEMBER_ID=你的幕布 colla 成员 ID
 
 ### 脚本路径
 
-解析本 `SKILL.md` 的符号链接，从其真实目录定位 `scripts/mubu_api.py`；不要假设 Agent 的安装目录。用户可指定 skills-dir，安装或导出需保留 `scripts/`、`docs/`、依赖文件和本 Skill 的引用闭包。LoreHub 安装优先使用上方 managed 命令入口。
+解析本 `SKILL.md` 的符号链接，从其真实目录定位 `scripts/mubu_api.py`；不要假设 Agent 的安装目录。用户可指定 skills-dir，安装或导出需保留 `scripts/`、`docs/`、依赖文件和本 Skill 的引用闭包。LoreLab 安装优先使用上方 managed 命令入口。
 
 ### 常用命令速查
 
