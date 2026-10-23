@@ -17,10 +17,10 @@ try {
   fs.mkdirSync(binDir, { recursive: true });
   execFileSync("go", [
     "build", "-trimpath", "-ldflags",
-    `-s -w -X github.com/OLCUBO/cubox-cli/cmd.Version=${version}+lorehub`,
+    `-s -w -X github.com/OLCUBO/cubox-cli/cmd.Version=${version}`,
     "-o", binary, ".",
   ], { cwd: root, stdio: "inherit" });
-  console.log(`cubox-cli ${version}+lorehub built from bundled source`);
+  console.log(`cubox-cli ${version} built from bundled source`);
 } catch (error) {
   console.error(`Failed to build cubox-cli from bundled source: ${error.message}`);
   console.error("Install Go matching go.mod, then retry from this complete component source. No release fallback is used.");

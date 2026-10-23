@@ -9,6 +9,7 @@ three-error stop over complete outcomes. Legacy detail semantics stay unchanged.
 ## 成员清单
 
 - `client.go`: Client transport, authentication styles, API operations, shared throttle.
+- `folder_list_test.go`: 完全相同的文件夹记录去重；同 ID 冲突记录必须拒绝。
 - `types.go`: Existing API payload types, including the unchanged CardDetail.
 - `card_batch.go`: GetCardBatch, versioned result/error/count types, bounded workers and batch stop.
 - `card_content.go`: ClassifyCardContent; local Markdown evidence only, no completeness claim or network access.

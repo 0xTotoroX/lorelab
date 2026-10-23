@@ -1,5 +1,5 @@
 // [INPUT]: HTTP transport, API response types, and shared request admission.
-// [OUTPUT]: Client API operations; sendRequestAuth is reused by card batches.
+// [OUTPUT]: Client API operations; folder IDs are unique and conflicting duplicates fail.
 // [POS]: Shared transport for CLI and web/app API groups.
 // [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 package client
@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -220,7 +221,20 @@ func (c *Client) ListFolders() ([]Folder, error) {
 	if err := json.Unmarshal(data, &folders); err != nil {
 		return nil, fmt.Errorf("parsing folders: %w", err)
 	}
-	return folders, nil
+	// 服务端可能重复返回系统文件夹；只折叠字段完全一致的记录。
+	unique := make([]Folder, 0, len(folders))
+	seen := make(map[string]Folder, len(folders))
+	for _, folder := range folders {
+		if previous, ok := seen[folder.ID]; ok {
+			if !reflect.DeepEqual(previous, folder) {
+				return nil, fmt.Errorf("folder list contains conflicting entries for ID %q", folder.ID)
+			}
+			continue
+		}
+		seen[folder.ID] = folder
+		unique = append(unique, folder)
+	}
+	return unique, nil
 }
 
 func (c *Client) ListTags() ([]Tag, error) {

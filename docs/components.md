@@ -4,7 +4,7 @@ LoreHub 的产品源码是维护主源。组件在 `modules/` 保留构建文件
 
 ## 指纹和来源
 
-`components.lock.json` 的每个组件记录 `path`、`skill.name/path`、`repository`、`revision`、`version` 和 `tree_sha256`。`revision` 是导入来源提交，`version` 保留导入版本标记；它们不证明修改后的源码仍与导入提交完全相同。当前内容由 `tree_sha256` 绑定。刷新指纹不改写来源字段，也不是发布新组件版本。
+`components.lock.json` 的每个组件记录 `path`、`skill.name/path`、`repository`、`revision`、`version` 和 `tree_sha256`。`revision` 是导入来源提交，`version` 是当前构建的组件标记；更新标记时可用 `import_version` 保留原导入值。它们不证明修改后的源码仍与导入提交完全相同，当前内容由 `tree_sha256` 绑定。刷新指纹不改写来源和版本字段，也不是发布新组件版本。
 
 指纹使用组件根目录内每个有效文件的相对 POSIX 路径，包含点文件、源码、依赖锁、构建定义、许可证、文档、测试和 Skill。文件内容按原始字节计算 SHA-256，再对整个映射计算 SHA-256：
 

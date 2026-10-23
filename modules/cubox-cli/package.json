@@ -1,6 +1,6 @@
 {
   "name": "cubox-cli",
-  "version": "1.0.10",
+  "version": "1.0.10+lorehub.1",
   "description": "LoreHub-maintained Cubox CLI, built from bundled Go source",
   "private": true,
   "bin": {

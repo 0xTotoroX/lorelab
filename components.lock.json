@@ -9,12 +9,13 @@
       "path": "modules/cubox-cli",
       "repository": "git@github.com:0xTotoroX/cubox-cli.git",
       "revision": "d9e6edb6919741817af4fa11f6f4b02827097823",
-      "version": "1.0.10+fork.d9e6edb",
+      "version": "1.0.10+lorehub.1",
       "skill": {
         "name": "cubox",
         "path": "modules/cubox-cli/skills/cubox"
       },
-      "tree_sha256": "ef6bce31e031fdfb64c9f9129bd20e42e3d4b434345d717cb86e5e5256da018a"
+      "tree_sha256": "0e652e28aebf53bba1fe643054af68cd54d09e94201f9c5ac993110fdf0001a5",
+      "import_version": "1.0.10+fork.d9e6edb"
     },
     "soota": {
       "path": "modules/soota",
