@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.mubu_token
+.env.mubu
+.venv/
+.pytest_cache/
+.ruff_cache/
+.local/
