@@ -1,5 +1,5 @@
 """[INPUT]: Agent 审阅 JSON、来源 handoff 和目标规则所在目录。
-[OUTPUT]: 校验/冻结的 approved、Soota 完成回执与产物指纹。
+[OUTPUT]: 按文章或组合目标校验/冻结的 approved、Soota 完成回执与产物指纹。
 [POS]: 只验证机械契约；全文阅读、语义覆盖与大纲质量由 Agent 负责。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
@@ -26,11 +26,13 @@ from .workflow_state import (
     save,
     seal,
     unseal,
+    wants_outline,
 )
 
 
 def template(job: Path, state: dict) -> dict:
     bindings = unseal(job, state, "handoffs.json")
+    outline = wants_outline(unseal(job, state, "spec.json"))
     sources = []
     for source in unseal(job, state, "sources.json"):
         handoff = bindings.get(source["id"])
@@ -45,7 +47,7 @@ def template(job: Path, state: dict) -> dict:
                 "submission": {
                     **{k: handoff[k] for k in ("task_id", "item_id", "context_fingerprint")},
                     "note_markdown": "",
-                    "outline_markdown": "",
+                    **({"outline_markdown": ""} if outline else {}),
                 }
                 if handoff
                 else None,
@@ -105,6 +107,7 @@ def validate_outline(notes: list):
 
 def validate(job: Path, state: dict, review: dict) -> dict:
     spec = unseal(job, state, "spec.json")
+    output_fields = ("note_markdown", "outline_markdown") if wants_outline(spec) else ("note_markdown",)
     sources = {s["id"]: s for s in unseal(job, state, "sources.json")}
     bindings = unseal(job, state, "handoffs.json")
     require(isinstance(review, dict) and set(review) == {"sources", "notes"}, "审阅仅接受 sources 和 notes。")
@@ -150,19 +153,19 @@ def validate(job: Path, state: dict, review: dict) -> dict:
         submission = item["submission"]
         require(
             isinstance(submission, dict)
-            and set(submission) == {"task_id", "item_id", "context_fingerprint", "note_markdown", "outline_markdown"},
+            and set(submission) == {"task_id", "item_id", "context_fingerprint", *output_fields},
             "submission 字段不符。",
         )
         require(
             all(submission[k] == binding[k] for k in ("task_id", "item_id", "context_fingerprint")),
             "submission task/item/context 身份不符。",
         )
-        for field in ("note_markdown", "outline_markdown"):
+        for field in output_fields:
             body = submission[field]
             require(isinstance(body, str) and body.strip(), f"缺少 {field}。")
             require(
                 links(body, Path(binding["bundle"]), {binding["context"]: set(binding["evidence_ids"])}),
-                "每个来源的 note/outline 必须引用自己的实际 context 证据。",
+                "每个来源的提交产物必须引用自己的实际 context 证据。",
             )
         key = binding["item_id"]
         require(key not in submissions or submissions[key] == submission, "共享正文的同一 item 不能提交不同内容。")
@@ -170,7 +173,9 @@ def validate(job: Path, state: dict, review: dict) -> dict:
     require(isinstance(notes, list) and notes and all(isinstance(x, dict) for x in notes), "至少需要一份可发布笔记。")
     used, paths, titles = set(), set(), set()
     for note in notes:
-        fields = {"title", "relative_path", "source_ids", "markdown", "body_sha256", "outline"}
+        fields = {"title", "relative_path", "source_ids", "markdown", "body_sha256"}
+        if wants_outline(spec):
+            fields.add("outline")
         require(fields <= set(note) <= fields | {"evidence"}, "笔记字段不符，不能自行指定 destination/vault。")
         require(isinstance(note["title"], str) and note["title"].strip(), "笔记标题不能为空。")
         path = destination(spec, note["relative_path"])
@@ -218,18 +223,19 @@ def validate(job: Path, state: dict, review: dict) -> dict:
             not item["all_valuable_parts_handled"] or identity in used,
             "没有知识落点的来源不能声明所有有价值内容已处理。",
         )
-    validate_outline(notes)
+    if wants_outline(spec):
+        validate_outline(notes)
     return review
 
 
-def artifact_checks(folder: Path, binding: dict) -> dict[str, str]:
+def artifact_checks(folder: Path, binding: dict, *, with_outline: bool = True) -> dict[str, str]:
     manifest = read_json(inside(folder, "manifest.json"))
     require(
         manifest.get("schema_version") == 2 and manifest.get("context_fingerprint") == binding["context_fingerprint"],
         "Soota 完成包身份或 context 指纹不符。",
     )
     result = {}
-    for name in ("context.md", "note.md", "outline.md", "analysis.json"):
+    for name in ["context.md", "note.md", "analysis.json", *(["outline.md"] if with_outline else [])]:
         matches = [a for a in manifest.get("artifacts", []) if a.get("path") == name]
         require(len(matches) == 1 and matches[0].get("verification") == "hash", f"缺少已验证产物：{name}")
         path = inside(folder, name)
@@ -282,7 +288,11 @@ def complete(run, job: Path, state: dict, review: dict):
             and row.get("bundle") == binding["bundle"],
             f"来源 item 尚未完成：{identity}",
         )
-        checks.update(artifact_checks(Path(binding["bundle"]), binding))
+        checks.update(
+            artifact_checks(
+                Path(binding["bundle"]), binding, with_outline=wants_outline(unseal(job, state, "spec.json"))
+            )
+        )
         saved = read_json(Path(binding["bundle"]) / "analysis.json")
         require(
             all(saved.get(k) == v for k, v in submissions[binding["item_id"]].items()), "实际 Soota 产物不是本次提交。"
@@ -304,7 +314,8 @@ def submit_review(run, job: Path, state: dict, review_file: Path):
     complete(run, job, state, review)
     check_sources(job, state)
     seal(job, state, "approved.json", review)
-    seal(job, state, "outline.json", {"nodes": [n["outline"] for n in review["notes"]]})
+    if wants_outline(unseal(job, state, "spec.json")):
+        seal(job, state, "outline.json", {"nodes": [n["outline"] for n in review["notes"]]})
     state["status"] = "approved"
     save(job, state)
 
@@ -318,5 +329,6 @@ def check_approved(job: Path, state: dict):
         {s for n in approved["notes"] for s in n["source_ids"]} == set(state["completed_source_ids"]),
         "完成来源与 approved 不一致。",
     )
-    unseal(job, state, "outline.json")
+    if wants_outline(unseal(job, state, "spec.json")):
+        unseal(job, state, "outline.json")
     return approved

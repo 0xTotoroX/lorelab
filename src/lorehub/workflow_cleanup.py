@@ -1,4 +1,4 @@
-"""[INPUT]: prepare 授权、冻结覆盖审阅、笔记与大纲实读结果。
+"""[INPUT]: prepare 授权与完成条件、冻结覆盖审阅、实际交付回读结果。
 [OUTPUT]: 清理预览、一次删除意图、active/archived 精确 URL 对账。
 [POS]: 收藏删除门禁；未知结果与恢复只能读取。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
@@ -13,7 +13,11 @@ from .workflow_state import call, data, require, rows, save, unseal
 
 
 def eligibility(job: Path, state: dict, approved: dict) -> list[str]:
-    if unseal(job, state, "spec.json")["delete_verified"] is not True:
+    spec = unseal(job, state, "spec.json")
+    if spec["delete_verified"] is not True:
+        return []
+    # 旧配置/批次的两处核对授权不能自动扩大为仅文章核对。
+    if spec.get("cleanup_after", "outline") == "outline" and state.get("mubu", {}).get("status") != "verified":
         return []
     sources = {s["id"]: s for s in unseal(job, state, "sources.json")}
     used = {s for n in approved["notes"] for s in n["source_ids"]}
@@ -66,7 +70,7 @@ def clean(run, job: Path, state: dict, execute: bool):
         save(job, state)
         return
     with writer(spec):
-        require(reconcile(run, job, state, approved), "知识/大纲尚未通过回读，不能清理。")
+        require(reconcile(run, job, state, approved), "本批交付尚未通过回读，不能清理。")
         if state.get("cleanup"):
             reconcile_delete(run, job, state)
             return
@@ -74,6 +78,8 @@ def clean(run, job: Path, state: dict, execute: bool):
         sources = unseal(job, state, "sources.json")
         retained = [s["id"] for s in sources if s["id"] not in ids]
         state["cleanup_preview"] = {"eligible_ids": ids, "retained_ids": retained, "executed": False}
+        if spec.get("cleanup_after", "outline") == "outline" and state.get("mubu", {}).get("status") != "verified":
+            state["cleanup_preview"]["reason"] = "原授权要求幕布核对；仅文章完成不扩大删除范围。"
         if not ids:
             save(job, state)
             return
@@ -94,7 +100,7 @@ def clean(run, job: Path, state: dict, execute: bool):
         if not execute:
             return
         check_approved(job, state)
-        require(reconcile(run, job, state, approved), "大纲回读失效。")
+        require(reconcile(run, job, state, approved), "交付回读失效。")
         reread(run, job, state, all_ids, "cleanup-final-cards")
         state["cleanup"] = {
             "status": "intent",

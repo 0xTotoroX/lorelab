@@ -82,7 +82,7 @@ Soota Skill 也支持将粘贴文字精炼归档到用户选择的知识库：Ag
 
 统一任务支持 `--workers 1..8`，默认 1。枚举和结果列表保持输入顺序，独立条目并行处理，同一内容包目录按顺序写入；条目失败不阻断其他条目。并发设置随任务保存，resume 可以覆盖；所有 worker 共享全批费用预留，恢复不清零。Ctrl-C 会等待在途条目收尾再保存暂停状态，可能需等 Provider 超时。
 
-需要从 Cubox 收藏整理知识时，[Soota Skill](skills/soota/references/knowledge.md) 可接续 Cubox CLI 批量读取、本地原样 source 快照、并行 context/note/outline 任务、Agent 按主题提炼与单写者落地，以及按请求通过 Mubu CLI 导入大纲并回读。正文可用不等于原文完整；缺失内容使用已有原站或字幕获取能力补取，未取得的部分继续报告缺失。
+需要从 Cubox 收藏整理知识时，[Soota Skill](skills/soota/references/knowledge.md) 可接续 Cubox CLI 批量读取、本地原样 source 快照、并行 context/note 任务、Agent 按主题整合为可连贯阅读的文章与单写者落地。文章核对后即可结束；只有明确请求学习复习时，再从选定文章组织大纲，通过 Mubu CLI 写入并回读。正文可用不等于原文完整；缺失内容使用已有原站或字幕获取能力补取，未取得的部分继续报告缺失。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
 

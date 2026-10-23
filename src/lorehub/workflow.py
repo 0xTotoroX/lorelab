@@ -1,5 +1,5 @@
 """[INPUT]: 显式收藏、目的地、Agent 审阅及 runtime.run_json。
-[OUTPUT]: prepare/submit/publish/verify/cleanup/status 的持久化知识流程。
+[OUTPUT]: 默认文章交付及显式大纲交付的持久化知识流程。
 [POS]: 产品跨工具编排；三工具仅经现有 CLI 调用，无服务私有 API。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
@@ -25,6 +25,7 @@ from .workflow_state import (
     save,
     seal,
     unseal,
+    wants_outline,
     write_json,
 )
 
@@ -41,9 +42,11 @@ def run_json(tool: str, args: list[str], receipt: Path | None = None, acceptable
 def report(job: Path, state: dict) -> dict:
     sources = unseal(job, state, "sources.json") if "sources.json" in state.get("sealed", {}) else []
     bindings = unseal(job, state, "handoffs.json") if "handoffs.json" in state.get("sealed", {}) else {}
+    spec = unseal(job, state, "spec.json")
     return {
         "ok": state["status"] not in {"prepare_failed", "publish_uncertain", "cleanup_uncertain"},
         **state,
+        "delivery": "article-and-outline" if wants_outline(spec) else "article",
         "sources": sources,
         "handoffs": bindings,
         "review_template": str(job / "review-template.json"),
@@ -57,18 +60,24 @@ def prepare(
     ids_file: Path,
     vault: Path,
     subdir: str,
-    mubu_doc: str,
+    mubu_doc: str | None = None,
     mubu_parent: str | None = None,
     delete_verified: bool = False,
     state_root: Path | None = None,
     mubu_auth: str = "desktop",
     source_bundles: dict[str, str] | None = None,
+    with_outline: bool = False,
+    cleanup_after: str = "article",
 ) -> dict:
     vault = Path(vault).expanduser().resolve()
     require(vault.is_dir(), "vault 必须已存在。")
     parts(subdir)
     require(type(delete_verified) is bool and mubu_auth in {"desktop", "password"}, "删除授权或认证参数无效。")
-    require(isinstance(mubu_doc, str) and bool(mubu_doc.strip()) and not mubu_doc.startswith("-"), "mubu_doc 无效。")
+    require(type(with_outline) is bool and cleanup_after in {"article", "outline"}, "交付或清理条件无效。")
+    if with_outline:
+        require(
+            isinstance(mubu_doc, str) and bool(mubu_doc.strip()) and not mubu_doc.startswith("-"), "mubu_doc 无效。"
+        )
     require(
         mubu_parent is None
         or isinstance(mubu_parent, str)
@@ -91,6 +100,9 @@ def prepare(
         "source_bundles 必须是本批 card_id 到包路径的映射。",
     )
     spec = {
+        "kind": "batch",
+        "with_outline": with_outline,
+        "cleanup_after": cleanup_after,
         "vault": str(vault),
         "subdir": subdir,
         "destination": str(vault / subdir),
@@ -151,7 +163,7 @@ def verify(job: str) -> dict:
         ids = [s["id"] for s in unseal(folder, state, "sources.json") if s["id"] not in deleted]
         reread(run_json, folder, state, ids, "verify-cards")
         with writer(unseal(folder, state, "spec.json")):
-            require(reconcile(run_json, folder, state, approved), "幕布尚无可确认的完整写入；只能对账，不能重导入。")
+            require(reconcile(run_json, folder, state, approved), "交付尚未完整核对；幕布只能对账，不能重导入。")
             if state.get("cleanup"):
                 reconcile_delete(run_json, folder, state)
         return report(folder, state)
@@ -171,5 +183,10 @@ def status(job: str) -> dict:
             check_approved(folder, state)
             from .workflow_publish import inspect_notes
 
-            inspect_notes(folder, state, read_json(folder / "approved.json"), require_saved=bool(state.get("mubu")))
+            inspect_notes(
+                folder,
+                state,
+                read_json(folder / "approved.json"),
+                require_saved=bool(state.get("notes") or state.get("mubu")),
+            )
         return report(folder, state)

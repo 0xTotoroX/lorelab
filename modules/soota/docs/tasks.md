@@ -95,7 +95,7 @@ Agent 读取本次 context、目标目录规则和最新 prompt，按主题拆�
 
 CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 的单份 `note.md` 与整包导出不代替多主题分类，也不会调用模型或自动合并已有知识。
 
-已授权的 Cubox 知识批次也可通过 Skill 接续：用 Cubox CLI 取得批量 CardDetail，将实际正文原样保存为稳定的本地 source 文件，旁存来源记录；再将文件路径写入输入清单，执行 `--provider local --want context,note,outline --workers 2`。`body_available` 只表示有正文，不能推断原文完整。只有描述、链接或空正文的条目保留缺失状态；需要补取时使用 Soota 已有原站／字幕入口，不能把描述作为完整原文。
+已授权的 Cubox 知识批次也可通过 Skill 接续：用 Cubox CLI 取得批量 CardDetail，将实际正文原样保存为稳定的本地 source 文件，旁存来源记录；再将文件路径写入输入清单，执行 `--provider local --want context,note --workers 2`，仅当用户明确请求大纲时再加入 `outline`。文章可独立交付；后续学习整理以明确选定的文章为输入，不依赖 Cubox 原收藏仍然存在。`body_available` 只表示有正文，不能推断原文完整。只有描述、链接或空正文的条目保留缺失状态；需要补取时使用 Soota 已有原站／字幕入口，不能把描述作为完整原文。
 
 Agent 按主题并行提炼独立草稿，由一个写入者核对证据、合并知识文件并串行提交分析；用户要求幕布时再通过 Mubu CLI `node-import` 预览、绑定版本执行并回读整篇。Soota 不调用这两个服务的私有 API，也不替用户决定收藏删除、分类、路径或写作 prompt；这些规则从目的地 `AGENTS.md` 读取。详细契约与恢复检查见 [知识提炼流程](../skills/soota/references/knowledge.md)。
 

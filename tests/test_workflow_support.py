@@ -120,7 +120,8 @@ class FakeCLI:
                 return {"dry_run": False, "count": len(ids)}
         if tool == "soota":
             if args[0] == "ingest":
-                assert args[args.index("--want") + 1] == "context,note,outline"
+                want = arg("--want").split(",")
+                assert want in [["context", "note"], ["context", "note", "outline"]]
                 assert arg("--provider") == "local" and arg("--workers") == "2" and arg("--max-cost") == "0"
                 inputs = json.loads(Path(arg("--inputs-file")).read_text())["inputs"]
                 for i, path in enumerate(inputs):
@@ -133,7 +134,7 @@ class FakeCLI:
                         "item_id": f"item-{i}",
                         "context_fingerprint": sha(context),
                         "context": str(folder / "context.md"),
-                        "requested_outputs": ["note", "outline"],
+                        "requested_outputs": want[1:],
                     }
                     write(folder / "analysis-request.json", request)
                     write(
@@ -155,7 +156,8 @@ class FakeCLI:
                     row = next(x for x in self.items if x["item_id"] == submission["item_id"])
                     folder = Path(row["bundle"])
                     for name, field in (("note.md", "note_markdown"), ("outline.md", "outline_markdown")):
-                        (folder / name).write_text(submission[field] + "\n\n[原文](context.md)\n")
+                        if field in submission:
+                            (folder / name).write_text(submission[field] + "\n\n[原文](context.md)\n")
                     write(folder / "analysis.json", submission)
                     manifest = json.loads((folder / "manifest.json").read_text())
                     manifest["artifacts"] = [
@@ -166,6 +168,7 @@ class FakeCLI:
                             ("outline.md", "outline"),
                             ("analysis.json", "analysis"),
                         )
+                        if (folder / name).is_file()
                     ]
                     write(folder / "manifest.json", manifest)
                     row["status"] = "waiting_analysis" if row["item_id"] in self.incomplete else "completed"
@@ -308,7 +311,11 @@ def review_for(result, vault, *, selected=None, complete=True):
         )
         source["submission"].update(
             note_markdown=f"# Point\n\nEvidence [source](context.md#{evidence})",
-            outline_markdown=f"- Point [source](context.md#{evidence})",
+            **(
+                {"outline_markdown": f"- Point [source](context.md#{evidence})"}
+                if "outline_markdown" in source["submission"]
+                else {}
+            ),
         )
         title = "Topic " + source["id"]
         text = f"# {title}\n\nPoint [source](<{binding['context']}#{evidence}>)\n"
@@ -319,7 +326,11 @@ def review_for(result, vault, *, selected=None, complete=True):
                 "source_ids": [source["id"]],
                 "markdown": text,
                 "body_sha256": sha(text),
-                "outline": {"text": title, "children": [{"text": "Point", "children": [{"text": "Condition"}]}]},
+                **(
+                    {"outline": {"text": title, "children": [{"text": "Point", "children": [{"text": "Condition"}]}]}}
+                    if "outline_markdown" in source["submission"]
+                    else {}
+                ),
             }
         )
     review["notes"] = notes

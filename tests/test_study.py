@@ -1,10 +1,8 @@
 """显式文章学习的快照、保全与幕布恢复；全部服务调用使用 fake Mubu。"""
 
-import inspect
 import json
 from copy import deepcopy
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from test_workflow_support import FakeCLI, sha, write
@@ -42,34 +40,14 @@ def workspace(tmp_path, monkeypatch):
 
 @pytest.fixture
 def shared_publisher(monkeypatch):
-    """主线新 API 自动走真实实现；隔离分支暂以适配桩验证同一共享算法。"""
-    if "checker" in inspect.signature(publisher.publish_approved).parameters:
-        monkeypatch.setattr(study, "publish_approved", publisher.publish_approved)
-        monkeypatch.setattr(study, "reconcile", publisher.reconcile)
+    """直接覆盖真实共享发布器，并确保学习任务完全不调用文章写入。"""
+    monkeypatch.setattr(study, "publish_approved", publisher.publish_approved)
+    monkeypatch.setattr(study, "reconcile", publisher.reconcile)
 
-        def forbidden(*args, **kwargs):
-            pytest.fail("study must not call write_notes, even for an identical existing article")
+    def forbidden(*args, **kwargs):
+        pytest.fail("study must not call write_notes, even for an identical existing article")
 
-        monkeypatch.setattr(publisher, "write_notes", forbidden)
-        return
-
-    original_publish, original_reconcile = publisher.publish_approved, publisher.reconcile
-
-    def read_existing(job, state, approved):
-        publisher.inspect_notes(job, state, approved, require_saved=True)
-
-    def adapted_publish(run, job, state, *, checker, write_articles=True):
-        assert checker is study.check_study and write_articles is False
-        with patch.object(publisher, "check_approved", checker), patch.object(publisher, "write_notes", read_existing):
-            return original_publish(run, job, state)
-
-    def adapted_reconcile(run, job, state, approved, *, checker):
-        assert checker is study.check_study
-        with patch.object(publisher, "check_approved", checker):
-            return original_reconcile(run, job, state, approved)
-
-    monkeypatch.setattr(study, "publish_approved", adapted_publish)
-    monkeypatch.setattr(study, "reconcile", adapted_reconcile)
+    monkeypatch.setattr(publisher, "write_notes", forbidden)
 
 
 def start(workspace, **kwargs):

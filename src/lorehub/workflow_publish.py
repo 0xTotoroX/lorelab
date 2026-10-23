@@ -1,5 +1,5 @@
 """[INPUT]: 冻结 approved、大纲、目标文件及 Mubu 全树回执。
-[OUTPUT]: 新笔记、单次导入意图和基于节点 ID 的全树对账。
+[OUTPUT]: 独立文章交付、按需单次导入意图和基于节点 ID 的全树对账。
 [POS]: 唯一写入者；遇未知结果只能读取，不重发导入。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
@@ -27,13 +27,19 @@ from .workflow_state import (
     seal,
     sync_dir,
     unseal,
+    wants_outline,
 )
 
 
 @contextmanager
 def writer(spec: dict):
     root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "lorehub/locks"
-    with lock(root / ("mubu-" + digest(spec["mubu_doc"].encode()) + ".lock")):
+    key = (
+        ("mubu-" + digest(spec["mubu_doc"].encode()))
+        if wants_outline(spec)
+        else ("article-" + digest(spec["destination"].encode()))
+    )
+    with lock(root / (key + ".lock")):
         yield
 
 
@@ -176,9 +182,15 @@ def execution_evidence(job: Path, state: dict, spec: dict):
             save(job, state)
 
 
-def reconcile(run, job: Path, state: dict, approved: dict) -> bool:
+def reconcile(run, job: Path, state: dict, approved: dict, *, checker=check_approved) -> bool:
     spec = unseal(job, state, "spec.json")
     inspect_notes(job, state, approved, require_saved=True)
+    if not wants_outline(spec):
+        checker(job, state)
+        state["article"] = {"status": "verified"}
+        state["status"] = "verified"
+        save(job, state)
+        return True
     intent = state.get("mubu")
     if not intent:
         return False
@@ -221,7 +233,7 @@ def reconcile(run, job: Path, state: dict, approved: dict) -> bool:
         state["status"] = "publish_uncertain"
         save(job, state)
         raise
-    check_approved(job, state)
+    checker(job, state)
     inspect_notes(job, state, approved, require_saved=True)
     intent.update(status="verified", root_ids=roots, verified_version=after["version"])
     state["status"] = "verified"
@@ -229,13 +241,18 @@ def reconcile(run, job: Path, state: dict, approved: dict) -> bool:
     return True
 
 
-def publish_approved(run, job: Path, state: dict):
-    approved = check_approved(job, state)
+def publish_approved(run, job: Path, state: dict, *, checker=check_approved, write_articles: bool = True):
+    approved = checker(job, state)
     spec = unseal(job, state, "spec.json")
     with writer(spec):
+        if not wants_outline(spec):
+            require(write_articles, "文章交付须启用正文写入。")
+            write_notes(job, state, approved)
+            reconcile(run, job, state, approved, checker=checker)
+            return
         if state.get("mubu"):
             # 包括超时、conflict 和调用前崩溃；永不再次进入写路径。
-            reconcile(run, job, state, approved)
+            reconcile(run, job, state, approved, checker=checker)
             return
         before = document(run, job, spec, "mubu-before-read")
         parent = spec["mubu_parent"]
@@ -262,8 +279,11 @@ def publish_approved(run, job: Path, state: dict):
             "幕布预览与当前版本不符；未执行。",
         )
         inspect_notes(job, state, approved, require_saved=False)
-        write_notes(job, state, approved)
-        check_approved(job, state)
+        if write_articles:
+            write_notes(job, state, approved)
+        else:
+            inspect_notes(job, state, approved, require_saved=True)
+        checker(job, state)
         seal(job, state, "mubu-before.json", before)
         state["mubu"] = {
             "status": "intent",
@@ -290,4 +310,4 @@ def publish_approved(run, job: Path, state: dict):
             state["status"] = "publish_uncertain"
             save(job, state)
             raise
-        reconcile(run, job, state, approved)
+        reconcile(run, job, state, approved, checker=checker)

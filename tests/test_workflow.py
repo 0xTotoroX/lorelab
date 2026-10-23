@@ -23,6 +23,7 @@ def setup(tmp_path, monkeypatch):
         monkeypatch.setattr(w, "run_json", fake)
         ids = tmp_path / "ids.txt"
         ids.write_text("\n".join(fake.cards))
+        kwargs.setdefault("with_outline", True)
         result = w.prepare(ids, vault, "Knowledge", "doc", state_root=tmp_path / "jobs", **kwargs)
         return fake, result, vault
 
@@ -147,7 +148,9 @@ def test_github_direct_and_descendant_protected(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "global"))
     ids = tmp_path / "ids"
     ids.write_text("safe\ndirect\nchild")
-    result = w.prepare(ids, vault, "Knowledge", "doc", delete_verified=True, state_root=tmp_path / "jobs")
+    result = w.prepare(
+        ids, vault, "Knowledge", "doc", with_outline=True, delete_verified=True, state_root=tmp_path / "jobs"
+    )
     assert [x["protected"] for x in result["sources"]] == [False, True, True]
     approve(result, vault)
     w.publish(result["job"])

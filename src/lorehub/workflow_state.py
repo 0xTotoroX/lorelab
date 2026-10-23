@@ -1,5 +1,5 @@
 """[INPUT]: 私有 job 文件、固定目的地和 CLI JSON。
-[OUTPUT]: 持久化、线程/进程锁、不可变文件及路径校验。
+[OUTPUT]: 持久化、线程/进程锁、不可变文件与路径校验、旧批次交付兼容。
 [POS]: workflow 共用的本地状态边界；不调用服务。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
@@ -23,6 +23,13 @@ class WorkflowError(RuntimeError):
 def require(condition, message):
     if not condition:
         raise WorkflowError(message)
+
+
+def wants_outline(spec: dict) -> bool:
+    """旧批次保留两处交付契约；新批次显式记录可选幕布目标。"""
+    value = spec.get("with_outline", True)
+    require(type(value) is bool, "with_outline 必须是布尔值。")
+    return value
 
 
 def digest(value: bytes) -> str:

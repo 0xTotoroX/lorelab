@@ -279,6 +279,9 @@ def collect(run, job: Path, state: dict, ids: list[str], supplied: dict):
 
 
 def handoffs(run, job: Path, state: dict):
+    from .workflow_state import wants_outline
+
+    outputs = ["note", "outline"] if wants_outline(unseal(job, state, "spec.json")) else ["note"]
     inputs = unseal(job, state, "input-map.json")
     bindings = {}
     if inputs:
@@ -296,7 +299,7 @@ def handoffs(run, job: Path, state: dict):
                     "--provider",
                     "local",
                     "--want",
-                    "context,note,outline",
+                    ",".join(["context", *outputs]),
                     "--workers",
                     "2",
                     "--max-cost",
@@ -338,9 +341,7 @@ def handoffs(run, job: Path, state: dict):
             )
             check_file(context_path, request.get("context_fingerprint"))
             require(Path(request.get("context", "")).resolve() == context_path, "handoff context 路径不符。")
-            require(
-                {"note", "outline"} <= set(request.get("requested_outputs", [])), "handoff 缺少 note/outline 目标。"
-            )
+            require(set(outputs) <= set(request.get("requested_outputs", [])), "handoff 缺少本批明确请求的目标。")
             evidence = re.findall(r'<a id="((?:para|seg)-[A-Za-z0-9_-]+)"></a>', context_path.read_text())
             require(evidence and len(set(evidence)) == len(evidence), "context 缺少稳定证据 ID 或 ID 重复。")
             binding = {

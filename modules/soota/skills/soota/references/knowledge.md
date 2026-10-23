@@ -1,6 +1,6 @@
-# Concise knowledge from preserved sources
+# Coherent knowledge from preserved sources
 
-Use when the user asks to save supplied text or a selected Cubox batch as concise, classified knowledge, with a Mubu outline only when requested. The Agent performs interpretation and topic placement; Soota preserves source context and validates submitted notes/outlines. An ordinary explanation or summary in chat does not require ingestion or authorize a collection write. Cubox and Mubu remain separate CLIs; this workflow does not call their private APIs or add an LLM to Soota.
+Use when the user asks to save supplied text or a selected Cubox batch as readable, source-backed knowledge, with a Mubu learning outline only when explicitly requested. The Agent performs interpretation and topic placement; Soota preserves source context and validates submitted notes/outlines. An ordinary explanation or summary in chat does not require ingestion or authorize a collection write. Cubox and Mubu remain separate CLIs; this workflow does not call their private APIs or add an LLM to Soota.
 
 ## Resolve the destination and preserve the source
 
@@ -58,25 +58,25 @@ Build a new Soota JSON list containing only actual source-file paths, for exampl
 
 ```bash
 soota ingest --inputs-file "/path/to/batch/source-inputs.json" \
-  --provider local --want context,note,outline --workers 2 --max-cost 0 \
+  --provider local --want context,note --workers 2 --max-cost 0 \
   --output "/path/to/source-bundles" --json
 ```
 
-If the user requests no outline, omit that target. Reading a local file with scope `full` proves only that the supplied snapshot was read in full. Carry the source record's original-content limitations into drafts and final knowledge. Record the job ID and card → source hash/path → task/item → context fingerprint mapping. Resume this job after failures; avoid creating another task for the same unchanged inputs merely to retry. A changed body gets a new source path and task; do not rewrite the existing task's local input.
+Add the outline target only when the user explicitly requests an outline. The article is a complete delivery on its own; Mubu is not a required next stage. Reading a local file with scope `full` proves only that the supplied snapshot was read in full. Carry the source record's original-content limitations into drafts and final knowledge. Record the job ID and card → source hash/path → task/item → context fingerprint mapping. Resume this job after failures; avoid creating another task for the same unchanged inputs merely to retry. A changed body gets a new source path and task; do not rewrite the existing task's local input.
 
 ## Extract knowledge using the current local prompt
 
 Read the actual `context.md`, `analysis-request.json` and neighboring provenance records. Use the local prompt as the writing contract; these are the default decision criteria when none is specified:
 
-- Split independent topics into separately reusable points; keep a procedure, its prerequisites and its exceptions together. Combine repeated expressions within the paste. Do not force a fixed number of notes or bullets.
+- Organize around a clear question or topic and connect related evidence from one or more sources into readable prose. Keep a procedure, its prerequisites and exceptions together. Separate unrelated topics when needed; do not create one note per post or split one thought into arbitrary bullets.
 - Keep conclusions, usable methods, definitions and evidence needed to understand them. Remove greetings, rhetoric, repetitions and unrelated anecdotes. Preserve a concrete example when the point would otherwise become ambiguous.
-- Write the shortest clear formulation that preserves the subject, action, conditions, numbers, units, negations, exceptions and certainty. A possibility stays possible; a recommendation stays a recommendation; an author's opinion retains its attribution. Do not invent missing causal links or use outside material to complete the source.
+- Write complete, connected explanations at the length the topic needs; use lists for actual steps, alternatives or comparisons. Preserve the subject, action, conditions, numbers, units, negations, exceptions and certainty. A possibility stays possible; a recommendation stays a recommendation; an author's opinion retains its attribution. Do not invent missing causal links or use outside material to complete the source.
 - Check each proposed point against actual source blocks. In the bundle note, attach existing `para-*` or `seg-*` evidence links to every retained point. The CLI rejects unknown IDs but does not require every point to have evidence; the Agent must verify coverage.
 - Search related destination notes by topic and distinctive terms, then read matches. An already covered point needs no duplicate prose. Add a genuinely new condition or example to the relevant section when authorized; preserve the existing text. Keep contradictory views attributed separately. Similar wording alone does not establish duplication.
 
-Use concise topic headings and paragraphs or bullets. Do not add an introduction, a second summary, a glossary or empty sections unless requested. If nothing reusable remains, report that result and retain the source; do not manufacture knowledge to complete a `note` target. The source can be saved with `--want context`, while a previously created note task remains unfinished and must be reported as such.
+Use clear topic headings and connected paragraphs. Completeness does not mean a long essay: do not pad a simple topic, invent transitions that imply unsupported causality, repeat a summary or add empty sections. If nothing reusable remains, report that result and retain the source; do not manufacture knowledge to complete a `note` target. The source can be saved with `--want context`, while a previously created note task remains unfinished and must be reported as such.
 
-Finalize the evidence-backed knowledge body before generating an outline. Derive the outline's branches, depth and number of points from that body's actual structure; do not fit it into a fixed count or let a preset outline dictate the prose. Read personal writing prompts only through the destination's applicable rules, without copying their text or paths here.
+Finalize and verify the evidence-backed knowledge body, then stop. Generate a learning outline only on an explicit request, now or later. Derive the outline's branches, depth and number of points from that body's actual structure; do not fit it into a fixed count or let a preset outline dictate the prose. Read personal writing prompts only through the destination's applicable rules, without copying their text or paths here.
 
 For a batch, group sources by the question/topic they address before assigning parallel Agent work. Give each Agent only the relevant contexts, provenance, existing-note excerpts and applicable local prompt. Agents write to distinct draft/submission files and return proposed points, evidence mappings, duplicate candidates and unresolved gaps. They do not edit the same knowledge file, run concurrent resume on one job, or write Mubu. Keep source-specific submissions traceable to their own task/item/fingerprint; cross-source synthesis belongs in the final topic draft, without attaching another source's paragraph IDs to a single-item submission. Limit Agent concurrency separately from Soota's `--workers` according to the available authorized runtime.
 
@@ -88,16 +88,18 @@ Choose one primary existing destination for each independent topic. Follow the d
 
 Use a single writer to create or supplement ordinary Markdown knowledge notes, following local edit permissions. Merge related points from the parallel drafts before writing, so several sources do not create parallel notes for the same topic. Preserve handwritten text and synchronized sections. If a safe in-place addition is unclear, save a separate linked supplement in an allowed location and report it. Re-read a target before writing; if it changed, incorporate the current content. Before repeating a completed batch or paste, verify the existing knowledge files and source references rather than creating duplicates.
 
-Use relative Markdown links from each knowledge file to the saved context and its actual evidence anchor. When supported by local rules, put provenance in one source section, with clear mapping to the retained points. Do not invent timestamps for pasted prose. An original post URL is additional provenance, not a replacement for the preserved source.
+Use the destination rules for provenance. When the orchestrator supports separate evidence mappings, keep private context paths and anchors in that mapping and retain original source URLs in the readable knowledge file. Otherwise use permitted relative links to saved context. Keep a clear mapping from claims to sources. Do not invent timestamps for pasted prose. An original post URL is additional provenance, not a replacement for the preserved source.
 
 CLI `--destination`/`--vault` exports the whole source bundle to a single destination. It neither splits knowledge files nor appends to existing notes. Do not export the same bundle repeatedly to topic folders as a substitute for classification.
 
 ## Deliver a requested Mubu outline
 
+Start from the explicitly selected, finalized article. Build a learning structure around concepts, relationships, comparisons or decisions; do not mechanically convert sentences into nested fragments. A complete short point can stay one node. Reading and verifying the article does not itself authorize publishing an outline, and a later Mubu request does not depend on the original Cubox card still existing.
+
 Use the installed Mubu CLI/Skill to resolve the executable, authentication mode and target document/root/parent from authorized local configuration. Check its help supports `node-import`; no global installation or direct service API is implied. Keep one writer per document. Prepare `outline.json` from the reviewed topic outline, using only `text`, optional plain-text `note`, and nested `children`:
 
 ```json
-{"nodes":[{"text":"Topic","note":"Source or knowledge-note reference","children":[{"text":"Supported point"}]}]}
+{"nodes":[{"text":"Topic","note":"Optional supporting explanation","children":[{"text":"Supported point"}]}]}
 ```
 
 `nodes` can contain one or several trees; submit the complete allowed batch as one `create` event rather than issuing a request per node. Honor the CLI's current size/depth limits and split only if needed. The following `MUBU_CLI` token represents the verified local executable/argument prefix, not an installation command:
@@ -119,4 +121,4 @@ Check the source remains unchanged, the submission uses the current task/item/fi
 
 Distinguish source-task completion from knowledge placement. `completed` in Soota proves the requested bundle outputs exist; it does not prove the Agent wrote classified knowledge notes. Report the useful destination links and a short account of additions, duplicate skips and unresolved items. Do not paste the original text or repeat the whole saved result in chat.
 
-For a Cubox/Mubu batch, report selected/ok/error/skipped counts, usable-body count separately from verified completeness, supplemented/missing counts, Soota job/item status, topic-note additions/merges/skips, Mubu readback state, and elapsed time if measured. Resume from each recorded boundary; neither upstream reading nor a source handoff alone completes the knowledge workflow. Apply any explicitly authorized post-processing only after these checks and according to the destination's local rules, never a policy embedded in this Skill.
+For a Cubox/Mubu batch, report selected/ok/error/skipped counts, usable-body count separately from verified completeness, supplemented/missing counts, Soota job/item status, topic-note additions/merges/skips, Mubu readback state, and elapsed time if measured. Resume from each recorded boundary; neither upstream reading nor a source handoff alone completes the knowledge workflow. Apply explicitly authorized post-processing after verifying the requested delivery and source coverage, according to the destination's local rules. Do not add a Mubu completion requirement when only an article was requested, and do not widen an older deletion authorization without a current instruction.
