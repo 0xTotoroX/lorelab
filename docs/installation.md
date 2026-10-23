@@ -66,7 +66,7 @@ PREFIX/
 
 ## 产品运行时接口
 
-`release/bin/lorelab` 与旧 `release/bin/lorehub` 均使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`；两组显式变量不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
+`release/bin/lorelab` 与旧 `release/bin/lorehub` 均使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`。独立 Soota 通过 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 和 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK` 读取同一绑定，不依赖产品 Python 包；新旧变量或清单路径不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
 
 `runtime.json` 的命令元素全部使用安装后的绝对路径，结构如下（`/prefix/releases/ID` 是占位路径）：
 
@@ -75,6 +75,8 @@ PREFIX/
   "schema_version": 1,
   "product": "lorelab",
   "release_id": "ID",
+  "source_root": "/prefix/releases/ID/source",
+  "components_lock": "/prefix/releases/ID/source/components.lock.json",
   "components_lock_sha256": "<sha256>",
   "tools": {
     "cubox": ["/prefix/releases/ID/bin/cubox-cli"],

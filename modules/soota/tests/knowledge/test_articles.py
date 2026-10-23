@@ -4,11 +4,12 @@ import json
 from pathlib import Path
 
 import pytest
-from test_workflow_support import FakeCLI, card, review_for, sha, write
 
-from lorehub import cli, runtime
-from lorehub import workflow as w
-from lorehub.workflow_state import WorkflowError
+from soota.knowledge import cli, runtime
+from soota.knowledge import workflow as w
+from soota.knowledge.workflow_state import WorkflowError
+
+from .support import FakeCLI, card, review_for, sha, write
 
 
 def start(tmp_path, monkeypatch, **options):
@@ -105,18 +106,20 @@ def test_cli_old_config_keeps_cleanup_boundary_and_does_not_enable_mubu(tmp_path
     )
     calls = []
     monkeypatch.setattr(w, "prepare", lambda *args, **kwargs: calls.append(kwargs))
-    cli.dispatch(cli.parser().parse_args(["batch", "prepare", "--ids-file", str(tmp_path / "ids")]))
+    cli.dispatch(cli.parser().parse_args(["knowledge", "prepare", "--ids-file", str(tmp_path / "ids")]))
     assert calls[0]["with_outline"] is False
     assert calls[0]["cleanup_after"] == "outline"
     cli.dispatch(
-        cli.parser().parse_args(["batch", "prepare", "--ids-file", str(tmp_path / "ids"), "--cleanup-after", "article"])
+        cli.parser().parse_args(
+            ["knowledge", "prepare", "--ids-file", str(tmp_path / "ids"), "--cleanup-after", "article"]
+        )
     )
     assert calls[1]["cleanup_after"] == "article"
 
 
 def test_cli_article_init_needs_no_mubu(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    args = cli.parser().parse_args(["init", "--vault", str(tmp_path), "--subdir", "Knowledge"])
+    args = cli.parser().parse_args(["knowledge", "init", "--vault", str(tmp_path), "--subdir", "Knowledge"])
     result = cli.dispatch(args)
     assert result["settings"]["mubu_doc"] is None
     assert result["settings"]["cleanup_after"] == "article"
@@ -130,7 +133,7 @@ def test_cli_without_legacy_config_defaults_to_article_cleanup(tmp_path, monkeyp
     cli.dispatch(
         cli.parser().parse_args(
             [
-                "batch",
+                "knowledge",
                 "prepare",
                 "--ids-file",
                 str(tmp_path / "ids"),

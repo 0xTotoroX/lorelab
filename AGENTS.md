@@ -8,7 +8,7 @@ Python 3.12+ 产品层 + Go Cubox CLI + Python Soota / 幕布 CLI。
 - `src/lorelab/`：产品 CLI、组件定位、安装检查及薄路由；`src/lorehub/` 仅保留旧 Python/命令兼容入口，不保存第二套内容流程。
 - `skills/lorelab/`：安装、组件维护与 Skill 路由；`skills/lorehub/` 保留兼容入口。采集、文章、学习和交付规则只在 Soota Skill 维护，Cubox/幕布的服务操作约定留在各自 Skill。
 - `packaging/`：成套构建、安装与版本校验；只从本仓库构建组件，禁止自动切换到原作者发行包。
-- `tests/`：产品安装、版本绑定、状态恢复与写入边界测试。
+- `tests/`：产品安装、版本绑定与旧入口兼容测试；知识状态恢复及写入边界测试随 Soota 组件维护。
 - `docs/`：已实现使用说明、架构及组件维护方法。
 
 ## 约定

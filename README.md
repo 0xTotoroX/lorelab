@@ -86,7 +86,7 @@ lorelab components export soota /path/to/new-soota-checkout
 
 ```sh
 uv run --python 3.12 pytest
-PYTHONPATH=src python3 -m lorelab.cli components verify
+uv run python -m lorelab.cli components verify
 python3 packaging/build_release.py --output-dir dist
 ```
 

@@ -6,10 +6,11 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from test_workflow_support import FakeCLI, artifact, card, review_for, sha, write
 
-from lorehub import workflow as w
-from lorehub.workflow_state import WorkflowError, lock
+from soota.knowledge import workflow as w
+from soota.knowledge.workflow_state import WorkflowError, lock
+
+from .support import FakeCLI, artifact, card, review_for, sha, write
 
 
 @pytest.fixture

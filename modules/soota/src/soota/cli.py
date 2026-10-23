@@ -1,7 +1,7 @@
 """Public Typer entry points.
 
 [INPUT]: Command arguments, settings and application command functions.
-[OUTPUT]: CLI commands including validated ingest/resume --workers options.
+[OUTPUT]: 采集、恢复命令及知识文章/学习交付入口。
 [POS]: soota CLI adapter; task execution contracts live in tasks/ and docs/tasks.md.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -38,7 +38,7 @@ from soota.updates_cli import app as updates_app
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Soota：给一个链接，搜集内容、补全字幕，留下可追溯 Markdown。",
+    help="Soota：采集媒体与原文，按需整理文章、学习大纲并核对交付。",
 )
 jobs_app = typer.Typer(help="查看任务与续跑目录采集")
 app.add_typer(jobs_app, name="jobs")
@@ -49,6 +49,26 @@ app.add_typer(providers_app, name="providers")
 app.add_typer(features_app, name="features")
 app.add_typer(updates_app, name="updates")
 app.add_typer(mcp_app, name="mcp")
+
+
+@app.command(
+    "knowledge", context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
+)
+def knowledge(ctx: typer.Context) -> None:
+    """从 Cubox 或已有内容包整理并交付知识文章。"""
+    from soota.knowledge.cli import main as knowledge_main
+
+    raise typer.Exit(knowledge_main(["knowledge", *ctx.args]))
+
+
+@app.command(
+    "study", context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
+)
+def study(ctx: typer.Context) -> None:
+    """从选定文章按需制作幕布学习大纲。"""
+    from soota.knowledge.cli import main as knowledge_main
+
+    raise typer.Exit(knowledge_main(["study", *ctx.args]))
 
 
 @app.command()

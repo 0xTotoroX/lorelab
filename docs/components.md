@@ -78,4 +78,4 @@ Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任�
 uv run --no-project --with pyyaml python -m unittest discover -s tests -v
 ```
 
-从源码运行时设置 `PYTHONPATH=src`，或使用已安装 LoreLab 的 Python。测试覆盖源码/Skill 篡改、路径与链接越界、原子刷新失败、导出隔离、并发内容变化检测、三组件实际文件闭包、产品、兼容入口及组件 Skill 的 frontmatter 和相对链接。`docs/workflow.md` 仅保留旧链接路由，流程契约主源是 `modules/soota/docs/knowledge.md`；检查应同时覆盖产品 Skill 路由和独立 Soota 的引用闭包。
+从源码运行时使用 `uv run python -m lorelab.cli …`，由本地依赖绑定找到 Soota；只做 Python 模块检查时可设置 `PYTHONPATH=src:modules/soota/src`。测试覆盖源码/Skill 篡改、路径与链接越界、原子刷新失败、导出隔离、并发内容变化检测、三组件实际文件闭包、产品、兼容入口及组件 Skill 的 frontmatter 和相对链接。`docs/workflow.md` 仅保留旧链接路由，流程契约主源是 `modules/soota/docs/knowledge.md`；检查应同时覆盖产品 Skill 路由和独立 Soota 的引用闭包。
