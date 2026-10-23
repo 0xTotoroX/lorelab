@@ -1,32 +1,49 @@
 ---
 name: lorelab
-description: 安装、检查和维护 LoreLab 成套内容工具，定位绑定的 CLI 与 Skill、导出独立组件。内容采集、文章整理、学习大纲及交付恢复路由到 Soota；收藏管理和幕布编辑使用各自组件 Skill。
+description: 将 Cubox 收藏或已有内容包整理为知识文章，按需从选定文章制作学习大纲，并管理审阅、交付核对、恢复与授权清理。也用于安装、检查和维护 LoreLab 绑定的 CLI 与四套 Skill。单纯采集、下载和解析交给 Soota。
 ---
 
 # LoreLab
 
-LoreLab 打包自有 Soota、Cubox CLI、幕布 CLI 及完整 Skill。它负责安装、版本绑定、组件维护和入口路由；内容流程仅在 Soota 实现。已有 Agent 负责理解与写作，无需另建 LLM 服务。
+LoreLab 负责跨来源文章、学习大纲和交付流程，打包自行维护的 Soota、Cubox CLI、幕布 CLI 及完整 Skill。Soota 获取源文本、媒体和 context；Agent 实读来源、理解与写作；LoreLab 冻结审阅、核对交付和恢复状态。CLI 不自行调用语言模型。
 
-运行 `lorelab doctor` 核对绑定入口，用 `lorelab skills list` 定位实际 Skill source。不能把 PATH 上同名命令当作已验证组件。只有入口存在不代表账号或云端写入已验证，也不代表 Agent 已重新加载 Skill。
+运行 `lorelab doctor` 核对绑定入口，用 `lorelab skills list` 定位实际 Skill source。入口存在不代表账号、来源完整性或云端交付已通过验收，也不代表 Agent 已重新加载 Skill。
 
-## 路由
+## 选择流程
 
-按实际请求只读相应 Skill，不一次加载全部文档：
+按实际请求只读相关引用，不默认走完整条链：
 
-| 任务 | Skill | 受管命令前缀 |
-| --- | --- | --- |
-| 采集、文章整理、知识交付、学习大纲与任务恢复 | [Soota](../../modules/soota/skills/soota/SKILL.md) | `lorelab tool soota -- ORIGINAL_ARGS` |
-| 收藏查询、正文读取与卡片管理 | [Cubox](../../modules/cubox-cli/skills/cubox/SKILL.md) | `lorelab tool cubox -- ORIGINAL_ARGS` |
-| 独立幕布文档、节点与媒体操作 | [幕布](../../modules/mubu-cli/SKILL.md) | `lorelab tool mubu -- ORIGINAL_ARGS` |
+| 请求 | 入口与规则 |
+| --- | --- |
+| 获取正文、下载媒体、字幕或转写 | [Soota Skill](../../modules/soota/skills/soota/SKILL.md)，受管入口 `lorelab tool soota -- ORIGINAL_ARGS` |
+| 整理多源文章、知识归档或恢复交付 | [文章与交付流程](references/process.md)、相关[写作提示](references/prompts.md)；正式命令 `lorelab knowledge` |
+| 已有文章的学习或复习大纲 | [按需学习任务](references/process.md#按需学习任务)，正式命令 `lorelab study` |
+| 粘贴文本作为来源、接入已有内容包 | [来源准备](references/knowledge.md)，保留来源身份，不能把粘贴正文当成 URL 清单 |
+| 直接查询或管理收藏 | [Cubox Skill](../../modules/cubox-cli/skills/cubox/SKILL.md)，`lorelab tool cubox -- ORIGINAL_ARGS` |
+| 直接编辑幕布文档、节点与媒体 | [幕布 Skill](../../modules/mubu-cli/SKILL.md)，`lorelab tool mubu -- ORIGINAL_ARGS` |
 
-`ORIGINAL_ARGS` 不重复附上可执行文件，幕布 Agent 调用仍须带 `--agent`。正在恢复的知识或学习任务继续走 Soota 的任务接口，不绕过其冻结和写入检查直接重发底层命令。
+`ORIGINAL_ARGS` 不重复附上可执行文件；幕布 Agent 调用仍须带 `--agent`。恢复 LoreLab 工作流时使用其任务接口，不绕过冻结状态直接重发底层写入或删除。
 
-`lorelab init/batch/study` 分别路由到 `soota knowledge init`、`soota knowledge`、`soota study`。旧 `lorehub` 命令、Python 兼容入口和 Skill 已移除；恢复旧任务时把原 JOB 路径交给上述现行入口。字段、默认行为、旧配置与任务兼容只查 [Soota 知识契约](../../modules/soota/docs/knowledge.md)及当前帮助，本 Skill 不复制流程或提示词。
+## 内容与交付
+
+普通采集默认停在 context；总结或分析可直接使用 context，不先增加文章步骤。明确要求知识整理时才选定目的地、阅读目标目录的 `AGENTS.md` 与相关既有笔记。个人分类、prompt 和路径由目标目录或用户配置提供，不放进共享 Skill。
+
+用 `lorelab knowledge prepare --ids-file FILE` 接入明确选定的 Cubox ID，或用互斥的 `--bundles-file FILE` 接入 Soota v2 内容包。以返回的真实 JOB、来源、指纹和审阅模板为准。Agent 必须实读并判断来源完整性；程序校验不能证明语义覆盖。
+
+文章写成连贯、足够理解和使用的内容，可综合多个来源，不强制长度、要点数量或双份笔记。默认到文章写入并回读结束。只有明确学习请求才从选定文章启动 `lorelab study`；同批文章和大纲须显式 `--with-outline`。学习节点保留完整意思，层级反映真实关系，不拆碎句，不建立幕布回写 Obsidian 的索引。
+
+默认保留收藏；仅适用的明确授权、完整来源覆盖和所选交付回读均满足后，才经 `knowledge cleanup` 预览和执行。资料不全与 GitHub 项目保留，内容包来源和 study 不清理原始资料。一次派发结果不确定时只读对账，不重新导入或删除。具体字段、门槛和恢复以 [工作流契约](../../docs/knowledge.md) 为准。
+
+## 旧命令与任务
+
+`lorelab knowledge/study` 是正式入口，`lorelab init/batch` 保留为产品别名。旧 `soota knowledge/study` 仅转发原参数，需要已安装 LoreLab；独立 Soota 不再包含工作流实现。旧 `lorehub` 命令、Python 入口和 Skill 继续保持移除。
+
+旧 JOB 按原绝对路径继续，冻结 schema、来源指纹和原清理条件不变。配置路径、旧环境变量和共享写锁见[兼容说明](../../docs/knowledge.md#配置独立组件与兼容入口)。不复制私人配置、不搬动任务目录或更改历史授权。
 
 ## 安装与组件维护
 
-阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。产品分发四个 CLI（`lorelab`、`soota`、`cubox-cli`、`mubu-cli`）和四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）。Skills 注册目录由安装器 `--skills-dir` 指定；保留整个 Skill 及相对引用闭包，不能只复制孤立的 SKILL.md。旧 prefix 可以继续升级，安装器清理它拥有的旧命令与 Skill 链接，历史 release 留作备份；不移动含绝对路径的安装目录，也不为名称统一改写旧配置或锁目录。
+阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。四个 CLI 与四套 Skill 随产品版本绑定，注册目录由 `--skills-dir` 指定，保留整个 Skill 引用闭包。安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
 
-组件源码和对应 Skill 在 `modules/` 内一起维护。使用 `lorelab components verify` 检查内容指纹；审阅本轮变化并完成相关验证后才 `refresh`，再重建受管 runtime。`components export` 导出自含源码和 Skill，不自动同步其他仓库。CLI 和 Skill 不切换到原作者发行包，不自动合并上游或推送。
+组件源码和对应 Skill 在 `modules/` 内维护；工作流源码在 `src/lorelab/knowledge/`，流程和提示词在本 Skill 中维护。审阅改动并完成验证后刷新组件锁，再重建受管 runtime。`components export` 导出独立组件及其 Skill，不携带 LoreLab 工作流、不自动同步外部仓库或切换原作者版本。
 
-个人路径、账号、凭据、资料、处理记录和规则留在用户配置或目的地中；配置变更仍须核对其 Git 与同步边界。安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
+个人账号、凭据、资料和执行记录留在用户配置、状态目录或指定知识库中，核对其 Git 与同步边界。历史安装 prefix 包含绝对路径，升级原位切换，不为改名搬动安装目录。

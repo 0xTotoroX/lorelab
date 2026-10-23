@@ -1,6 +1,6 @@
 """[INPUT]: 独立 CLI 配置、可选分发器绑定清单和用户环境。
 [OUTPUT]: 固定 argv 调用、私有 JSON 回执、兼容知识配置路径。
-[POS]: Soota 知识流程的进程边界；不依赖 LoreLab Python 包。
+[POS]: LoreLab 知识流程的组件进程边界与配置兼容。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 
@@ -20,15 +20,15 @@ class ToolError(RuntimeError):
 
 
 def config_path() -> Path:
-    explicit = os.environ.get("SOOTA_KNOWLEDGE_CONFIG_FILE")
+    explicit = os.environ.get("LORELAB_CONFIG_FILE") or os.environ.get("SOOTA_KNOWLEDGE_CONFIG_FILE")
     if explicit:
         return Path(explicit).expanduser()
     config_dir = os.environ.get("SOOTA_CONFIG_DIR")
     if config_dir:
         return Path(config_dir).expanduser() / "knowledge.json"
     base = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))).expanduser()
-    canonical = base / "soota/knowledge.json"
-    for path in [canonical, base / "lorelab/config.json", base / "lorehub/config.json"]:
+    canonical = base / "lorelab/config.json"
+    for path in [canonical, base / "soota/knowledge.json", base / "lorehub/config.json"]:
         if path.is_file():
             return path
     return canonical
@@ -105,7 +105,7 @@ def tool_command(tool: str) -> list[str]:
         return _command(tools.get(tool))
     if tool == "soota":
         return _command([sys.executable, "-m", "soota.cli"])
-    explicit = os.environ.get(f"SOOTA_{tool.upper()}_COMMAND")
+    explicit = os.environ.get(f"LORELAB_{tool.upper()}_COMMAND") or os.environ.get(f"SOOTA_{tool.upper()}_COMMAND")
     if explicit:
         try:
             value = json.loads(explicit)
@@ -115,7 +115,7 @@ def tool_command(tool: str) -> list[str]:
     name = {"cubox": "cubox-cli", "mubu": "mubu-cli"}[tool]
     executable = shutil.which(name)
     if not executable:
-        raise ToolError(f"本次需要 {name}；请安装独立 CLI 或设置 SOOTA_{tool.upper()}_COMMAND。")
+        raise ToolError(f"本次需要 {name}；请安装独立 CLI 或设置 LORELAB_{tool.upper()}_COMMAND。")
     return _command([str(Path(executable).absolute())])
 
 

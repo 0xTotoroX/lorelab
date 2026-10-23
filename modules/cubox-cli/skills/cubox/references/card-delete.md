@@ -30,7 +30,7 @@ Deleted items stay in the user's "Recently Deleted" folder for 30 days before pe
 2. Inspect the dry-run result against the current authorization. Present the proposed scope and ask for explicit authorization only when it is not already covered.
   - ≤ 3 cards: show the card titles returned by dry-run.
   - > 3 cards: tell the user the count (e.g. "Will delete 25 cards").
-3. Only within explicit authorization for that scope, run again without `--dry-run` to perform the actual deletion. Soota knowledge batches must use their cleanup command or the corresponding LoreLab route so source-completeness, GitHub protection and destination-verification checks remain enforced.
+3. Only within explicit authorization for that scope, run again without `--dry-run` to perform the actual deletion. LoreLab knowledge batches must use their cleanup command so source-completeness, GitHub protection and destination-verification checks remain enforced.
 4. Never skip the dry-run step.
 
 ## Example workflow

@@ -17,7 +17,7 @@ Use only targets requested or necessary for the task:
 | Write a per-source note, with an outline only if requested | `--want note` or `--want note,outline` |
 | Produce a detailed reading article | `--want article` |
 
-For requested knowledge delivery, preserve pasted text as a `.txt` file and ingest with `--provider local --want context`; then pass the resulting v2 bundle through `knowledge prepare --bundles-file`. Cubox selections use `knowledge prepare --ids-file`. Read [source preparation](knowledge.md) and [article workflow](process.md) rather than building another manual delivery path. Do not pass prose or the Cubox response directly as share text or an input list. Ordinary ingestion still stops at the requested source artifacts.
+For downstream knowledge delivery, save pasted text as a `.txt` file and ingest with `--provider local --want context`. Hand the returned v2 bundle to the LoreLab Skill for composition and delivery. Do not pass prose or a Cubox response directly as share text or an input list; collection still stops at the requested source artifacts.
 
 `markdown` keeps the same unprocessed-text boundary as context. Do not map “download this article” to a semantic rewrite. Put optional outputs in `--optional`; do not downgrade a user-required target merely to obtain a successful exit code.
 
@@ -86,7 +86,7 @@ The CLI does not call an LLM. A requested analysis/note/outline/article produces
 
 Fingerprint or evidence mismatches require reading the current source again. Do not edit identity fields or fabricate evidence to make an old result pass. A repeated identical submission can resume safely; replacing existing semantic output requires authorized `--force`. Source text stays separate and is not rewritten by rendering.
 
-For a saved `knowledge` batch, submit through `soota knowledge submit` so its frozen review and downstream readback stay consistent; do not independently resume its Soota source task with a different submission. A `study` task uses existing articles and has its own `soota study` handoff. Full contracts live in [knowledge documentation](../../../docs/knowledge.md).
+Saved knowledge and study tasks belong to LoreLab: use `lorelab knowledge submit` or `lorelab study` with the original JOB. Do not independently resume a source task with a different submission while a LoreLab review is frozen. See [migration and compatibility](../../../docs/knowledge.md).
 
 New content bundles can be rendered independently using `render --bundle ... --analysis ...`; use `jobs resume` when finishing a pending task so the task record and export continue. Legacy v1 bundles retain the older Analysis render contract.
 

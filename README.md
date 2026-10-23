@@ -12,12 +12,12 @@ LoreLab 把 Soota、Cubox CLI、幕布 CLI 和配套 Agent Skills 放进同一�
 
 | 项目与仓库 | 职责 | CLI | 配套 Skill |
 | --- | --- | --- | --- |
-| LoreLab（本仓库） | 成套安装、版本绑定、环境检查、组件导出与 Skill 路由 | `lorelab` | [lorelab](skills/lorelab/SKILL.md) |
-| [Soota](https://github.com/0xTotoroX/soota) | 采集与解析、任务恢复、知识文章、学习大纲及交付核对 | `soota` | [soota](modules/soota/skills/soota/SKILL.md) |
+| LoreLab（本仓库） | 知识文章、学习大纲、交付与清理编排，以及成套安装和版本维护 | `lorelab` | [lorelab](skills/lorelab/SKILL.md) |
+| [Soota](https://github.com/0xTotoroX/soota) | 正文与媒体采集、下载、解析、context 及采集任务恢复 | `soota` | [soota](modules/soota/skills/soota/SKILL.md) |
 | [Cubox CLI](https://github.com/0xTotoroX/cubox-cli) | 查询收藏、批量读取正文、管理文件夹及执行授权清理 | `cubox-cli` | [cubox](modules/cubox-cli/skills/cubox/SKILL.md) |
 | [幕布 CLI](https://github.com/0xTotoroX/mubu-cli) | 文档与节点管理、大纲批量写入、导出和回读 | `mubu-cli` | [mubu-integration](modules/mubu-cli/SKILL.md) |
 
-**四个 CLI、四套 Skill，随同一个产品版本安装。** LoreLab Skill 负责工具选择与维护，Soota Skill 负责内容流程，Cubox 和幕布 Skill 分别负责各自服务的操作。每套 Skill 保留完整引用文件，各 CLI 也可独立使用。
+**四个 CLI、四套 Skill，随同一个产品版本安装。** LoreLab Skill 负责文章、学习、交付流程与产品维护，Soota Skill 负责采集和内容包，Cubox 和幕布 Skill 分别负责各自服务的操作。每套 Skill 保留完整引用文件，各 CLI 也可独立使用。
 
 本仓库的 `modules/` 是成套产品的开发主源；上表链接是各组件的自有仓库入口。安装时使用 [components.lock.json](components.lock.json) 绑定的源码与版本，不追随原作者的最新版，也不假定外部组件仓库已包含本仓库的全部修改。组件导出与仓库同步是两个步骤，详见[组件维护](docs/components.md)。
 
@@ -28,9 +28,9 @@ flowchart TD
     media["网页 / 视频 / 音频 / 本地文件"] --> ingest["Soota：采集与解析"]
     cubox["Cubox CLI：读取收藏正文"] --> ingest
     ingest --> context["context.md：源文本与证据位置"]
-    context -->|明确要求整理| article["Soota + Agent：知识文章"]
+    context -->|明确要求整理| article["LoreLab + Agent：知识文章"]
     article --> vault["Obsidian / Markdown"]
-    vault -->|明确要求学习| study["Soota + Agent：学习大纲"]
+    vault -->|明确要求学习| study["LoreLab + Agent：学习大纲"]
     study --> mubu["幕布 CLI：写入与核对"]
 ```
 
@@ -38,9 +38,9 @@ flowchart TD
 - **整理**：明确要求写文章时，由 Agent 阅读来源、目标目录规则和相关既有笔记，将一个或多个来源组织成连贯的文章。分析、总结请求可以直接使用 context，不必先写文章。
 - **学习**：从用户选定的已有文章整理学习树，按概念、关系和问题组织，不固定分支数量，也不把一句话拆成多个碎片。
 
-内容流程的实现与提示词统一在 Soota。LoreLab 的 `init/batch/study` 入口调用同一份 Soota 实现；LoreLab 没有另一套 context 生成器。CLI 负责采集、状态、证据校验与交付，语义理解和写作由使用 Skill 的 Agent 完成，CLI 不自行调用语言模型。
+Soota 负责生成 context 和采集任务恢复；LoreLab 负责跨来源的文章整理、学习大纲、交付核对与授权清理。工作流与写作提示词只在 LoreLab 维护，LoreLab 通过 Soota 获取和校验内容包，不实现另一套采集或 context 解析器。语义理解和写作由 Agent 完成，CLI 不自行调用语言模型。
 
-现有内容包转入知识任务时，目前会再建立本地分析包；原包保持只读，不重新下载媒体。这个步骤仍由 Soota 执行，详见[内容包输入](modules/soota/docs/knowledge.md#现有内容包输入)。
+现有内容包转入知识任务时，目前会再建立本地分析包；原包保持只读，不重新下载媒体。LoreLab 编排这一过程，解析仍调用 Soota，详见[内容包输入](docs/knowledge.md#现有内容包输入)。
 
 ## 安装
 
@@ -74,35 +74,35 @@ soota ingest /path/to/audio.m4a --want transcript,context --json
 先指定知识库，再选择 Cubox 收藏 ID 或已有的 Soota v2 内容包：
 
 ```sh
-soota knowledge init --vault /path/to/KnowledgeVault --subdir 知识
+lorelab knowledge init --vault /path/to/KnowledgeVault --subdir 知识
 
 # Cubox 收藏：文件中每行一个 ID
-soota knowledge prepare --ids-file /path/to/card-ids.txt
+lorelab knowledge prepare --ids-file /path/to/card-ids.txt
 
 # 或使用已有内容包：JSON 文件中列出包路径字符串数组
-soota knowledge prepare --bundles-file /path/to/source-bundles.json
+lorelab knowledge prepare --bundles-file /path/to/source-bundles.json
 ```
 
 两种来源参数互斥。Cubox 正文缺失时，可先通过 Soota 补抓，再用 `--source-bundles` 传入收藏 ID 到补抓包的映射。
 
-让 Agent 按 **Soota Skill** 阅读来源并填写 `prepare` 返回的审阅模板，再提交和核对：
+让 Agent 按 **LoreLab Skill** 阅读来源并填写 `prepare` 返回的审阅模板，再提交和核对：
 
 ```sh
-soota knowledge submit /path/to/job --file /path/to/review.json
-soota knowledge publish /path/to/job
-soota knowledge verify /path/to/job
+lorelab knowledge submit /path/to/job --file /path/to/review.json
+lorelab knowledge publish /path/to/job
+lorelab knowledge verify /path/to/job
 ```
 
-文章以足够理解和使用为准，不强制长文、固定要点数量或额外保存一份短笔记。默认在文章写入并回读后完成；只有明确选择同批交付大纲时，才在 `prepare` 加 `--with-outline` 并指定幕布目标。审阅字段、补抓、清理及恢复方法见 [Soota 知识流程](modules/soota/docs/knowledge.md)。
+文章以足够理解和使用为准，不强制长文、固定要点数量或额外保存一份短笔记。默认在文章写入并回读后完成；只有明确选择同批交付大纲时，才在 `prepare` 加 `--with-outline` 并指定幕布目标。审阅字段、补抓、清理及恢复方法见 [LoreLab 知识流程](docs/knowledge.md)。
 
 ### 从已有文章制作学习大纲
 
 ```sh
-soota study prepare --article /path/to/KnowledgeVault/知识/主题.md \
+lorelab study prepare --article /path/to/KnowledgeVault/知识/主题.md \
   --vault /path/to/KnowledgeVault --mubu-doc DOCUMENT_ID
-soota study submit /path/to/study-job --file /path/to/study-review.json
-soota study publish /path/to/study-job
-soota study verify /path/to/study-job
+lorelab study submit /path/to/study-job --file /path/to/study-review.json
+lorelab study publish /path/to/study-job
+lorelab study verify /path/to/study-job
 ```
 
 在 `prepare` 和 `submit` 之间，让 Agent 根据返回的模板整理大纲。`study` 只读选定文章，不重抓来源、不重写文章或清理收藏；原收藏已删除也可以使用。文章完成不会自动触发幕布同步，也不建立幕布返回 Obsidian 的索引。
@@ -111,8 +111,8 @@ soota study verify /path/to/study-job
 
 - **保留人工修改**：已有同路径文章内容不同时停止，当前不自动合并或覆盖。
 - **完整性需要实读**：非空正文、下载成功或 hash 校验通过，都不等于原帖和媒体内容已完整处理。
-- **收藏默认保留**：适用的明确授权下，Cubox 批次才可启用 `--delete-verified`。核对完成后，先用 `soota knowledge cleanup JOB` 预览，再加 `--execute` 执行；资料不全和 GitHub 项目保留。内容包批次始终不删除原包或媒体。
-- **旧任务保留原门槛**：已有任务与配置可按原路径继续使用，升级不扩大删除授权。旧 `lorehub` 命令已移除，迁移方法见[升级说明](docs/installation.md#从-lorehub-升级)。
+- **收藏默认保留**：适用的明确授权下，Cubox 批次才可启用 `--delete-verified`。核对完成后，先用 `lorelab knowledge cleanup JOB` 预览，再加 `--execute` 执行；资料不全和 GitHub 项目保留。内容包批次始终不删除原包或媒体。
+- **旧任务保留原门槛**：`soota knowledge/study` 仅作兼容转发，需要已安装 LoreLab；新任务使用 `lorelab knowledge/study`。已有任务与配置可按原路径继续使用，升级不扩大删除授权。旧 `lorehub` 命令已移除，迁移方法见[升级说明](docs/installation.md#从-lorehub-升级)。
 
 公开源码与安装包不包含账号凭据、收藏正文、私人知识库路径或执行台账。`doctor` 检查安装与组件绑定，不代表真实账号或云端交付已验收。
 
@@ -122,13 +122,13 @@ soota study verify /path/to/study-job
 
 ```sh
 lorelab tool cubox -- card batch --ids-file /path/to/card-ids.txt
-lorelab tool soota -- knowledge status /path/to/job
+lorelab knowledge status /path/to/job
 lorelab tool mubu -- --agent --help
 lorelab components verify
 lorelab components export soota /path/to/new-soota-checkout
 ```
 
-开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁、重建并安装。独立导出包含源码、构建文件、完整 Skill 和许可证；导出的 Soota 可运行采集与知识流程，不依赖 LoreLab Python 包。导出不会自动提交或同步到上表的外部仓库。
+开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁、重建并安装。独立导出包含源码、构建文件、完整 Skill 和许可证；导出的 Soota 可独立采集、下载、解析与恢复任务，不依赖 LoreLab Python 包；知识整理和学习交付在 LoreLab 中运行。导出不会自动提交或同步到上表的外部仓库。
 
 在本仓库验证与构建：
 
@@ -145,8 +145,8 @@ python3 packaging/build_release.py --output-dir dist
 | 安装、更新、恢复与源码构建 | [安装说明](docs/installation.md) |
 | 版本绑定、组件维护与独立导出 | [组件维护](docs/components.md) |
 | 采集目标、任务状态与恢复 | [Soota 任务文档](modules/soota/docs/tasks.md) |
-| 知识文章、学习任务与交付核对 | [Soota 知识流程](modules/soota/docs/knowledge.md) |
-| Agent 的审阅与写作提示词 | [Soota 提示词](modules/soota/skills/soota/references/prompts.md) |
+| 知识文章、学习任务与交付核对 | [LoreLab 知识流程](docs/knowledge.md) |
+| Agent 的审阅与写作提示词 | [LoreLab 提示词](skills/lorelab/references/prompts.md) |
 
 ## 许可证
 

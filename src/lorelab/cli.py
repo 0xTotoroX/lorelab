@@ -30,9 +30,9 @@ def parser() -> argparse.ArgumentParser:
     export.add_argument("destination", type=Path)
     skills = sub.add_parser("skills", help="查看配套 Skill 入口")
     skills.add_argument("action", choices=["list"])
-    from soota.knowledge.cli import register
+    from lorelab.knowledge.cli import register
 
-    register(sub, legacy=True)
+    register(sub)
     return app
 
 
@@ -88,7 +88,7 @@ def dispatch(args: argparse.Namespace) -> object:
         if args.action == "export":
             return components.export_component(runtime.root(), args.name, args.destination)
         return getattr(components, args.action)(runtime.root())
-    from soota.knowledge.cli import dispatch as knowledge_dispatch
+    from lorelab.knowledge.cli import dispatch as knowledge_dispatch
 
     return knowledge_dispatch(args)
 

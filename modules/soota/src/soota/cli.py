@@ -1,7 +1,7 @@
 """Public Typer entry points.
 
 [INPUT]: Command arguments, settings and application command functions.
-[OUTPUT]: 采集、恢复命令及知识文章/学习交付入口。
+[OUTPUT]: 采集与恢复命令；旧知识命令仅转交 LoreLab。
 [POS]: soota CLI adapter; task execution contracts live in tasks/ and docs/tasks.md.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -38,7 +38,7 @@ from soota.updates_cli import app as updates_app
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Soota：采集媒体与原文，按需整理文章、学习大纲并核对交付。",
+    help="Soota：采集正文、字幕和媒体，解析为可追溯的 context。",
 )
 jobs_app = typer.Typer(help="查看任务与续跑目录采集")
 app.add_typer(jobs_app, name="jobs")
@@ -52,23 +52,25 @@ app.add_typer(mcp_app, name="mcp")
 
 
 @app.command(
-    "knowledge", context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
+    "knowledge", hidden=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
 )
 def knowledge(ctx: typer.Context) -> None:
-    """从 Cubox 或已有内容包整理并交付知识文章。"""
-    from soota.knowledge.cli import main as knowledge_main
+    """兼容旧命令，将原参数转交 LoreLab knowledge。"""
+    from soota.workflow_compat import forward
 
-    raise typer.Exit(knowledge_main(["knowledge", *ctx.args]))
+    raise typer.Exit(forward(["knowledge", *ctx.args]))
 
 
 @app.command(
-    "study", context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
+    "study", hidden=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
 )
 def study(ctx: typer.Context) -> None:
-    """从选定文章按需制作幕布学习大纲。"""
-    from soota.knowledge.cli import main as knowledge_main
+    """兼容旧命令，将原参数转交 LoreLab study。"""
+    from soota.workflow_compat import forward
 
-    raise typer.Exit(knowledge_main(["study", *ctx.args]))
+    raise typer.Exit(forward(["study", *ctx.args]))
 
 
 @app.command()

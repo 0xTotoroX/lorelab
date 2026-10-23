@@ -26,7 +26,7 @@ SKILLS = {
     "soota": Path("modules/soota/skills/soota"),
     "mubu-integration": Path("modules/mubu-cli"),
 }
-WORKFLOW = ROOT / "modules/soota/docs/knowledge.md"
+WORKFLOW = ROOT / "docs/knowledge.md"
 
 
 def prose(text: str) -> str:

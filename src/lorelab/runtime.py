@@ -1,5 +1,5 @@
-"""[INPUT]: 已安装组件清单、固定运行时、新旧产品环境变量与 Soota 配置接口。
-[OUTPUT]: 显式组件调用、私有 JSON 回执和绑定路径；配置委派给 Soota。
+"""[INPUT]: 已安装组件清单、固定运行时、新旧产品环境变量与工作流配置接口。
+[OUTPUT]: 显式组件调用、私有 JSON 回执和绑定路径；配置委派给产品 knowledge 模块。
 [POS]: LoreLab 分发运行时；历史配置和运行时绑定可读，不提供旧名称命令。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -94,7 +94,7 @@ def tool_environment() -> dict[str, str]:
     _, manifest = _binding()
     if manifest is None:
         raise ToolError("尚未使用受管安装；不会退回其他组件。")
-    # 即使由旧环境变量调用，也让独立 Soota 明确收到同一份受管清单。
+    # 即使由旧环境变量调用，也让工作流及兼容入口收到同一份受管清单。
     for prefix in ("LORELAB", "LOREHUB"):
         env[f"{prefix}_ROOT"] = str(source)
         env[f"{prefix}_RUNTIME_FILE"] = str(manifest)
@@ -127,12 +127,12 @@ def forward(tool: str, args: list[str]) -> int:
 
 
 def config_path() -> Path:
-    from soota.knowledge.runtime import config_path as knowledge_config_path
+    from lorelab.knowledge.runtime import config_path as knowledge_config_path
 
     return knowledge_config_path()
 
 
 def read_config() -> dict:
-    from soota.knowledge.runtime import read_config as knowledge_read_config
+    from lorelab.knowledge.runtime import read_config as knowledge_read_config
 
     return knowledge_read_config()

@@ -9,10 +9,10 @@
 | 目的 | 入口 | 契约 |
 | --- | --- | --- |
 | 采集原文、媒体、单项分析产物或整包导出 | `soota ingest`，以 `soota jobs resume` 接续 | 本文 |
-| 从 Cubox 收藏或已有内容包整理多源文章、写入并核对 | `soota knowledge init/prepare/submit/publish/verify/cleanup/status` | [知识流程](knowledge.md) |
-| 从明确选定的已有文章制作学习大纲 | `soota study prepare/submit/publish/verify/status` | [独立学习任务](knowledge.md#独立学习任务-study) |
+| 从 Cubox 收藏或已有内容包整理多源文章、写入并核对 | 外部 `lorelab knowledge` | [迁移说明](knowledge.md) |
+| 从明确选定的已有文章制作学习大纲 | 外部 `lorelab study` | [迁移说明](knowledge.md) |
 
-知识任务和学习任务是显式请求的流程，不修改普通 ingest 默认停在原文 context 的行为。`note/article/outline` 是内容包产物；`knowledge/study` 另外管理跨来源归并、最终目的地与写入回读。内容判断和写作由 Agent 完成，程序只做确定性处理与核验。
+知识任务和学习任务是显式请求的流程，不修改普通 ingest 默认停在原文 context 的行为。`note/article/outline` 是内容包产物；LoreLab 的 `knowledge/study` 管理跨来源归并、最终目的地与写入回读。内容判断和写作由 Agent 完成，程序只做确定性处理与核验。
 
 ## 选择目标
 
@@ -101,13 +101,11 @@ soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
   --output "/path/to/source-bundles" --json
 ```
 
-将返回的 v2 包路径写入 JSON 字符串数组，再用 `soota knowledge prepare --bundles-file FILE` 进入明确目的地的文章任务。多个网页、媒体或文本来源可合成文章；原包只读，知识任务不调用 Cubox 或删除源文件。来源准备见 [Skill 来源说明](../skills/soota/references/knowledge.md)，提交与交付见[知识流程](knowledge.md)。
+如需跨来源归档，把返回的内容包交给 LoreLab Skill，由 `lorelab knowledge` 接续。Soota 到源内容包结束，不自行选择知识目录、写作规则或清理策略。
 
 CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 不调用模型，单份 `note.md` 与整包导出也不代替多主题知识交付。
 
-Cubox 收藏使用 `soota knowledge prepare --ids-file FILE`。流程通过 Cubox CLI 批量读取原文，保留来源身份，再走本地 context/note 分析交接；`--with-outline` 才增加同批大纲。只有描述、链接或空正文的条目保留缺失状态，需要时用现有原站／字幕入口补取，再用 `--source-bundles` 绑定补抓包。`body_available` 不等于完整原文。
-
-Agent 阅读目标规则、实际来源和相关既有知识，按主题归并并审阅；程序冻结提交、检查证据，写入所选文章并回读。默认到文章完成结束。用户明确选择学习复习时，再用 `soota study` 从选定文章制作幕布大纲；不要求原收藏仍存在，不自动安排同步。Soota 通过独立 CLI 调用 Cubox 与幕布，不接入私有 API，也不替用户决定分类、路径、prompt 或删除授权。完整字段与旧任务兼容以[知识流程](knowledge.md)为准。
+Cubox 批次读取、补抓编排、文章交付与幕布学习任务由 LoreLab 负责；相关操作使用其工作流与 Skill，不在独立 Soota 中复制。旧 `soota knowledge/study` 命令的兼容边界见[迁移说明](knowledge.md)。
 
 ## 有界条目并行
 
@@ -267,6 +265,6 @@ CLI 只写显式目的地，不自动寻找 Vault、重组知识库、选择知�
 
 ## 实现与验证边界
 
-任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，内容包和整包导出位于 `artifacts/`；跨来源文章、学习与交付位于 `knowledge/`，见[职责图](providers.md#处理流程与职责)。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
+任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，内容包和整包导出位于 `artifacts/`；跨来源文章、学习与交付位于外部 LoreLab 产品，见[职责图](providers.md#处理流程与职责)。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
 
 自动测试使用合成内容、模拟网络响应和本地媒体样本，检查费用、恢复、文件与证据契约。它们不证明某个真实网站已登录、某份视频已完整下载或付费接口当前可用；应按实际来源单独记录运行验收。

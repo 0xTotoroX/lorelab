@@ -1,4 +1,4 @@
-"""独立 Soota、旧任务位置与多源内容包的真实行为。"""
+"""LoreLab 工作流归属、独立 Soota 采集与旧任务保全。"""
 
 import json
 import os
@@ -7,14 +7,14 @@ import sys
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
-
 from soota.artifacts.bundle import content_from_markdown, write_bundle
 from soota.cli import app
-from soota.knowledge import runtime, workflow
-from soota.knowledge.workflow_state import WorkflowError, default_root
 from soota.models import MediaItem, TranscriptDocument, TranscriptSegment, TranscriptSource, TranscriptStatus
 from soota.routing import recognize
+from typer.testing import CliRunner
+
+from lorelab.knowledge import runtime, workflow
+from lorelab.knowledge.workflow_state import WorkflowError, default_root
 
 from .support import FakeCLI, review_for, sha, write
 
@@ -123,27 +123,32 @@ def test_bundle_excerpt_cannot_be_claimed_complete(isolated, monkeypatch):
         workflow.submit(result["job"], review)
 
 
-def test_soota_cli_is_independent_of_product_and_init_is_shared(isolated):
-    result = CliRunner().invoke(app, ["knowledge", "init", "--vault", str(isolated), "--subdir", "Knowledge"])
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.stdout)["settings"]["cleanup_after"] == "article"
-    source = Path(__file__).resolve().parents[2] / "src"
+def test_product_owns_workflows_and_collection_imports_without_product(isolated):
+    from lorelab.knowledge.cli import dispatch, parser
+
+    settings = dispatch(parser().parse_args(["knowledge", "init", "--vault", str(isolated), "--subdir", "Knowledge"]))
+    assert settings["settings"]["cleanup_after"] == "article"
+    assert runtime.config_path() == isolated / "config/lorelab/config.json"
+    source = Path(__file__).resolve().parents[2] / "modules/soota/src"
     subprocess.run(
         [
             sys.executable,
+            "-S",
             "-c",
-            "from soota.knowledge import workflow,study,cli; import sys; "
-            "assert 'lorelab' not in sys.modules and 'lorehub' not in sys.modules",
+            (
+                "import soota, importlib.util, sys; "
+                "assert importlib.util.find_spec('soota.knowledge') is None; "
+                "assert importlib.util.find_spec('lorelab') is None"
+            ),
         ],
         cwd=isolated,
         env={**os.environ, "PYTHONPATH": str(source)},
         check=True,
         capture_output=True,
     )
-    for command in ["knowledge", "study"]:
-        result = CliRunner().invoke(app, [command, "prepare", "--help"])
-        assert result.exit_code == 0, result.output
-        assert "--vault" in result.stdout
+    result = CliRunner().invoke(app, ["--help"])
+    assert result.exit_code == 0, result.output
+    assert "knowledge" not in result.stdout and "study" not in result.stdout
 
 
 def test_config_fallback_keeps_legacy_authorization_and_explicit_isolation(isolated, monkeypatch):
@@ -166,6 +171,24 @@ def test_state_paths_keep_explicit_legacy_directory(isolated, monkeypatch):
     assert default_root() == isolated / "legacy"
     monkeypatch.setenv("SOOTA_KNOWLEDGE_STATE_DIR", str(isolated / "explicit"))
     assert default_root() == isolated / "explicit"
+
+
+def test_new_workflow_state_uses_product_directory(isolated, monkeypatch):
+    monkeypatch.delenv("SOOTA_DATA_DIR")
+    assert default_root() == isolated / "state/lorelab/jobs"
+    monkeypatch.setenv("LORELAB_STATE_DIR", str(isolated / "product"))
+    monkeypatch.setenv("SOOTA_KNOWLEDGE_STATE_DIR", str(isolated / "legacy"))
+    assert default_root() == isolated / "product"
+
+
+def test_product_config_override_preserves_existing_legacy_file(isolated, monkeypatch):
+    old = isolated / "config/soota/knowledge.json"
+    write(old, {"delete_verified": True, "cleanup_after": "outline"})
+    before = old.read_bytes()
+    assert runtime.config_path() == old
+    monkeypatch.setenv("LORELAB_CONFIG_FILE", str(isolated / "new/config.json"))
+    assert runtime.read_config() == {}
+    assert old.read_bytes() == before
 
 
 def test_standalone_commands_are_argv_and_current_python(isolated, monkeypatch):

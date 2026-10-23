@@ -1,6 +1,6 @@
 """[INPUT]: 独立或产品转交的知识命令、用户目的地配置。
 [OUTPUT]: 文章/学习任务参数与结构化结果；旧命令复用相同解析。
-[POS]: Soota 知识 CLI，语义内容仍由外部 Agent 提交。
+[POS]: LoreLab 工作流 CLI，语义内容由外部 Agent 提交。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 
@@ -27,13 +27,11 @@ def init_arguments(init):
     )
 
 
-def register(sub, *, legacy=False):
-    if legacy:
-        init_arguments(sub.add_parser("init", help="保存知识目的地与清理条件"))
-    batch = sub.add_parser("batch" if legacy else "knowledge", help="读取、Agent 交接、写入、核对和清理")
+def register(sub):
+    init_arguments(sub.add_parser("init", help="保存知识目的地与清理条件"))
+    batch = sub.add_parser("knowledge", aliases=["batch"], help="读取、Agent 交接、写入、核对和清理")
     commands = batch.add_subparsers(dest="action", required=True)
-    if not legacy:
-        init_arguments(commands.add_parser("init"))
+    init_arguments(commands.add_parser("init"))
     prepare = commands.add_parser("prepare")
     sources = prepare.add_mutually_exclusive_group(required=True)
     sources.add_argument("--ids-file", type=Path)
@@ -73,13 +71,13 @@ def register(sub, *, legacy=False):
 
 
 def parser():
-    app = argparse.ArgumentParser(prog="soota", description="内容采集后的知识整理、学习和交付。")
+    app = argparse.ArgumentParser(prog="lorelab", description="内容采集后的知识整理、学习和交付。")
     register(app.add_subparsers(dest="command", required=True))
     return app
 
 
 def dispatch(args):
-    if args.command == "init" or args.command == "knowledge" and args.action == "init":
+    if args.command == "init" or args.command in {"knowledge", "batch"} and args.action == "init":
         vault = args.vault.expanduser().resolve()
         if not vault.is_dir():
             raise ValueError("知识库目录必须已经存在。")
@@ -109,7 +107,7 @@ def dispatch(args):
                 fields[name] = supplied if supplied is not None else config.get(name)
             for name in ["vault", "subdir", *(["mubu_doc"] if args.with_outline else [])]:
                 if not fields[name]:
-                    raise ValueError(f"缺少 {name}，请传入参数或先执行 soota knowledge init。")
+                    raise ValueError(f"缺少 {name}，请传入参数或先执行 lorelab knowledge init。")
             fields["vault"] = Path(fields["vault"])
             fields["mubu_auth"] = fields["mubu_auth"] or "desktop"
             fields["delete_verified"] = bool(fields["delete_verified"])
@@ -140,7 +138,7 @@ def dispatch(args):
             }
             for name in ["vault", "mubu_doc"]:
                 if not fields[name]:
-                    raise ValueError(f"缺少 {name}，请传入参数或先执行 soota knowledge init。")
+                    raise ValueError(f"缺少 {name}，请传入参数或先执行 lorelab knowledge init。")
             fields["vault"] = Path(fields["vault"])
             fields["mubu_auth"] = fields["mubu_auth"] or "desktop"
             return study.prepare(args.article, state_root=args.state_root, **fields)

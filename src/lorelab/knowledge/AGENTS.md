@@ -1,11 +1,11 @@
 # knowledge/
 
-> L2 | 父级: ../../../AGENTS.md
+> L2 | 父级: ../AGENTS.md
 
-Soota 负责内容流程的唯一实现；采集任务仍归 `tasks/`，跨来源知识文章与学习任务在此独立保存状态。此模块不依赖 LoreLab Python 包，不调用服务私有 API。
+LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/`，跨来源知识文章与学习任务在此独立保存状态。此模块复用 Soota 内容包契约，不调用服务私有 API。
 
 - `__init__.py`：知识模块入口。
-- `cli.py`：Soota knowledge/study 参数、配置及路由；产品兼容命令复用解析和执行。
+- `cli.py`：LoreLab knowledge/study 参数、配置及 init/batch 别名。
 - `runtime.py`：独立 CLI 发现或受管绑定调用；旧配置兼容；JSON 回执与无 shell 的 argv。
 - `workflow.py`：文章批次、可选组合交付、核对与授权清理入口。
 - `bundles.py`：已验证 v2 正文/字幕包输入，源包只读并保留指纹。

@@ -1,14 +1,15 @@
 ---
 name: soota
-description: Use the local Soota CLI to collect content, download media and subtitles, transcribe files, or export bundles. Also use for requested multi-source knowledge articles, Cubox or saved-bundle batches, article delivery/recovery and selected-article Mubu study outlines. Save unprocessed context by default; analysis and destination writes require a request. Ordinary explanations do not require collection.
+description: Use the local Soota CLI to collect source text, download media and subtitles, transcribe files, create context bundles, or recover collection tasks. Save unprocessed context by default. Knowledge composition, study outlines and delivery workflows belong to LoreLab. Ordinary explanations do not require collection.
 ---
 
 # Soota
 
 Use an installed `soota` command. For a source checkout, resolve this SKILL.md symlink, locate the repository two directories above its skill directory, verify pyproject.toml belongs to Soota, and run `uv run --project <repository> soota ...`. Do not hard-code a personal checkout path. Codex calls this CLI; Soota chooses its internal Providers. Do not register opencli-mcp as a separate Codex tool for this workflow.
 
-In a managed LoreLab installation, use `lorelab tool soota -- ORIGINAL_ARGS` and locate the bound source with `lorelab doctor` / `lorelab skills list`. The old `lorehub` command, Python compatibility package and Skill have been removed. Resume existing jobs with their original paths through `soota knowledge`, `soota study` or the corresponding LoreLab route; existing configuration remains readable in place. This Skill owns collection, knowledge composition, delivery, cleanup gates and recovery. Soota implements the deterministic workflow; the Agent actually reads, writes and reviews meaning. Independent component exports include this entire Skill and its references. Product routing does not authorize extra analysis, destination writes, paid requests or deletion.
+In a managed LoreLab installation, use `lorelab tool soota -- ORIGINAL_ARGS` and locate the bound source with `lorelab doctor` / `lorelab skills list`. This Skill owns collection, parsing, context and acquisition recovery. It remains usable in an independent Soota installation without LoreLab.
 
+Knowledge articles, cross-source composition, study outlines, destination readback and authorized cleanup belong to the **LoreLab Skill**. Locate it through `lorelab skills list` when installed; do not recreate that workflow here. Old `soota knowledge/study` commands only forward to LoreLab and are hidden from ordinary help. Existing task paths and configuration remain readable through LoreLab; the old `lorehub` command is removed.
 ## Choose the requested output
 
 Use `ingest INPUT --want ... --json` for explicit artifacts and combinations: `video`, `audio`, `transcript`, `context`, `markdown`, `images`, `data`, `analysis`, `note`, `outline`, `article`. `--optional` declares outputs whose failure does not block the required ones. Inputs can be URLs, local files, a bundle directory or manifest, and `--inputs-file` lists. For batch processing, existing bundles, explicit native operations, analysis handoffs or exports, read [task workflow](references/tasks.md).
@@ -17,11 +18,7 @@ Unified tasks accept `--workers 1..8` (default 1). Start with the requested boun
 
 Default collection ends at unprocessed context. Saving an existing article uses `context` or `markdown`; `article` requests a separate reading article written by the Agent. Do not introduce an article step before a summary or analysis. A media-only request does not authorize transcription or summarization; do not load the full body for a download-only request.
 
-For a requested knowledge article, read [article and delivery workflow](references/process.md), then the relevant [writing prompts](references/prompts.md). Use `soota knowledge prepare --ids-file FILE` for selected Cubox IDs or `--bundles-file FILE` for an existing-v2-bundle JSON path array; they are mutually exclusive. Acquire ordinary webpages/media with existing `ingest` first. For pasted text, read [source preparation](references/knowledge.md); a paste containing URLs stays supplied text unless acquisition is requested. A summary-only request does not authorize knowledge-base writes.
-
-A knowledge task ends when the article has been saved and read back. Only an explicit learning/review request starts `soota study` from selected existing articles; it does not depend on the original Cubox cards still existing. A same-batch outline requires `knowledge prepare --with-outline`. Reuse the actual review template and [knowledge contract](../../docs/knowledge.md); do not bypass frozen task state by issuing direct service writes. The CLI validates hashes/evidence, not whether the Agent read everything or whether a source is complete.
-
-Cubox and Mubu remain independently usable CLIs. Independent Soota discovers `cubox-cli` and `mubu-cli`, or uses configured `SOOTA_CUBOX_COMMAND` / `SOOTA_MUBU_COMMAND` JSON argv arrays. Managed Soota uses only its bound executables. Read [configuration and compatibility](../../docs/knowledge.md#配置独立组件与兼容入口) when resolving them; no global installation, private service API or product dependency is implied. Source-bundle knowledge tasks do not call Cubox or delete sources; Mubu is needed only for an explicitly selected outline.
+For a requested knowledge article or study outline, hand the returned source bundle to LoreLab and follow its Skill. Pure collection or a summary-only request does not authorize knowledge-base writes, cloud delivery or deletion. Preserve the source bundle, task/item identities and context fingerprints for downstream use.
 
 The existing single-video command without `--want` remains available: `ingest URL --transcript captions-only|auto|asr|none --json`. Use `inspect URL --json` for metadata only. Use `doctor --json` when required runtimes are unknown.
 

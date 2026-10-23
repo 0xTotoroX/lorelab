@@ -10,10 +10,10 @@
 
 ```text
 soota doctor --json
-soota knowledge prepare --ids-file FILE --vault PATH --subdir SUBDIR --no-delete-verified
+lorelab knowledge prepare --ids-file FILE --vault PATH --subdir SUBDIR --no-delete-verified
 ```
 
-已有网页、媒体或本地文件的 v2 内容包可使用 `soota knowledge prepare --bundles-file FILE --vault PATH --subdir SUBDIR`。FILE 是包目录或 manifest 路径的 JSON 字符串数组，相对路径基于清单目录；与 `--ids-file` 互斥。包必须含已验证的 body/transcript 和 context，字段与支持边界见[内容包输入](../../../docs/knowledge.md#现有内容包输入)。原包只读，非 Cubox 输入不会查询或删除 Cubox，也不删除原始媒体；不要为统一入口先把普通媒体存回 Cubox。粘贴文字的保全方式见[来源准备](knowledge.md#resolve-the-destination-and-preserve-the-source)。
+已有网页、媒体或本地文件的 v2 内容包可使用 `lorelab knowledge prepare --bundles-file FILE --vault PATH --subdir SUBDIR`。FILE 是包目录或 manifest 路径的 JSON 字符串数组，相对路径基于清单目录；与 `--ids-file` 互斥。包必须含已验证的 body/transcript 和 context，字段与支持边界见[内容包输入](../../../docs/knowledge.md#现有内容包输入)。原包只读，非 Cubox 输入不会查询或删除 Cubox，也不删除原始媒体；不要为统一入口先把普通媒体存回 Cubox。粘贴文字的保全方式见[来源准备](knowledge.md#resolve-the-destination-and-preserve-the-source)。
 
 没有适用的清理授权时传 `--no-delete-verified`。仅对 Cubox 来源，用户明确授权本批，或已明确将“文章完成并回读后清理”应用于当前范围时，传 `--delete-verified --cleanup-after article`；同一授权范围无需重复询问。不能将其他批次的授权或旧的“文章和幕布都完成”授权扩大为文章完成即可删除。旧配置缺少 `cleanup_after` 时按 `outline` 保留原门槛。这些选项只记录意图，不证明来源完整或已可删除。
 
@@ -21,7 +21,7 @@ soota knowledge prepare --ids-file FILE --vault PATH --subdir SUBDIR --no-delete
 
 ### 补齐证据与写成文章
 
-先逐项区分可用正文、仅摘要、链接占位、获取失败和原始来源自身的缺口。需要补采且在当前请求范围内时，按[采集任务](tasks.md)使用 `soota ingest`，复用标准任务、预算和缓存。
+先逐项区分可用正文、仅摘要、链接占位、获取失败和原始来源自身的缺口。需要补采且在当前请求范围内时，按[采集任务](../../../modules/soota/skills/soota/references/tasks.md)使用 `soota ingest`，复用标准任务、预算和缓存。
 
 独立补采默认停在 `context.md`，Agent 直接读取 context 写作。文章批次向 Soota 请求 `context,note` 并接收分析交接，不需要大纲或额外的阅读文章中间步骤。免费来源默认优先；确认无字幕轨道后 `auto` 才进入音频与本地转写，未知或获取失败不等于无字幕。付费、登录、限流和失败恢复继续遵守 Soota 的业务边界，不新建服务私有 API、Provider 链或 LLM 服务。
 
@@ -38,10 +38,10 @@ soota knowledge prepare --ids-file FILE --vault PATH --subdir SUBDIR --no-delete
 用独立的 `notes[].evidence` 逐一映射 `source_ids`，每个来源必须指向自己的真实 context 证据。source/task/item 身份、指纹和证据 ID 均取自当前产物，不手造或混用其他 JOB。私人 context 路径、来源 ID 和审计状态留在台账，文章只保留用户所需正文和原始来源链接。
 
 ```text
-soota knowledge submit JOB --file review.json
-soota knowledge publish JOB
-soota knowledge verify JOB
-soota knowledge status JOB
+lorelab knowledge submit JOB --file review.json
+lorelab knowledge publish JOB
+lorelab knowledge verify JOB
+lorelab knowledge status JOB
 ```
 
 提交冻结来源审阅、文章和完成产物；发布使用同一份快照。重试提交只接受已冻结内容，不在发布中途改文案，不强制覆盖 Soota 分析。文章模式只要求已验证的 context、note、analysis 产物及其 manifest，不生成 `outline.json`。
@@ -55,9 +55,9 @@ soota knowledge status JOB
 清理前核对当前范围的明确授权、来源完整性、有价值内容的处理去向、文章实际写入与回读。`cleanup_after=article` 的文章任务不需要幕布；`cleanup_after=outline` 仍要求本批幕布核对。完整来源覆盖与文章写入回读足以作为文章模式的交付依据，不能再隐式增加大纲条件，也不能跳过既有的授权和程序门禁。
 
 ```text
-soota knowledge cleanup JOB
-soota knowledge cleanup JOB --execute
-soota knowledge status JOB
+lorelab knowledge cleanup JOB
+lorelab knowledge cleanup JOB --execute
+lorelab knowledge status JOB
 ```
 
 先预览候选名单，只有适用授权与流程检查均通过才执行。资料不全、冲突、待确认和 GitHub 项目保留。不清理标签、其他收藏、原始证据或 Cubox 最近删除。一个 JOB 最多派发一次删除；部分删除、失败或不确定时只读对账，不重删。`cleaned` 表示删除名单已核对，不表示整个输入批次都被删除。
@@ -69,11 +69,11 @@ soota knowledge status JOB
 只在用户明确要求学习或复习时，从其选定的已存 Markdown 文章发起 `study`。读取目标规则与文章全文，核对所选文件都在 vault 内。文章可以来自此前知识任务或已有知识，原 Cubox 收藏已删除也不影响此任务。
 
 ```text
-soota study prepare --article FILE --article OTHER_FILE --vault PATH --mubu-doc ID
-soota study submit STUDY_JOB --file study-review.json
-soota study publish STUDY_JOB
-soota study verify STUDY_JOB
-soota study status STUDY_JOB
+lorelab study prepare --article FILE --article OTHER_FILE --vault PATH --mubu-doc ID
+lorelab study submit STUDY_JOB --file study-review.json
+lorelab study publish STUDY_JOB
+lorelab study verify STUDY_JOB
+lorelab study status STUDY_JOB
 ```
 
 只选一篇时传一次 `--article`。vault 和幕布目标可复用配置，可显式指定 `--mubu-parent`、`--mubu-auth desktop|password`、`--state-root`。prepare 冻结原文快照与字节 hash；按返回模板填写 `articles[]`，保留 vault 相对路径、`body_sha256` 和以实际 H1（无 H1 时用文件名）为根的 `outline`，填写非空的语义 `review_notes`。字段见 [study schema](../../../docs/knowledge.md#独立学习任务-study)。
@@ -92,6 +92,6 @@ study 和显式组合批次共用单一云端写入者：同一文档串行写�
 
 ### 显式同批文章与大纲
 
-用户明确要求同一批完成两处交付时，在 `soota knowledge prepare` 增加 `--with-outline --mubu-doc ID`；如授权要求两处完成后才删除，同时传 `--cleanup-after outline`。仅配置了幕布目标不会启用大纲。
+用户明确要求同一批完成两处交付时，在 `lorelab knowledge prepare` 增加 `--with-outline --mubu-doc ID`；如授权要求两处完成后才删除，同时传 `--cleanup-after outline`。仅配置了幕布目标不会启用大纲。
 
 此模式才请求 Soota `context,note,outline`，提交额外包含每个来源的 `outline_markdown` 和每篇文章的 `outline`，文章定稿后再制作学习树。两处全部回读才算本批 `verified`，不得用 `cleanup_after=article` 跳过已选的大纲交付。旧持久化任务缺少新字段时仍按此组合语义恢复，不改写为文章模式。

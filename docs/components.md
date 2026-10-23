@@ -60,7 +60,7 @@ lorelab components export mubu /path/to/new-mubu-source
 
 Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任何自有 Release 或 npm 发布已存在。Go import path 中保留上游模块名用于现有依赖兼容，不能据此安装上游发行包。版本标记含历史 `+lorehub` 的自有构建关闭原作者版本查询与替换安装提示；更新从 LoreLab 源码重新构建，独立导出也保留这一规则。
 
-安装四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）时允许用户指定 `--skills-dir`。安装器应保留真实 source 入口及相对引用闭包，不能只复制孤立的 `SKILL.md`；Agent 通过 `lorelab skills list` 定位 source。LoreLab Skill 只负责安装、组件维护和路由，需要同份源码中的 `docs/` 与组件 Skill。文章流程、schema 和写作提示词仅在 Soota 组件内维护；独立 Soota 导出保留 `docs/knowledge.md`、`skills/soota/references/{process,prompts}.md` 及全部引用，不依赖产品包或其他 Skill 目录。产品入口与三个独立组件入口合计四个 CLI；旧 `lorehub` 命令、Python 包和 Skill 均不再分发。
+安装四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）时可指定 `--skills-dir`。保留真实 source 入口和完整引用闭包，不只复制 SKILL.md。LoreLab Skill 维护文章、学习、交付与清理流程，引用产品 `docs/knowledge.md` 和自身 `references/{process,prompts,knowledge}.md`。Soota Skill 维护采集、context 与采集任务恢复，独立导出只引用组件内部文件；旧知识命令仅兼容转发，不要求独立采集安装 LoreLab。Cubox 与幕布 Skill 保留服务操作。四个 CLI 和四套 Skill 随同一产品版本绑定，旧 `lorehub` 入口不再分发。
 
 ## Python 接口
 
@@ -78,4 +78,4 @@ Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任�
 uv run --no-project --with pyyaml python -m unittest discover -s tests -v
 ```
 
-从源码运行时使用 `uv run python -m lorelab.cli …`，由本地依赖绑定找到 Soota；只做 Python 模块检查时可设置 `PYTHONPATH=src:modules/soota/src`。测试覆盖源码/Skill 篡改、路径与链接越界、原子刷新失败、导出隔离、并发内容变化检测、三组件实际文件闭包、产品及组件 Skill 的 frontmatter 和相对链接。`docs/workflow.md` 仅保留文档链接路由，流程契约主源是 `modules/soota/docs/knowledge.md`；检查应同时覆盖产品 Skill 路由和独立 Soota 的引用闭包。
+从源码运行时使用 `uv run python -m lorelab.cli …`，由本地依赖绑定找到 Soota；只做 Python 模块检查时可设置 `PYTHONPATH=src:modules/soota/src`。测试覆盖源码/Skill 篡改、路径与链接越界、原子刷新失败、导出隔离、并发内容变化检测、三组件实际文件闭包、产品及组件 Skill 的 frontmatter 和相对链接。`docs/workflow.md` 仅保留文档链接路由，流程契约主源是 `docs/knowledge.md`；检查应同时覆盖产品工作流 Skill 和各独立组件的引用闭包。

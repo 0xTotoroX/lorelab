@@ -1,6 +1,6 @@
 # Source preparation for knowledge tasks
 
-This reference covers source preservation for pasted text and retains links from older Soota workflows. The maintained article, learning, delivery and cleanup procedure is [process.md](process.md); the schema and recovery contract is [Soota knowledge](../../../docs/knowledge.md). Do not run a second hand-written Cubox/Mubu workflow alongside a saved knowledge job.
+This reference covers source preservation for pasted text and retains links from older Soota workflows. The maintained article, learning, delivery and cleanup procedure is [process.md](process.md); the schema and recovery contract is [LoreLab knowledge](../../../docs/knowledge.md). Do not run a second hand-written Cubox/Mubu workflow alongside a saved knowledge job.
 
 ## Resolve the destination and preserve the source
 
@@ -22,11 +22,11 @@ soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
 
 Do not pass pasted prose as the positional input or as `--inputs-file`: those inputs interpret links or input-list rows. Ingest the saved text file instead. Preserve the source as context first. A requested knowledge article continues through `knowledge prepare`; it does not require a separate `ingest --want article` intermediate, media acquisition or transcription.
 
-After ingest, record the returned v2 bundle directory or manifest in a JSON string-array file. Run `soota knowledge prepare --bundles-file FILE --vault PATH --subdir SUBDIR` and follow its actual review template. The original paste and bundle remain read-only. If the user requested only a per-source note or whole-bundle export, use [the ordinary task contract](tasks.md) instead of silently adding classified knowledge delivery.
+After ingest, record the returned v2 bundle directory or manifest in a JSON string-array file. Run `lorelab knowledge prepare --bundles-file FILE --vault PATH --subdir SUBDIR` and follow its actual review template. The original paste and bundle remain read-only. If the user requested only a per-source note or whole-bundle export, use [the ordinary task contract](../../../modules/soota/skills/soota/references/tasks.md) instead of silently adding classified knowledge delivery.
 
 ## Cubox batches and source snapshots
 
-Use the selected IDs with `soota knowledge prepare --ids-file FILE`. It calls Cubox CLI to read folders and cards, preserves exact source bytes and source identities, protects GitHub projects and creates the Soota analysis handoffs. Missing or description-only content stays incomplete. See [article workflow](process.md#文章任务) and [source supplementation](../../../docs/knowledge.md#cubox-输入与补抓).
+Use the selected IDs with `lorelab knowledge prepare --ids-file FILE`. It calls Cubox CLI to read folders and cards, preserves exact source bytes and source identities, protects GitHub projects and creates the Soota analysis handoffs. Missing or description-only content stays incomplete. See [article workflow](process.md#文章任务) and [source supplementation](../../../docs/knowledge.md#cubox-输入与补抓).
 
 `body_available` means body text exists, not that the original post is complete. Keep Cubox snapshots distinct from supplemental sources. Use existing Soota acquisition for the original URL; a failed read, login problem or `link + null` result remains missing. Never ingest the full CardDetail response as an input list or treat title, AI insight and description as full body text.
 
@@ -38,7 +38,7 @@ Follow [article submission and readback](process.md#提交发布与回读). Read
 
 ## Deliver a requested Mubu outline
 
-Use [the independent study workflow](process.md#按需学习任务) only for explicitly selected articles and a requested learning/review result. Submit through `soota study`, which shares the version, single-writer and readback protections. Do not independently repeat `node-import` for a saved job.
+Use [the independent study workflow](process.md#按需学习任务) only for explicitly selected articles and a requested learning/review result. Submit through `lorelab study`, which shares the version, single-writer and readback protections. Do not independently repeat `node-import` for a saved job.
 
 ## Verify the requested result
 

@@ -106,12 +106,13 @@ def save(job: Path, state: dict):
 
 
 def default_root() -> Path:
-    for name in ("SOOTA_KNOWLEDGE_STATE_DIR", "LORELAB_STATE_DIR", "LOREHUB_STATE_DIR"):
+    for name in ("LORELAB_STATE_DIR", "SOOTA_KNOWLEDGE_STATE_DIR", "LOREHUB_STATE_DIR"):
         if os.environ.get(name):
             return Path(os.environ[name]).expanduser()
-    from soota.config import default_dirs
-
-    return default_dirs()[2] / "knowledge/jobs"
+    if os.environ.get("SOOTA_DATA_DIR"):
+        return Path(os.environ["SOOTA_DATA_DIR"]).expanduser() / "knowledge/jobs"
+    base = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))).expanduser()
+    return base / "lorelab/jobs"
 
 
 _thread_locks: dict[str, threading.Lock] = {}

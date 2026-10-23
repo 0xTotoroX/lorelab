@@ -11,7 +11,7 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 所有实际调用在子命令前添加 `--agent`，复用桌面会话时加 `--auth desktop`。先读取 [Agent 调用约定](docs/agent-usage.md)，依据 JSON 的 `ok/status/error.code/data` 和退出码处理，不解析中文文案判断成功。
 
-在 LoreLab 中使用 `lorelab tool mubu -- ORIGINAL_ARGS`，例如 `lorelab tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorelab doctor` 和 `lorelab skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。已有知识或学习任务使用 `soota knowledge`、`soota study` 或对应 LoreLab 路由发布与核对，不能另起写入者绕过批次状态。下方 `python3 scripts/mubu_api.py` 示例是独立源码形式；LoreLab 安装中统一把该前缀替换为 `lorelab tool mubu --`，保留其后的 `--agent`、认证选项和子命令，使用产品绑定的解释器与依赖。
+在 LoreLab 中使用 `lorelab tool mubu -- ORIGINAL_ARGS`，例如 `lorelab tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorelab doctor` 和 `lorelab skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。已有知识或学习任务使用 `lorelab knowledge`、`lorelab study` 发布与核对，不能另起写入者绕过批次状态。下方 `python3 scripts/mubu_api.py` 示例是独立源码形式；LoreLab 安装中统一把该前缀替换为 `lorelab tool mubu --`，保留其后的 `--agent`、认证选项和子命令，使用产品绑定的解释器与依赖。
 
 - 在用户已授权的范围内完成读取、预览与执行，不为 `--execute` 再次索要相同授权。
 - 节点/媒体执行必须带预览的 `--expect-version`；同一文档串行操作。

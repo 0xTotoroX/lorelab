@@ -2,11 +2,11 @@
 
 给 Soota 媒体、网页、本地资料或 Cubox 收藏，采集所需内容，并按要求整理、记录与交付知识。
 
-Soota 是本地优先的内容采集与知识记录 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context，只有明确请求时才由 Agent 分析、写笔记或整理详细阅读文章。
+Soota 是本地优先的内容采集与解析 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context，只有明确请求时才由 Agent 分析、写笔记或整理详细阅读文章。
 
 YouTube/Bilibili 字幕按平台和能力的费用规则选择来源，支持手动优先级；Monid 为可选付费 Provider，免费来源默认优先。确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
 
-常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，多源文章与学习交付见 [知识流程](docs/knowledge.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
+常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，多源文章与学习交付由 LoreLab 负责，见[工作流迁移说明](docs/knowledge.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -82,7 +82,7 @@ B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优
 
 统一任务支持 `--workers 1..8`，默认 1。枚举和结果列表保持输入顺序，独立条目并行处理，同一内容包目录按顺序写入；条目失败不阻断其他条目。并发设置随任务保存，resume 可以覆盖；所有 worker 共享全批费用预留，恢复不清零。Ctrl-C 会等待在途条目收尾再保存暂停状态，可能需等 Provider 超时。
 
-文章、学习大纲和最终交付使用下文的 `knowledge` / `study`；采集任务仍保留自己的 source bundle、预算和恢复记录。
+文章、学习大纲和最终交付由 LoreLab 负责；Soota 采集任务保留自己的 source bundle、预算和恢复记录。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
 
@@ -90,37 +90,11 @@ B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优
 
 `SOOTA_AUTO_UPDATE=false` 可关闭自动更新；`config.toml` 的 `[updates] interval_seconds = 3600` 可将检查间隔改为一小时，默认 `0` 表示每次在线任务检查。固定版本或执行 `runtime rollback` 后若要继续使用该版，请关闭自动更新。安装位置、外部路径和兼容性检查见 [Provider 架构](docs/providers.md)。
 
-## 文章整理与学习交付
+## 与 LoreLab 配合
 
-`soota knowledge` 从选定的 Cubox 收藏或已摄取的 v2 内容包生成审阅交接，Agent 实读来源、相关已有知识及目标规则后，整理成完整、连贯的文章。文章可综合多个来源，长短取决于内容，不固定要点数量。普通采集或聊天总结不隐含此步骤。
+Soota 获取、解析和保存原文 context；LoreLab 接收内容包，组织跨来源文章、学习大纲、交付核对与授权清理。这些工作流及提示词由 LoreLab Skill 维护，独立 Soota 不包含工作流代码。
 
-```bash
-soota knowledge init --vault /path/to/KnowledgeVault --subdir 知识
-soota knowledge prepare --ids-file /path/to/card-ids.txt
-# 或：JSON 字符串数组，每项是已有 v2 包目录或 manifest 路径
-soota knowledge prepare --bundles-file /path/to/source-bundles.json
-soota knowledge submit /path/to/job --file /path/to/review.json
-soota knowledge publish /path/to/job
-soota knowledge verify /path/to/job
-```
-
-两个输入选项互斥。`--bundles-file` 只接收有已校验正文或字幕及 context 的包，原包只读，后续变动会阻止继续；这类任务不调用 Cubox 或删除源文件。Cubox 补抓另用 `--source-bundles` 绑定收藏 ID 与采集包。非空正文、文件 hash 正确或任务 completed 均不证明原始内容完整，完整性由 Agent 根据实际阅读审阅。
-
-文章写入并回读后即可结束，已有文件冲突会停止并保留人工修改。只有明确要求学习或复习时，再从选定文章发起独立任务：
-
-```bash
-soota study prepare --article /path/to/KnowledgeVault/知识/主题.md \
-  --vault /path/to/KnowledgeVault --mubu-doc DOCUMENT_ID
-soota study submit /path/to/study-job --file /path/to/study-review.json
-soota study publish /path/to/study-job
-soota study verify /path/to/study-job
-```
-
-`study` 不重抓来源、不重写文章或清理收藏；幕布节点表达完整知识单元，层级用于真实关系。只在明确要求同批文章和大纲时使用 `knowledge prepare --with-outline`，不自动把每篇文章转为学习树。
-
-Cubox 与幕布操作通过各自独立 CLI 执行，Soota 不调用其私有 API。独立运行按需发现 `cubox-cli`、`mubu-cli`，也可用 `SOOTA_CUBOX_COMMAND`、`SOOTA_MUBU_COMMAND` 的 JSON argv 数组指定；仅整理内容包文章不需要这两个 CLI。LoreLab 提供成套安装与固定入口，流程实现和 Skill 仍完整属于 Soota。
-
-收藏默认保留；有适用明确授权的 Cubox 批次才启用 `--delete-verified`，通过完整来源覆盖和实际交付门禁后执行 `knowledge cleanup JOB --execute`。资料不全与 GitHub 项目保留，内容包来源不删除。配置路径优先级、文章/大纲清理条件、旧命令与冻结任务兼容详见 [知识流程契约](docs/knowledge.md)，操作和提示词见 [Soota Skill](skills/soota/SKILL.md)。
+安装 LoreLab 后，用 `lorelab knowledge` 整理知识、`lorelab study` 制作学习大纲。旧 `soota knowledge/study` 仅作兼容转发，已有任务继续使用原 JOB 路径；采集和下载可以只安装 Soota。兼容边界见[工作流迁移说明](docs/knowledge.md)。
 
 ## 多平台查询
 

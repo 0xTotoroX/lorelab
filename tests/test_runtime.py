@@ -137,14 +137,14 @@ def test_new_manifest_rejects_wrong_product_and_invalid_json(managed):
         runtime.runtime_manifest()
 
 
-def test_config_methods_delegate_to_soota_without_own_storage(monkeypatch, tmp_path):
-    knowledge_runtime = types.ModuleType("soota.knowledge.runtime")
-    path = tmp_path / "chosen-by-soota.json"
+def test_config_methods_delegate_to_product_workflow_storage(monkeypatch, tmp_path):
+    knowledge_runtime = types.ModuleType("lorelab.knowledge.runtime")
+    path = tmp_path / "chosen-by-workflow.json"
     settings = {"preserved": True}
     calls = []
     knowledge_runtime.config_path = lambda: calls.append("path") or path
     knowledge_runtime.read_config = lambda: calls.append("read") or settings
-    monkeypatch.setitem(sys.modules, "soota.knowledge.runtime", knowledge_runtime)
+    monkeypatch.setitem(sys.modules, "lorelab.knowledge.runtime", knowledge_runtime)
     assert runtime.config_path() == path
     assert runtime.read_config() is settings
     assert calls == ["path", "read"]

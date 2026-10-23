@@ -7,13 +7,15 @@ import sys
 from pathlib import Path
 
 from soota.cli import app
-from soota.knowledge.workflow_state import save, seal
 from typer.testing import CliRunner
 
 from lorelab.cli import main
+from lorelab.knowledge.workflow_state import save, seal
 
 
-def test_current_entrypoints_read_old_frozen_job_without_migration(tmp_path, capsys):
+def test_current_entrypoints_read_old_frozen_job_without_migration(tmp_path, capsys, monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(root / "src"), str(root / "modules/soota/src")]))
     job = tmp_path / "old-job"
     job.mkdir()
     state = {"schema_version": 1, "job": str(job), "status": "waiting_review", "sealed": {}}
@@ -38,7 +40,10 @@ def test_removed_python_command_cannot_execute_from_source(tmp_path):
     result = subprocess.run(
         [sys.executable, "-S", "-m", "lorehub.cli", "--help"],
         env={**os.environ, "PYTHONPATH": str(source)},
-        cwd=tmp_path, capture_output=True, text=True, check=False,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     assert result.returncode != 0
     assert "No module named" in result.stderr

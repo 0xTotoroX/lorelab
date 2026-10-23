@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from soota.knowledge import study
-from soota.knowledge import workflow_publish as publisher
-from soota.knowledge.workflow_state import WorkflowError, lock
+from lorelab.knowledge import study
+from lorelab.knowledge import workflow_publish as publisher
+from lorelab.knowledge.workflow_state import WorkflowError, lock
 
 from .support import FakeCLI, sha, write
 

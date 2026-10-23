@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from soota.knowledge import cli, runtime
-from soota.knowledge import workflow as w
-from soota.knowledge.workflow_state import WorkflowError
+from lorelab.knowledge import cli, runtime
+from lorelab.knowledge import workflow as w
+from lorelab.knowledge.workflow_state import WorkflowError
 
 from .support import FakeCLI, card, review_for, sha, write
 

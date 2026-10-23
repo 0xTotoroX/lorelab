@@ -65,7 +65,7 @@ PREFIX/
 
 ## 产品运行时接口
 
-`release/bin/lorelab` 使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`。保留历史环境变量名称用于读取既有运行时绑定，不提供旧命令或 Python 包。独立 Soota 通过 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 和 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK` 读取同一绑定，不依赖产品 Python 包；新旧变量或清单路径不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
+`release/bin/lorelab` 使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`。保留历史环境变量名称用于读取既有运行时绑定，不提供旧命令或 Python 包。LoreLab 工作流兼容读取 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 和 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK` 绑定；Soota 的旧知识命令在同环境中转发到 LoreLab；新旧变量或清单路径不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
 
 `runtime.json` 的命令元素全部使用安装后的绝对路径，结构如下（`/prefix/releases/ID` 是占位路径）：
 
@@ -92,13 +92,13 @@ PREFIX/
 
 ## 从 LoreHub 升级
 
-旧 `lorehub` 命令、产品 Python 导入兼容入口和同名 Skill 已移除。知识与学习任务分别使用 `soota knowledge`、`soota study`，产品管理使用 `lorelab`。
+旧 `lorehub` 命令、产品 Python 导入兼容入口和同名 Skill 已移除。知识与学习任务分别使用 `lorelab knowledge`、`lorelab study`，采集任务使用 `soota ingest/jobs`。
 
 可以把新包安装到原 LoreHub prefix：安装器识别旧 `current`，创建并检查新 release 后再切换。升级清理 `PREFIX/bin/lorehub` 以及 `--skills-dir` 指定目录中的旧 Skill 链接，仅删除能确认属于本 prefix 的链接，外部同名内容仍受保护。未指定 `--skills-dir` 时不检查外部 Skill 注册目录。已有 release 不搬动、不删除，留作历史备份；当前安装不再注册旧入口。
 
 既有 prefix 名称不影响产品名称。安装目录包含绝对路径，不要为了改名直接移动它；需要更换位置时重新安装。组件命令 `soota`、`cubox-cli`、`mubu-cli` 仍独立存在。
 
-知识配置由 Soota 按[配置优先级](../modules/soota/docs/knowledge.md#配置独立组件与兼容入口)读取，可原位沿用旧 LoreHub 配置；升级不会静默复制配置、改写旧任务或放宽删除。旧 JOB 绝对路径可交给 `soota knowledge`、`soota study` 或对应 LoreLab 路由继续。历史 prefix、配置路径、环境变量和共享锁目录保留原名，用于数据兼容；新任务状态与锁的约定见 [Soota 契约](../modules/soota/docs/knowledge.md#python-接口)。
+知识配置由 LoreLab 按[配置优先级](knowledge.md#配置独立组件与兼容入口)读取，可原位沿用旧 LoreHub 配置；升级不会静默复制配置、改写旧任务或放宽删除。旧 JOB 绝对路径可交给 `lorelab knowledge/study` 继续；旧 `soota knowledge/study` 仅作兼容转发，需要已安装 LoreLab。历史 prefix、配置路径、环境变量和共享锁目录保留原名，用于数据兼容；新任务状态与锁的约定见 [LoreLab 契约](knowledge.md#python-接口)。
 
 ## 从本地源码构建
 

@@ -1,6 +1,6 @@
 """[INPUT]: 显式收藏、目的地、Agent 审阅及 runtime.run_json。
 [OUTPUT]: 默认文章交付及显式大纲交付的持久化知识流程。
-[POS]: Soota 知识交付编排；来源采集和跨来源文章任务分别保留恢复状态。
+[POS]: LoreLab 知识交付编排；来源采集和跨来源文章任务分别保留恢复状态。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
