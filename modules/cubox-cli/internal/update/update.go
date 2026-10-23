@@ -225,6 +225,10 @@ func (n *Notifier) shouldCheck() bool {
 	if n.Version == "" || n.Version == "dev" {
 		return false
 	}
+	// LoreHub 构建由自有源码整包更新，不向用户推荐原作者的替换安装。
+	if strings.Contains(n.Version, "+lorehub") {
+		return false
+	}
 	if !isReleaseVersion(n.Version) {
 		return false
 	}

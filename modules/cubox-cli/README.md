@@ -2,18 +2,16 @@
 
 [License: MIT](https://opensource.org/licenses/MIT)
 [Go Version](https://go.dev/)
-[npm version](https://www.npmjs.com/package/cubox-cli)
 
 [English](./README.md) | [中文版](./README.zh.md)
 
-The official Cubox CLI. Save, search, read, and use what you read with AI. Your personal reading memory, now usable.
+The LoreHub-maintained Cubox CLI fork. Save, search, read, and use what you read with AI. Your personal reading memory, now usable.
 
 [Install](#installation) · [Auth](#authentication) · [Commands](#commands) · [AI Agent](#quick-start-ai-agent) · [Examples](#examples) · [Development](#development)
 
 ## ⭐ Fork Addition: What This Fork Adds Over the Official CLI
 
-> 本节为 fork 新增说明。以下官方 README 内容保持原样，未做修改。
-> This section is fork-only; everything below is the original official README, untouched.
+> This component is maintained in LoreHub. Installation and updates use the bundled source and Skill, not the original author's releases.
 
 Compared with the official CLI (v1.0.10), this fork **unlocks the full web/app API group** that the official CLI does not expose:
 
@@ -58,8 +56,8 @@ Details and reverse-engineering notes: see [FORK.md](./FORK.md).
 
 ### Requirements
 
-- Node.js 16+ (for `npm`/`npx`)
-- Go 1.23+ (only for building from source)
+- LoreHub release installation: use the product installer; no separate Node.js or Go installation is needed.
+- Independent source build: Go 1.23+; Node.js 16+ only when using the local npm wrapper.
 
 ### Quick Start (Human Users)
 
@@ -67,26 +65,14 @@ Details and reverse-engineering notes: see [FORK.md](./FORK.md).
 
 #### Install
 
-**Option 1 — From npm (recommended):**
+Use the LoreHub product installer for the matched CLI and Skill. To install an independently exported component instead:
 
 ```bash
-# Install CLI
-npm install -g cubox-cli
-
-# Install CLI Skill (required for AI Agents)
-npx skills add OLCUBO/cubox-cli -g -y
-```
-
-**Option 2 — From source:**
-
-```bash
-git clone https://github.com/OLCUBO/cubox-cli.git
-cd cubox-cli
+cd /path/to/exported-cubox-cli
 make install
-
-# Install CLI Skill (required for AI Agents)
-npx skills add OLCUBO/cubox-cli -g -y
 ```
+
+Alternatively, `npm install -g .` in that same directory builds the included Go source. Register the complete `skills/cubox` directory in your Agent's Skill directory; do not copy only `SKILL.md`. This private source package is not the public npm package.
 
 #### Log in
 
@@ -124,13 +110,7 @@ cubox-cli card detail --id CARD_ID
 
 **Step 1 — Install**
 
-```bash
-# Install CLI
-npm install -g cubox-cli
-
-# Install CLI Skill (required)
-npx skills add OLCUBO/cubox-cli -g -y
-```
+Use LoreHub's installer and `lorehub skills list`, or follow the independent source installation above. Keep the CLI and complete Skill from the same exported version.
 
 **Step 2 — Authenticate**
 
@@ -628,8 +608,7 @@ cubox-cli card list --keyword "AI" --page 2
 ### Build from source
 
 ```bash
-git clone https://github.com/OLCUBO/cubox-cli.git
-cd cubox-cli
+cd /path/to/exported-cubox-cli
 make build        # build for current platform
 make build-all    # cross-compile for all platforms
 make release      # create release archives

@@ -104,11 +104,9 @@ python3 scripts/mubu_api.py create "周会" --folder <folder-id> --md examples/w
 
 ## 📦 Install
 
-```bash
-npx skills add liuboacean/mubu-integration
-```
+This LoreHub-maintained component is installed with the product's CLI and Skill bundle. For standalone use, export the component from LoreHub and register that complete directory in your Agent; its root SKILL.md references the included scripts and docs. Updates use the same maintained source, not the original author's Skill package.
 
-This installs the Skill for your agent. It is a Python package — you also need **Python 3.9+** and the runtime dependency:
+A standalone source installation requires **Python 3.9+** and the runtime dependencies:
 
 ```bash
 pip install -r requirements.txt

@@ -104,11 +104,9 @@ python3 scripts/mubu_api.py create "周会" --folder <folder-id> --md examples/w
 
 ## 📦 安装
 
-```bash
-npx skills add liuboacean/mubu-integration
-```
+本组件由 LoreHub 维护，随产品成套安装 CLI 和 Skill。独立使用时，从 LoreHub 导出本组件，把整个导出目录注册到 Agent；根目录的 SKILL.md 需要随附的 scripts 和 docs。更新仍使用这份自有源码，不替换为原作者的 Skill 包。
 
-这会为你的 Agent 安装该 Skill。它是一个 Python 包 —— 你还需要 **Python 3.9+** 及运行时依赖：
+独立源码安装需要 **Python 3.9+** 及运行时依赖：
 
 ```bash
 pip install -r requirements.txt

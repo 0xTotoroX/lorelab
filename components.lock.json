@@ -14,7 +14,7 @@
         "name": "cubox",
         "path": "modules/cubox-cli/skills/cubox"
       },
-      "tree_sha256": "0e652e28aebf53bba1fe643054af68cd54d09e94201f9c5ac993110fdf0001a5",
+      "tree_sha256": "4d068e3c5e162a449659c2dd0d30b82deed8862fcedd35f29cc1b8909ef066d9",
       "import_version": "1.0.10+fork.d9e6edb"
     },
     "soota": {
@@ -37,7 +37,7 @@
         "name": "mubu-integration",
         "path": "modules/mubu-cli"
       },
-      "tree_sha256": "be22e38ced05fff166c8fa167203a3cf1128af0a36ed3988d84f07e4d9240a89"
+      "tree_sha256": "8e69c3cbd83e44205726099d149cb59c7138dacf9d99151094da9680ef54c29c"
     }
   }
 }

@@ -58,7 +58,7 @@ lorehub components export mubu /path/to/new-mubu-source
 | Soota | `pyproject.toml` / `uv.lock`、`src/soota/`、`skills/soota/` 及其引用。在组件根使用 `uv run soota --help`。 |
 | 幕布 | `requirements.txt`、`scripts/`、根 `SKILL.md`、README 和 `docs/`。在隔离 Python 环境安装依赖后运行 `python scripts/mubu_api.py --help`。 |
 
-Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任何自有 Release 或 npm 发布已存在。Go import path 中保留上游模块名用于现有依赖兼容，不能据此安装上游发行包。继承的更新通知仍可能提及上游版本；按配套 Skill 处理，不执行其中的替换安装命令。
+Cubox 的本地 npm 包为 private，仅提供随包源码构建，不假设任何自有 Release 或 npm 发布已存在。Go import path 中保留上游模块名用于现有依赖兼容，不能据此安装上游发行包。版本标记含 `+lorehub` 的自有构建关闭原作者版本查询与替换安装提示；更新从 LoreHub 源码重新构建，独立导出也保留这一规则。
 
 安装四个 Skill 时允许用户指定 `--skills-dir`。安装器应保留真实 source 入口及相对引用闭包，不能只复制孤立的 `SKILL.md`；Agent 通过 `lorehub skills list` 定位 source。统一产品 Skill 需要同份源码中的 `docs/`、组件 Skill 及其引用；三个组件导出则各自保持独立。
 

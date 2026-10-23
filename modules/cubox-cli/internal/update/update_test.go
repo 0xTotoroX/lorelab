@@ -166,6 +166,25 @@ func TestLookupSkipsForDevAndUnsetVersions(t *testing.T) {
 	}
 }
 
+func TestLoreHubBuildNeverUsesOfficialUpdateService(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		w.Write([]byte(`{"version":"99.0.0"}`))
+	}))
+	defer server.Close()
+	n := newTestNotifier(t, "1.0.10+lorehub.1")
+	n.RegistryURL = server.URL
+	state := n.Lookup()
+	n.RefreshCache(context.Background())
+	if state.Info != nil || state.NeedsRefresh || requests.Load() != 0 {
+		t.Fatal("LoreHub build entered the upstream update path")
+	}
+	if _, err := os.Stat(n.CachePath); !os.IsNotExist(err) {
+		t.Fatal("LoreHub build touched upstream update cache")
+	}
+}
+
 func TestLookupSkipsForGitDescribeBuilds(t *testing.T) {
 	cases := []string{
 		"1.0.0-12-g9b933f1",

@@ -31,7 +31,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "cubox-cli",
-	Short: "The official Cubox CLI tool, built for humans and AI Agents",
+	Short: "LoreHub-maintained Cubox CLI for humans and AI Agents",
 	Long: `cubox-cli — manage your Cubox bookmarks from the terminal.
 
 Supports listing groups (folders), tags, filtering cards, and reading

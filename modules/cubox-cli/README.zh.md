@@ -2,11 +2,10 @@
 
 [License: MIT](https://opensource.org/licenses/MIT)
 [Go Version](https://go.dev/)
-[npm version](https://www.npmjs.com/package/cubox-cli)
 
 [English](./README.md) | [中文版](./README.zh.md)
 
-Cubox 官方 CLI。收藏、搜索、阅读，并借助 AI 使用你读过的内容。让你的个人阅读记忆，真正被用起来。
+LoreHub 维护的 Cubox CLI 二次开发版。收藏、搜索、阅读，并借助 AI 使用你读过的内容。让你的个人阅读记忆，真正被用起来。
 
 [安装](#安装) · [认证](#认证) · [命令](#命令) · [AI Agent](#ai-agent-快速开始) · [示例](#示例) · [开发](#开发)
 
@@ -31,8 +30,8 @@ Cubox 官方 CLI。收藏、搜索、阅读，并借助 AI 使用你读过的内
 
 ### 前置要求
 
-- Node.js 16+（用于 `npm`/`npx`）
-- Go 1.23+（仅从源码构建时需要）
+- LoreHub 发行包使用产品安装器，无需单独安装 Node.js 或 Go。
+- 独立源码构建需要 Go 1.23+；只有使用本地 npm 包装器时才需要 Node.js 16+。
 
 ### 快速开始（人类用户）
 
@@ -40,26 +39,14 @@ Cubox 官方 CLI。收藏、搜索、阅读，并借助 AI 使用你读过的内
 
 #### 安装
 
-**方式一：通过 npm（推荐）**
+优先使用 LoreHub 产品安装器，成套安装匹配的 CLI 与 Skill。独立导出的组件可在其目录中安装：
 
 ```bash
-# 安装 CLI
-npm install -g cubox-cli
-
-# 安装 CLI Skill（AI Agent 必需）
-npx skills add OLCUBO/cubox-cli -g -y
-```
-
-**方式二：从源码构建**
-
-```bash
-git clone https://github.com/OLCUBO/cubox-cli.git
-cd cubox-cli
+cd /path/to/exported-cubox-cli
 make install
-
-# 安装 CLI Skill（AI Agent 必需）
-npx skills add OLCUBO/cubox-cli -g -y
 ```
+
+也可在同一目录执行 `npm install -g .`，它会构建随包 Go 源码。把完整的 `skills/cubox` 目录注册到 Agent 的 Skill 目录，保留引用文件，不只复制 `SKILL.md`。本组件是私有源码包，更新同样从 LoreHub 导出和构建，不安装公共 npm 包或原作者发行版。
 
 #### 登录
 
@@ -97,13 +84,7 @@ cubox-cli card detail --id CARD_ID
 
 **步骤 1：安装**
 
-```bash
-# 安装 CLI
-npm install -g cubox-cli
-
-# 安装 CLI Skill（必需）
-npx skills add OLCUBO/cubox-cli -g -y
-```
+使用 LoreHub 安装器与 `lorehub skills list`，或遵照上面的独立源码安装方式；CLI 和完整 Skill 来自同一导出版本。
 
 **步骤 2：认证**
 
@@ -601,8 +582,7 @@ cubox-cli card list --keyword "AI" --page 2
 ### 从源码构建
 
 ```bash
-git clone https://github.com/OLCUBO/cubox-cli.git
-cd cubox-cli
+cd /path/to/exported-cubox-cli
 make build        # 为当前平台构建
 make build-all    # 交叉编译所有平台
 make release      # 创建发布包
