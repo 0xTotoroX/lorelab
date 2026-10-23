@@ -31,6 +31,8 @@ lorehub batch prepare --ids-file /path/to/card-ids.txt
 
 接着让支持 Skill 的 Agent 使用 `lorehub` Skill，读取任务的来源快照与交接文件，按知识库规则整理内容。CLI 不自行调用语言模型；Agent 负责阅读、归并、确认来源覆盖，先定稿正文，再按实际结构生成大纲。
 
+原文缺失时先用 Soota 补抓，再通过 `prepare --source-bundles /path/to/bundles.json` 传入“收藏 ID → 内容包路径”映射。程序会核对来源身份；补抓文件存在不代表原帖已读全。
+
 ```sh
 lorehub batch submit /path/to/job --file /path/to/review.json
 lorehub batch publish /path/to/job

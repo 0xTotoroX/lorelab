@@ -1,6 +1,7 @@
 """[INPUT]: Cubox batch/folder list、可选 Soota v2 正文包。
 [OUTPUT]: 不可变来源、输入顺序和实际 task/item/context 绑定。
 [POS]: workflow 来源保全与接续；不把描述或本地 full 当作全文证明。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
 from __future__ import annotations

@@ -1,6 +1,7 @@
 """[INPUT]: 私有 job 文件、固定目的地和 CLI JSON。
 [OUTPUT]: 持久化、线程/进程锁、不可变文件及路径校验。
 [POS]: workflow 共用的本地状态边界；不调用服务。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
 from __future__ import annotations

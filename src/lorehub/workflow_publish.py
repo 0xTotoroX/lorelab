@@ -1,6 +1,7 @@
 """[INPUT]: 冻结 approved、大纲、目标文件及 Mubu 全树回执。
 [OUTPUT]: 新笔记、单次导入意图和基于节点 ID 的全树对账。
 [POS]: 唯一写入者；遇未知结果只能读取，不重发导入。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
 from __future__ import annotations

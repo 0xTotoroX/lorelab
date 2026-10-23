@@ -1,6 +1,7 @@
 """[INPUT]: prepare 授权、冻结覆盖审阅、笔记与大纲实读结果。
 [OUTPUT]: 清理预览、一次删除意图、active/archived 精确 URL 对账。
 [POS]: 收藏删除门禁；未知结果与恢复只能读取。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
 from pathlib import Path

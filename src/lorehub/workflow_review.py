@@ -1,6 +1,7 @@
 """[INPUT]: Agent 审阅 JSON、来源 handoff 和目标规则所在目录。
 [OUTPUT]: 校验/冻结的 approved、Soota 完成回执与产物指纹。
 [POS]: 只验证机械契约；全文阅读、语义覆盖与大纲质量由 Agent 负责。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
 from __future__ import annotations

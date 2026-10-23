@@ -1,6 +1,7 @@
 """[INPUT]: 显式收藏、目的地、Agent 审阅及 runtime.run_json。
 [OUTPUT]: prepare/submit/publish/verify/cleanup/status 的持久化知识流程。
 [POS]: 产品跨工具编排；三工具仅经现有 CLI 调用，无服务私有 API。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
 from __future__ import annotations
