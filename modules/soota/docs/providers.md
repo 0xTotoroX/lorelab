@@ -2,36 +2,46 @@
 
 ## 处理流程与职责
 
-这张图按职责展示统一内容任务。每个框包含内部的工具、格式和失败处理；只有请求的目标需要某一步时才执行它。默认文字采集到 context 结束，媒体目标直接交付文件。
+这张图按职责展示采集、知识整理与交付。每个框包含内部的工具、格式和失败处理；只有请求的目标需要某一步时才执行它。默认文字采集到 context 结束，媒体目标直接交付文件。知识整理和学习复习分别由明确请求触发。
 
 ```mermaid
 flowchart TD
-    A[输入与目标] --> B[有序枚举与来源去重]
+    A[链接、媒体、本地文件与目标] --> B[有序枚举与来源去重]
     B --> H[有界条目调度：1–8 workers]
     H --> C[内容获取]
     H -.逐项进度合并与同目录串行.-> S[任务状态与内容包锁]
     C -.计费请求前持久预留.-> Q[全批共享预算]
     C --> D[内容处理]
-    D --> E[校验与保存产物]
-    E -.明确要求分析或文章.-> F[Agent 按主题分析与独立草稿]
+    D --> E[校验与保存 context、媒体及所选产物]
+    E -.明确要求单项分析或文章.-> F[Agent 阅读与提交所选语义产物]
     F --> E
-    E -.指定目的地.-> G[导出]
-    F -.明确要求知识落地.-> K[单写者合并知识与 Mubu CLI 导入回读]
+    E -.指定整包目的地.-> G[导出]
+    E -.明确要求知识整理.-> K[Soota knowledge：固定来源与审阅交接]
+    X[Cubox CLI：选定收藏与原文] --> K
+    K --> W[Agent 实读、多源归并与文章审阅]
+    W --> V[Soota：校验冻结、写入文章并回读]
+    V --> O[Obsidian 或明确 Markdown 目录：文章完成]
+    O -.用户明确选定文章学习.-> L[Soota study：文章快照与学习交接]
+    L --> T[Agent 组织有真实关系的完整知识节点]
+    T --> M[Soota 经幕布 CLI 写入与全树核验]
+    V -.仅显式同批大纲.-> M
 ```
 
 | 黑盒 | 职责 | 代码入口 |
 | --- | --- | --- |
 | 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py` |
-| 任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py` |
+| 采集任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py` |
 | 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |
 | 内容处理 | 字幕格式统一、本地转写、正文结构转换及媒体处理；默认不做语义改写 | `transcripts/`、`content/`、`media/` |
 | 校验与保存产物 | 校验文件与媒体，登记 v2 产物、来源及校验值，保护既有源文和文章 | `media/probe.py`、`artifacts/bundle.py` |
-| Agent 分析与整理 | 按明确目标读取 context，按主题并行产出独立草稿；单写者提交任务结果、合并知识及调用外部 CLI；Soota 检查正文指纹、任务身份与证据 | `skills/soota/`、`tasks/outputs.py`、`artifacts/analysis.py` |
-| 导出 | 写入指定目录，维持相对附件链接并检查人工修改冲突 | `artifacts/export.py` |
+| Agent 分析与整理 | 按明确目标实际阅读 context、已有知识或选定文章，形成带证据的语义草稿与审阅结果 | `skills/soota/` |
+| 单项语义产物接续 | 校验 Agent 提交的正文指纹、task/item 身份与证据，保存请求的分析、笔记或文章产物 | `tasks/outputs.py`、`artifacts/analysis.py` |
+| 知识与学习交付 | 固定 Cubox 或内容包来源、生成审阅交接、冻结证据、文章及可选大纲；保护人工修改、串行写入与回读；按授权核对 Cubox 清理 | `knowledge/` |
+| 整包导出 | 写入指定目录，维持相对附件链接并检查人工修改冲突 | `artifacts/export.py` |
 
-`docs/tasks.md` 是统一输入、产物目标、任务恢复和分析提交的操作契约。职责、阶段顺序或能力改变时，同步更新本图、受影响的表和对应 Skill；不以未来目标代替当前实现。
+[统一任务契约](tasks.md)维护采集输入、产物、恢复和单项分析提交；[知识流程契约](knowledge.md)维护跨来源文章、学习任务及交付。职责、阶段顺序或能力改变时，同步更新本图、受影响的表和对应 Skill；不以未来目标代替当前实现。
 
-Cubox → 本地不改写的 source 快照 → Soota context/note/outline → 知识与幕布的组合流程属于 Skill。Cubox 与 Mubu 由各自 CLI 执行，Soota 不接入其私有 API。图中 Agent 的主题并行与 CLI 的 `--workers` 分属不同阶段；语义分析、知识库修改和云端写入都需要对应请求。单元测试验证调度、共享预算、恢复和写入隔离，不代表真实站点或收藏批次已验收。
+Cubox 和幕布的服务操作由各自 CLI 执行，Soota 不接入其私有 API。LoreLab 是成套安装与薄路由入口，独立 Soota 使用同一份知识实现，不需要安装产品层。Agent 的主题并行与 `ingest --workers` 分属不同阶段；一个协调者合并草稿和提交，同一知识文件或幕布文档只由一个写入者处理。正文可用、任务完成或 hash 正确均不证明原始来源完整，语义判断仍由 Agent 负责。单元/契约测试不代表真实站点或收藏批次已验收。
 
 ### 字幕边界
 

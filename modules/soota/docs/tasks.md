@@ -4,6 +4,16 @@
 
 默认获取供 Agent 使用的原文 context，不润色、合段、总结或生成文章。没有 `--want` 的原有 YouTube/Bilibili 单视频命令保留旧输出契约；显式目标及新输入使用 v2 内容包。高层职责图见 [处理流程与职责](providers.md#处理流程与职责)。
 
+## 选择入口
+
+| 目的 | 入口 | 契约 |
+| --- | --- | --- |
+| 采集原文、媒体、单项分析产物或整包导出 | `soota ingest`，以 `soota jobs resume` 接续 | 本文 |
+| 从 Cubox 收藏或已有内容包整理多源文章、写入并核对 | `soota knowledge init/prepare/submit/publish/verify/cleanup/status` | [知识流程](knowledge.md) |
+| 从明确选定的已有文章制作学习大纲 | `soota study prepare/submit/publish/verify/status` | [独立学习任务](knowledge.md#独立学习任务-study) |
+
+知识任务和学习任务是显式请求的流程，不修改普通 ingest 默认停在原文 context 的行为。`note/article/outline` 是内容包产物；`knowledge/study` 另外管理跨来源归并、最终目的地与写入回读。内容判断和写作由 Agent 完成，程序只做确定性处理与核验。
+
 ## 选择目标
 
 以下命令中的 URL、路径和任务编号均为占位值，执行前替换为实际输入。
@@ -83,21 +93,21 @@ soota ingest --inputs-file "/path/to/links.txt" --want context --workers 2 --max
 
 ### 粘贴文字与知识归纳
 
-通过 Soota Skill 可以把用户提供的帖子、片段或混合话题文字保存并精炼归档。Agent 先将文字原样保存成独立 TXT 文件，再使用本地正文入口；文件里的链接保留为文字，不因此访问网站。
+用户要求把帖子、片段或混合话题文字保存为知识时，Agent 先把原文逐字保存为独立 TXT，再用本地正文入口。文件里的 URL 保留为文字，不因此访问网站。普通聊天总结不要求摄取或写知识库。
 
 ```bash
 soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
-  --provider local --want context,note --max-cost 0 \
+  --provider local --want context --max-cost 0 \
   --output "/path/to/source-bundles" --json
 ```
 
-Agent 读取本次 context、目标目录规则和最新 prompt，按主题拆分、精炼、检查相关已有笔记并选择存放位置，再提交带证据的 `note_markdown`，通过 `jobs resume --analysis` 完成来源笔记。不同主题的知识文件由 Agent 按知识库约定创建或补充；无法分类的内容进入约定的收件目录。写入后核对实际文件和来源链接，分别报告来源包与知识归档的结果。流程见 [Skill 知识归纳](../skills/soota/references/knowledge.md)。
+将返回的 v2 包路径写入 JSON 字符串数组，再用 `soota knowledge prepare --bundles-file FILE` 进入明确目的地的文章任务。多个网页、媒体或文本来源可合成文章；原包只读，知识任务不调用 Cubox 或删除源文件。来源准备见 [Skill 来源说明](../skills/soota/references/knowledge.md)，提交与交付见[知识流程](knowledge.md)。
 
-CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 的单份 `note.md` 与整包导出不代替多主题分类，也不会调用模型或自动合并已有知识。
+CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 不调用模型，单份 `note.md` 与整包导出也不代替多主题知识交付。
 
-已授权的 Cubox 知识批次也可通过 Skill 接续：用 Cubox CLI 取得批量 CardDetail，将实际正文原样保存为稳定的本地 source 文件，旁存来源记录；再将文件路径写入输入清单，执行 `--provider local --want context,note --workers 2`，仅当用户明确请求大纲时再加入 `outline`。文章可独立交付；后续学习整理以明确选定的文章为输入，不依赖 Cubox 原收藏仍然存在。`body_available` 只表示有正文，不能推断原文完整。只有描述、链接或空正文的条目保留缺失状态；需要补取时使用 Soota 已有原站／字幕入口，不能把描述作为完整原文。
+Cubox 收藏使用 `soota knowledge prepare --ids-file FILE`。流程通过 Cubox CLI 批量读取原文，保留来源身份，再走本地 context/note 分析交接；`--with-outline` 才增加同批大纲。只有描述、链接或空正文的条目保留缺失状态，需要时用现有原站／字幕入口补取，再用 `--source-bundles` 绑定补抓包。`body_available` 不等于完整原文。
 
-Agent 按主题并行提炼独立草稿，由一个写入者核对证据、合并知识文件并串行提交分析；用户要求幕布时再通过 Mubu CLI `node-import` 预览、绑定版本执行并回读整篇。Soota 不调用这两个服务的私有 API，也不替用户决定收藏删除、分类、路径或写作 prompt；这些规则从目的地 `AGENTS.md` 读取。详细契约与恢复检查见 [知识提炼流程](../skills/soota/references/knowledge.md)。
+Agent 阅读目标规则、实际来源和相关既有知识，按主题归并并审阅；程序冻结提交、检查证据，写入所选文章并回读。默认到文章完成结束。用户明确选择学习复习时，再用 `soota study` 从选定文章制作幕布大纲；不要求原收藏仍存在，不自动安排同步。Soota 通过独立 CLI 调用 Cubox 与幕布，不接入私有 API，也不替用户决定分类、路径、prompt 或删除授权。完整字段与旧任务兼容以[知识流程](knowledge.md)为准。
 
 ## 有界条目并行
 
@@ -257,6 +267,6 @@ CLI 只写显式目的地，不自动寻找 Vault、重组知识库、选择知�
 
 ## 实现与验证边界
 
-任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，内容包和导出位于 `artifacts/`。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
+任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，内容包和整包导出位于 `artifacts/`；跨来源文章、学习与交付位于 `knowledge/`，见[职责图](providers.md#处理流程与职责)。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
 
 自动测试使用合成内容、模拟网络响应和本地媒体样本，检查费用、恢复、文件与证据契约。它们不证明某个真实网站已登录、某份视频已完整下载或付费接口当前可用；应按实际来源单独记录运行验收。

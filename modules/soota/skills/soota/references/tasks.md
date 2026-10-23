@@ -14,10 +14,10 @@ Use only targets requested or necessary for the task:
 | Save an existing webpage with its images | `--want context,images` |
 | Return native query data | `--want data` |
 | Summarize/analyze | `--want analysis` |
-| Write a note and separate outline | `--want note,outline` |
+| Write a per-source note, with an outline only if requested | `--want note` or `--want note,outline` |
 | Produce a detailed reading article | `--want article` |
 
-Saving pasted text as classified knowledge uses a saved `.txt` file with `--provider local --want context,note`, then Agent-managed classification. Cubox batches use immutable local source snapshots and `context,note` by default, adding `outline` only for an explicit request; read [knowledge workflow](knowledge.md). Do not pass prose or the Cubox response directly as share text or an input list.
+For requested knowledge delivery, preserve pasted text as a `.txt` file and ingest with `--provider local --want context`; then pass the resulting v2 bundle through `knowledge prepare --bundles-file`. Cubox selections use `knowledge prepare --ids-file`. Read [source preparation](knowledge.md) and [article workflow](process.md) rather than building another manual delivery path. Do not pass prose or the Cubox response directly as share text or an input list. Ordinary ingestion still stops at the requested source artifacts.
 
 `markdown` keeps the same unprocessed-text boundary as context. Do not map “download this article” to a semantic rewrite. Put optional outputs in `--optional`; do not downgrade a user-required target merely to obtain a successful exit code.
 
@@ -85,6 +85,8 @@ The CLI does not call an LLM. A requested analysis/note/outline/article produces
 4. Run `soota jobs resume JOB_ID --analysis /path/to/submission.json --json`. A directory of per-item submissions is also accepted. Parallel topic Agents must return separate drafts/submissions; a single coordinator validates and submits the collected files, rather than running concurrent resume commands on the same job. Read the final required-output and export states before reporting completion.
 
 Fingerprint or evidence mismatches require reading the current source again. Do not edit identity fields or fabricate evidence to make an old result pass. A repeated identical submission can resume safely; replacing existing semantic output requires authorized `--force`. Source text stays separate and is not rewritten by rendering.
+
+For a saved `knowledge` batch, submit through `soota knowledge submit` so its frozen review and downstream readback stay consistent; do not independently resume its Soota source task with a different submission. A `study` task uses existing articles and has its own `soota study` handoff. Full contracts live in [knowledge documentation](../../../docs/knowledge.md).
 
 New content bundles can be rendered independently using `render --bundle ... --analysis ...`; use `jobs resume` when finishing a pending task so the task record and export continue. Legacy v1 bundles retain the older Analysis render contract.
 

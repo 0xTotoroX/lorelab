@@ -1,98 +1,95 @@
-# LoreHub
+# LoreLab
 
-把 Cubox 收藏整理成完整、连贯的文章，保存到 Obsidian 或用户明确指定的知识目录，回读核对后结束。需要学习或复习时，再从选定的文章制作幕布大纲。
+把内容采集与知识记录所需的工具一起安装：Soota 处理网页、媒体、本地资料和 Cubox 来源，Agent 按要求写成知识文章，再交付到 Obsidian 或明确指定的 Markdown 目录。需要学习或复习时，从选定文章制作幕布大纲。
 
-一篇文章可以综合多个来源，讲清概念、关系和适用条件。完整意味着内容足够、自成一体，不要求篇幅长、修辞多或固定结构；也不要求同时生成短笔记和主题文章、保存两份副本或建立两套目录。已有笔记继续保留。
-
-LoreHub 将 Cubox CLI、Soota、幕布 CLI 和各自的 Skill 一起交付。三个组件来自本仓库维护的版本；修改、构建和安装都以本仓库及 `components.lock.json` 为准。每个 CLI 仍可单独调用，也能导出为独立源码目录。
+LoreLab 打包本仓库维护的 Soota、Cubox CLI、幕布 CLI 及完整 Skill。内容流程只有一份实现，位于 Soota；LoreLab 负责成套安装、版本绑定、检查和组件维护。每个 CLI 可独立使用、构建与更新，组件源码和 Skill 可完整导出。原作者仓库仅作人工选择补丁的来源。
 
 ## 安装
 
 目前提供 macOS Apple Silicon 构建。下载并解压完整发行包后执行：
 
 ```sh
-./install.sh --prefix "$HOME/.local/share/lorehub" \
+./install.sh --prefix "$HOME/.local/share/lorelab" \
   --skills-dir "$HOME/.agents/skills"
-export PATH="$HOME/.local/share/lorehub/bin:$PATH"
-lorehub doctor
+export PATH="$HOME/.local/share/lorelab/bin:$PATH"
+lorelab doctor
 ```
 
-安装器一起安装产品命令、三个 CLI 和四个 Skill；遇到已有的非 LoreHub Skill 会停止，保护原安装。可以先省略 `--skills-dir`，安装后从 `lorehub skills list` 查看完整 Skill 路径，或改用一个新的项目 Skill 目录。
+安装包含产品入口、三个独立 CLI、四套 Skill（`lorelab`、`soota`、`cubox`、`mubu-integration`）及 `lorehub` 兼容 Skill。遇到已有的非本产品 Skill 会停止，保护原安装；可以省略 `--skills-dir`，再用 `lorelab skills list` 定位随包 Skill，或使用新的项目 Skill 目录。
 
-发行包包含 Cubox 二进制、Python 依赖 wheel 和全部组件源码。首次安装仍可能联网获取 uv 和 Python；账号登录、浏览器桥接及可选媒体工具按实际任务配置。源码安装还需要 Go。详见 [安装、更新与恢复](docs/installation.md)。
+发行包包含 Cubox 二进制、Python 依赖 wheel 和全部组件源码。首次安装仍可能联网获取 uv 和 Python；账号登录、浏览器桥接及可选媒体工具按任务配置。源码构建还需要 Go。详见[安装、更新与恢复](docs/installation.md)。
 
-## 使用
+## 采集与知识记录
 
-先为自己的知识库设置明确目的地：
+普通采集默认保存未加工的 context，不自动改写或归档。已有 Soota 命令继续使用：
 
 ```sh
-lorehub init --vault "/path/to/KnowledgeVault" --subdir "知识"
-lorehub batch prepare --ids-file /path/to/card-ids.txt
+soota ingest "URL" --want context --max-cost 0 --json
+soota ingest /path/to/audio.m4a --want transcript,context --json
 ```
 
-接着让支持 Skill 的 Agent 使用 `lorehub` Skill，读取任务的来源快照与交接文件，按知识库规则写成文章。CLI 不自行调用语言模型；Agent 负责阅读、归并、确认来源覆盖与语义审核。普通文章以连贯段落讲清内容，列表用于确实需要并列或列步骤的部分，不自动把每篇文章改成要点清单。
-
-原文缺失时先用 Soota 补抓，再通过 `prepare --source-bundles /path/to/bundles.json` 传入“收藏 ID → 内容包路径”映射。程序会核对来源身份；补抓文件存在不代表原帖已读全。
+明确要求整理知识时，设置目的地并选择来源：
 
 ```sh
-lorehub batch submit /path/to/job --file /path/to/review.json
-lorehub batch publish /path/to/job
-lorehub batch verify /path/to/job
+soota knowledge init --vault /path/to/KnowledgeVault --subdir 知识
+soota knowledge prepare --ids-file /path/to/card-ids.txt
+
+# 或：整理已有 Soota v2 内容包，清单是包路径的 JSON 字符串数组
+soota knowledge prepare --bundles-file /path/to/source-bundles.json
 ```
 
-默认到此结束，不要求配置或调用幕布。文章提交仍使用 `notes`、`markdown` 字段，默认模板不含大纲；格式见 [审阅 schema](docs/workflow.md#agent-审阅-schema)。
+`--ids-file` 与 `--bundles-file` 互斥。Cubox 正文缺失时通过 Soota 现有采集能力补抓，使用 `--source-bundles` 提供收藏 ID 到补抓包的映射。内容包输入只读原包，不调用 Cubox 或删除原始媒体。
 
-收藏默认保留。只有用户明确选择清理时，才在 `init` 或本次 `batch prepare` 启用 `--delete-verified`。新的 `init` 默认 `--cleanup-after article`：完整来源已覆盖、有价值内容已处理、文章实际写入并回读通过，就足以进入清理候选，无需等待幕布。`lorehub batch cleanup /path/to/job` 仅预览，加 `--execute` 才执行删除；资料不全和 GitHub 项目保留，不清空 Cubox 最近删除。
-
-旧配置缺少 `cleanup_after` 时仍要求文章和幕布均已核对，升级不会扩大原有删除授权。若用户明确改为“文章完成即可清理”，准备新批次时显式传 `--cleanup-after article`。详细兼容行为见 [交付选择与旧任务](docs/workflow.md#交付选择与旧任务)。
-
-## 按需学习与复习
-
-用户明确提出学习或复习需求后，从已经保存的文章发起独立任务：
+让 Agent 使用 **Soota Skill**，实际阅读来源、目标目录规则及相关既有知识，填写任务返回的审阅模板。文章可综合多个来源，保留必要的解释、条件和证据；完整以足够理解和使用为准，不强制长文、固定要点数量或双份笔记。CLI 负责状态、指纹、证据及交付核对，不自行调用语言模型。
 
 ```sh
-lorehub study prepare --article "/path/to/KnowledgeVault/知识/主题.md" \
-  --vault "/path/to/KnowledgeVault" --mubu-doc DOCUMENT_ID
+soota knowledge submit /path/to/job --file /path/to/review.json
+soota knowledge publish /path/to/job
+soota knowledge verify /path/to/job
 ```
 
-可重复传入 `--article FILE` 选择多篇文章；`vault`、幕布文档及可选父节点也可复用配置。Agent 阅读选定文章和返回的审核模板，按概念、关系或问题组织学习树。每个节点保留完整含义及直接相关的简短条件、参数，只为真实上下位关系增加子层级，不把一句话机械拆成几个节点。
+默认到文章实际写入并回读后结束，不要求幕布。已有文件内容冲突会停止，保留人工修改；当前不自动合并或更新已有文章。来源完整性仍需 Agent 审阅，非空正文或通过 hash 校验不等于原帖已读全。
+
+收藏默认保留。适用的明确授权下，Cubox 批次才可启用 `--delete-verified`，核对完成后先用 `soota knowledge cleanup JOB` 预览，再加 `--execute` 执行。资料不全和 GitHub 项目保留；内容包批次始终不删除源文件或收藏。旧配置和旧任务保留原有清理门槛，不随升级扩大授权。字段与完整边界见 [Soota 知识流程](modules/soota/docs/knowledge.md)。
+
+## 按需学习
+
+用户明确要求学习或复习时，从已保存的文章另开任务：
 
 ```sh
-lorehub study submit /path/to/study-job --file /path/to/study-review.json
-lorehub study publish /path/to/study-job
-lorehub study verify /path/to/study-job
-lorehub study status /path/to/study-job
+soota study prepare --article /path/to/KnowledgeVault/知识/主题.md \
+  --vault /path/to/KnowledgeVault --mubu-doc DOCUMENT_ID
+soota study submit /path/to/study-job --file /path/to/study-review.json
+soota study publish /path/to/study-job
+soota study verify /path/to/study-job
 ```
 
-`study` 只读原文章并核对冻结指纹，不调用 Cubox 或 Soota，不重写或重建原文章，也不删除收藏。即使原收藏已删除，仍可独立运行。它不会自动在文章完成后启动或定时同步，也不建立幕布返回 Obsidian 的索引。字段与恢复约束见 [学习任务](docs/workflow.md#独立学习任务-study)。
+学习树按概念、关系和问题组织，节点保留完整意思，只为真实关系增加层级，不把一句话切成多个碎片。`study` 只读选定文章，不重抓来源、不重写文章或清理收藏；原收藏已删除也可使用。文章完成不会自动启动学习任务或安排同步，也不建立幕布返回 Obsidian 的索引。
 
-若用户明确要求同一批同时交付文章和大纲，可在 `batch prepare` 加 `--with-outline --mubu-doc DOCUMENT_ID`；仅保存了幕布配置不会启用此模式。需要两处均完成后才清理时，加 `--cleanup-after outline`。
+明确要求同批交付文章和大纲时，才在 `knowledge prepare` 加 `--with-outline`。流程、审阅模板与恢复约束统一维护在 [Soota 知识流程](modules/soota/docs/knowledge.md)，写作取舍见 [Soota 提示词](modules/soota/skills/soota/references/prompts.md)。
 
-来源、审核结果和写入回执保存在用户状态目录，账号配置仍由各组件管理。现有文章内容冲突或幕布目标下已有同名主题时停止该写入，保留人工内容；已有主题合并需另行审阅，当前没有自动更新功能。详细交接格式、状态与恢复方式见 [知识提炼流程](docs/workflow.md)。
+## 兼容与独立维护
 
-## 独立使用和维护
+`lorelab init/batch/study` 是上述 Soota 命令的薄路由，旧 `lorehub init/batch/study` 继续可用。已有冻结任务按原绝对路径恢复，旧配置原位沿用；安装升级可以继续使用原 LoreHub prefix，无需搬动历史 release。配置优先级见 [Soota 配置与兼容入口](modules/soota/docs/knowledge.md#配置独立组件与兼容入口)。
 
 ```sh
-lorehub tool cubox -- card batch --ids-file /path/to/card-ids.txt
-lorehub tool soota -- ingest URL --want context --max-cost 0 --json
-lorehub tool mubu -- --help
-
-lorehub components verify
-lorehub components export cubox /path/to/new-cubox-checkout
+lorelab tool cubox -- card batch --ids-file /path/to/card-ids.txt
+lorelab tool soota -- knowledge status /path/to/job
+lorelab tool mubu -- --agent --help
+lorelab components verify
+lorelab components export soota /path/to/new-soota-checkout
 ```
 
-安装目录还提供独立的 `cubox-cli`、`soota`、`mubu-cli` 命令。`lorehub tool` 始终使用当前产品版本绑定的入口，不从 PATH 中误选另一份组件。
-
-开发时直接修改 `modules/` 内对应组件及其 Skill，运行组件相关检查，再刷新锁文件、检查整包并构建。独立导出的源码保留原入口、Skill、测试和许可证。导出不会自动同步已有外部仓库。详见 [组件维护](docs/components.md)。
+`lorelab tool` 使用当前产品版本绑定的入口，不从 PATH 误选另一份组件。独立导出的 Soota 包含知识流程及完整 Skill 引用，不依赖 LoreLab 或 LoreHub Python 包；Cubox 和幕布按需要使用各自 CLI。开发时直接修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁、重建并安装。导出不自动同步外部仓库。详见[组件维护](docs/components.md)。
 
 ## 验证与构建
 
 ```sh
 uv run --python 3.12 pytest
-PYTHONPATH=src python3 -m lorehub.cli components verify
+PYTHONPATH=src python3 -m lorelab.cli components verify
 python3 packaging/build_release.py --output-dir dist
 ```
 
-本地检查通过只证明源码、入口及测试覆盖的行为；站点账号、来源完整性和云端写入需要各自的实际回读。公开源码及发行包不包含收藏正文、登录信息、私人知识库路径或执行台账。
+本地检查不代表真实账号、站点或云端交付已验收。公开源码及发行包不包含收藏正文、登录信息、私人知识库路径或执行台账。
 
-产品层和 Soota 使用 GPL-3.0-only；Cubox CLI 与幕布 CLI 保留各自 MIT 许可证及声明，见 [第三方声明](NOTICE.md)。
+产品层和 Soota 使用 GPL-3.0-only；Cubox CLI 与幕布 CLI 保留各自 MIT 许可证及声明，见[组件与许可证](NOTICE.md)。

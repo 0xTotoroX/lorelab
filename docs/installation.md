@@ -7,8 +7,8 @@
 解压可信来源的发行包，并在解压目录执行：
 
 ```sh
-sh install.sh --prefix "$HOME/.local/share/lorehub"
-"$HOME/.local/share/lorehub/bin/lorehub" doctor
+sh install.sh --prefix "$HOME/.local/share/lorelab"
+"$HOME/.local/share/lorelab/bin/lorelab" doctor
 ```
 
 若发布者提供 `.sha256`，可先在压缩包所在目录运行 `shasum -a 256 -c <文件名>.sha256`。包内清单用于检测损坏、遗漏及源码与二进制错配，不代替对发行来源的信任或签名。
@@ -16,22 +16,22 @@ sh install.sh --prefix "$HOME/.local/share/lorehub"
 只在需要注册到 Agent 时显式指定 Skills 目录：
 
 ```sh
-sh install.sh --prefix "$HOME/.local/share/lorehub" \
+sh install.sh --prefix "$HOME/.local/share/lorelab" \
   --skills-dir "$HOME/.agents/skills"
 ```
 
-注册名称为 `lorehub`、`cubox`、`soota`、`mubu-integration`。同名非 LoreHub 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选一个空目录。没有 `--skills-dir` 时，完整 Skills 仍位于 release 内，但不会向 Agent 全局目录注册。
+四套 Skill 注册为 `lorelab`、`cubox`、`soota`、`mubu-integration`，同时提供旧名称 `lorehub` 兼容 Skill。同名非 LoreLab 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选一个空目录。没有 `--skills-dir` 时，完整 Skills 仍位于 release 内，但不会向 Agent 全局目录注册。
 
 安装器不修改 shell profile、不执行 `npm install`，也不替换已有全局 CLI。可以一直使用完整命令路径；需要时自行为当前终端设置：
 
 ```sh
-export PATH="$HOME/.local/share/lorehub/bin:$PATH"
+export PATH="$HOME/.local/share/lorelab/bin:$PATH"
 ```
 
 已有 Python 3.12+ 时也可直接调用 Python 安装入口，它仍会用 uv 创建私有 Python 环境：
 
 ```sh
-python3 packaging/install.py --prefix "/path/with spaces/LoreHub" \
+python3 packaging/install.py --prefix "/path/with spaces/LoreLab" \
   --skills-dir "/path/to/agent skills"
 ```
 
@@ -41,14 +41,15 @@ python3 packaging/install.py --prefix "/path/with spaces/LoreHub" \
 PREFIX/
   .install.lock
   current -> releases/ID
-  bin/{lorehub,cubox-cli,soota,mubu-cli} -> ../current/bin/NAME
+  bin/{lorelab,lorehub,cubox-cli,soota,mubu-cli} -> ../current/bin/NAME
   releases/ID/
     source/          # 产品、组件、Skills、固定依赖与 bundle 清单
     venv/            # 该 release 的 Python 包
     toolchain/python/# uv 管理的 Python 3.12.12，位于此 release 内
-    bin/             # 四个固定入口
+    bin/             # 产品新旧入口与三个独立 CLI
     runtime.json
     skills/
+      lorelab -> ../source/skills/lorelab
       lorehub -> ../source/skills/lorehub
       cubox -> ../source/modules/cubox-cli/skills/cubox
       soota -> ../source/modules/soota/skills/soota
@@ -57,7 +58,7 @@ PREFIX/
 
 幕布 Skill 指向整个组件根目录，保留它引用的 `docs/`、`scripts/` 和其他资源。其余 Skills 也保留完整目录，组件完整源码同时留在 `source/modules/`。
 
-安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorehub.components.verify(root)` → 检查目标冲突 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 四个命令的离线 help/version 检查及再次组件校验 → 原子替换 `current`。终端安装不会重新解析依赖版本，也不会编译 Cubox。并行安装由 prefix 内的文件锁拒绝。
+安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorelab.components.verify(root)` → 检查目标冲突 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 产品新旧入口及三个 CLI 的离线 help/version 检查及再次组件校验 → 原子替换 `current`。终端安装不会重新解析依赖版本，也不会编译 Cubox。并行安装由 prefix 内的文件锁拒绝。
 
 安装过程失败时不切换 `current`，清除本次未完成 release；旧 release 保留。已有命令和注册 Skills 都间接指向 `current`，升级后一起切换。原子切换失败会移除本次新建的链接。强制断电或 `SIGKILL` 可能留下未启用 release，`current` 仍指向切换前或已完整检查的新版本。
 
@@ -65,14 +66,14 @@ PREFIX/
 
 ## 产品运行时接口
 
-`release/bin/lorehub` 设置 `LOREHUB_ROOT=release/source`、`LOREHUB_RUNTIME_FILE=release/runtime.json`，然后使用该 release 的 `venv/bin/python -I -B -m lorehub.cli`。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
+`release/bin/lorelab` 与旧 `release/bin/lorehub` 均使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`；两组显式变量不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
 
 `runtime.json` 的命令元素全部使用安装后的绝对路径，结构如下（`/prefix/releases/ID` 是占位路径）：
 
 ```json
 {
   "schema_version": 1,
-  "product": "lorehub",
+  "product": "lorelab",
   "release_id": "ID",
   "components_lock_sha256": "<sha256>",
   "tools": {
@@ -87,6 +88,14 @@ PREFIX/
 ```
 
 独立命令 `mubu-cli` 保留组件原生参数，Agent 调用时按组件约定显式传入 `--agent`。缺少受管可执行文件时直接失败，不会去 PATH 查找同名 CLI。Skills 注册本身不会改写组件文档的命令示例。
+
+## 从 LoreHub 升级
+
+旧命令 `lorehub` 和产品 Python 导入兼容入口保留。可以把新包安装到原 LoreHub prefix：安装器识别旧 `current`，创建新 release 后再切换，不搬动已有 release。需要 Skills 注册时继续使用原 `--skills-dir`；已归属本 prefix 的链接可随升级切换，外部同名内容仍保持冲突保护。
+
+既有 prefix 名称不影响产品名称。安装目录包含绝对路径，不要为了改名直接移动它；需要更换位置时重新安装。组件命令 `soota`、`cubox-cli`、`mubu-cli` 仍独立存在。
+
+知识配置由 Soota 按[配置优先级](../modules/soota/docs/knowledge.md#配置独立组件与兼容入口)读取，可原位沿用旧 LoreHub 配置；升级不会静默复制配置、改写旧任务或放宽删除。旧 JOB 绝对路径可交给新 `soota knowledge` 或旧 `lorehub batch` 继续；新任务状态与旧共享写锁的约定见 [Soota 契约](../modules/soota/docs/knowledge.md#python-接口)。
 
 ## 从本地源码构建
 
@@ -123,10 +132,10 @@ uv --no-config pip compile packaging/build-requirements.in \
 
 ```sh
 python3 -B -m unittest discover -s tests -p 'test_install*.py' -v
-"$HOME/.local/share/lorehub/bin/lorehub" doctor
-"$HOME/.local/share/lorehub/bin/cubox-cli" version
-"$HOME/.local/share/lorehub/bin/soota" --help
-"$HOME/.local/share/lorehub/bin/mubu-cli" --agent --help
+"$HOME/.local/share/lorelab/bin/lorelab" doctor
+"$HOME/.local/share/lorelab/bin/cubox-cli" version
+"$HOME/.local/share/lorelab/bin/soota" --help
+"$HOME/.local/share/lorelab/bin/mubu-cli" --agent --help
 ```
 
 这些检查验证安装和本地入口，不登录账号、不写入云端，也不代表站点、媒体下载、可选 ASR、ffmpeg 或其他平台工具已完成配置。当前不提供其他 CPU/系统的发行包，也不是完全离线安装包：Python 和缺失的 uv 仍需下载。
