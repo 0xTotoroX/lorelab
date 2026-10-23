@@ -4,9 +4,11 @@ import fcntl
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import tarfile
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -43,6 +45,7 @@ class BundleTests(unittest.TestCase):
             first = builder.build(self.root, self.base / "first")
             second = builder.build(self.root, self.base / "second")
         self.assertEqual(first.read_bytes(), second.read_bytes())
+        self.assertTrue(first.name.startswith("lorelab-0.1.0-"))
         checksum = first.with_name(first.name + ".sha256").read_text().split()[0]
         self.assertEqual(common.sha256(first), checksum)
         extracted = self.base / "extracted"
@@ -58,7 +61,8 @@ class BundleTests(unittest.TestCase):
         common.verify_bundle(unpacked)
         common.verify_components(unpacked)
         for path in ("modules/cubox-cli/main.go", "modules/mubu-cli/scripts/mubu_api.py",
-                     "modules/mubu-cli/docs/guide.md", "skills/lorehub/SKILL.md", "NOTICE.md", "uv.lock"):
+                     "modules/mubu-cli/docs/guide.md", "skills/lorehub/SKILL.md", "skills/lorelab/SKILL.md",
+                     "src/lorelab/cli.py", "NOTICE.md", "uv.lock"):
             self.assertTrue((unpacked / path).is_file(), path)
 
     def test_missing_bundle_manifest_never_falls_back_to_source_build(self):
@@ -68,6 +72,49 @@ class BundleTests(unittest.TestCase):
             self.assertRaisesRegex(common.PackagingError, "no bundle manifest"),
         ):
             installer.install(self.root, self.base / "prefix")
+
+    def test_product_wheel_contains_new_and_legacy_packages_and_local_soota_dependency(self):
+        metadata = tomllib.loads((PACKAGING.parent / "pyproject.toml").read_text())
+        self.assertEqual(metadata["project"]["name"], "lorelab")
+        self.assertEqual(metadata["project"]["version"], "0.1.0")
+        self.assertEqual(metadata["project"]["dependencies"], ["soota>=0.1.0"])
+        scripts = metadata["project"]["scripts"]
+        self.assertEqual(scripts["lorelab"], scripts["lorehub"])
+        self.assertEqual(scripts["lorelab"], "lorelab.cli:main")
+        self.assertEqual(metadata["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"],
+                         ["src/lorelab", "src/lorehub"])
+        self.assertEqual(metadata["tool"]["uv"]["sources"]["soota"], {"path": "modules/soota"})
+        locked = tomllib.loads((PACKAGING.parent / "uv.lock").read_text())
+        soota = next(package for package in locked["package"] if package["name"] == "soota")
+        self.assertEqual(soota["source"], {"directory": "modules/soota"})
+
+    def test_payload_builds_product_and_soota_only_from_local_source(self):
+        put(self.root, "modules/cubox-cli/go.mod", "module example.com/synthetic/cubox\n")
+        lock = json.loads((self.root / "components.lock.json").read_text())
+        lock["components"] = {"cubox": {"version": "1.0.0+synthetic"}}
+        common.write_json(self.root / "components.lock.json", lock)
+        shutil.rmtree(self.root / "packaging/prebuilt")
+        shutil.rmtree(self.root / "packaging/wheels")
+        with patch.object(common, "platform_tag", return_value="darwin-arm64"), \
+             patch.object(common.shutil, "which", return_value="/unused/go"), \
+             patch.object(common, "create_venv", return_value=self.base / "python"), \
+             patch.object(common, "run") as run:
+            common.build_payload(self.root, self.base / "scratch", Path("/unused/uv"))
+        command = run.call_args_list[-1].args[0]
+        self.assertEqual(command[-2:], [self.root, self.root / "modules/soota"])
+        for flag in ("--no-index", "--no-deps", "--no-build-isolation"):
+            self.assertIn(flag, command)
+
+    def test_installer_uv_override_supports_both_names_and_rejects_conflict(self):
+        executable = put(self.base, "uv with spaces", "synthetic", executable=True)
+        for prefix in ("LORELAB", "LOREHUB"):
+            with patch.dict(os.environ, {f"{prefix}_INSTALL_UV": str(executable)}, clear=True), \
+                 patch.object(common, "run", side_effect=AssertionError("must not bootstrap")):
+                self.assertEqual(common.get_uv(self.root, self.base / "scratch"), executable)
+        with patch.dict(os.environ, {"LORELAB_INSTALL_UV": str(executable),
+                                     "LOREHUB_INSTALL_UV": str(self.base / "other-uv")}, clear=True), \
+             self.assertRaisesRegex(common.PackagingError, "conflicting"):
+            common.get_uv(self.root, self.base / "scratch")
 
     def test_tracked_worktree_changes_are_copied_but_untracked_files_are_not(self):
         subprocess.run(["git", "init", "-q", self.root], check=True)

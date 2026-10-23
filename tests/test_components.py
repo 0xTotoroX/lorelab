@@ -19,6 +19,14 @@ from lorehub.components import PROVENANCE_FILE, export_component, refresh, verif
 REPOSITORY = Path(__file__).resolve().parents[1]
 
 
+def test_legacy_component_import_is_same_module():
+    import lorehub.components as legacy
+    import lorelab.components as canonical
+
+    assert legacy is canonical
+    assert legacy.PROVENANCE_FILE == "lorehub-provenance.json"
+
+
 def digest(contents: dict[str, bytes]) -> str:
     files = {path: hashlib.sha256(content).hexdigest() for path, content in contents.items()}
     return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()).hexdigest()

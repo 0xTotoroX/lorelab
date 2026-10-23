@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""隔离安装完整 LoreHub，检查成功后原子切换 current。
+"""隔离安装完整 LoreLab，兼容已有 LoreHub prefix，检查成功后原子切换 current。
 
 [INPUT]: 完整源码或校验通过的 bundle、prefix、可选 skills-dir。
 [OUTPUT]: 独立 release、绝对路径 runtime.json 与稳定命令/Skill 链接。
@@ -32,6 +32,8 @@ from common import (
     copy_source,
     create_venv,
     get_uv,
+    product_name,
+    product_skills,
     run,
     sha256,
     source_files,
@@ -57,24 +59,24 @@ def check_link(path: Path, target: Path) -> None:
         return
     if path.is_symlink() and os.path.abspath(path.parent / os.readlink(path)) == str(target):
         return
-    raise PackagingError(f"refusing to overwrite existing non-LoreHub path: {path}")
+    raise PackagingError(f"refusing to overwrite existing non-LoreLab/LoreHub path: {path}")
 
 
-def check_destinations(prefix: Path, skills_dir: Path | None) -> None:
+def check_destinations(prefix: Path, skills_dir: Path | None, *, skills: dict[str, str] | None = None) -> None:
     for directory in [prefix / "releases", prefix / "bin"]:
         require_directory(directory)
     current = prefix / "current"
     if lexists(current):
         if not current.is_symlink():
-            raise PackagingError(f"refusing non-LoreHub current: {current}")
+            raise PackagingError(f"refusing non-LoreLab/LoreHub current: {current}")
         target = current.resolve()
         try:
             runtime = json.loads((target / "runtime.json").read_text())
         except (OSError, ValueError) as error:
-            raise PackagingError("existing current has no LoreHub runtime") from error
-        if (target.parent != prefix / "releases" or runtime.get("product") != "lorehub"
+            raise PackagingError("existing current has no LoreLab/LoreHub runtime") from error
+        if (target.parent != prefix / "releases" or runtime.get("product") not in {"lorelab", "lorehub"}
                 or runtime.get("release_id") != target.name):
-            raise PackagingError("existing current is not owned by this LoreHub prefix")
+            raise PackagingError("existing current is not owned by this LoreLab/LoreHub prefix")
     for name in COMMANDS:
         check_link(prefix / "bin" / name, prefix / "current/bin" / name)
     if skills_dir is not None:
@@ -82,7 +84,7 @@ def check_destinations(prefix: Path, skills_dir: Path | None) -> None:
         if skills_dir == prefix or any(skills_dir.is_relative_to(prefix / part)
                                       for part in ("releases", "current", "bin")):
             raise PackagingError("skills-dir must not overlap releases/current/bin or equal prefix")
-        for name in SKILLS:
+        for name in SKILLS if skills is None else skills:
             check_link(skills_dir / name, prefix / "current/skills" / name)
 
 
@@ -105,18 +107,24 @@ def prepare_runtime(release: Path) -> dict:
     mubu = source / "modules/mubu-cli/scripts/mubu_api.py"
     tools = {"cubox": [str(binary)], "soota": [str(release / "venv/bin/soota")],
              "mubu": [str(python), str(mubu)]}
-    runtime = {"schema_version": 1, "product": "lorehub", "release_id": release.name, "tools": tools,
+    runtime = {"schema_version": 1, "product": "lorelab", "release_id": release.name, "tools": tools,
+               "source_root": str(source), "components_lock": str(source / "components.lock.json"),
                "components_lock_sha256": sha256(source / "components.lock.json")}
     write_json(release / "runtime.json", runtime)
-    environment = {"LOREHUB_ROOT": str(source), "LOREHUB_RUNTIME_FILE": str(release / "runtime.json"),
+    environment = {"LORELAB_ROOT": str(source), "LORELAB_RUNTIME_FILE": str(release / "runtime.json"),
+                   "LOREHUB_ROOT": str(source), "LOREHUB_RUNTIME_FILE": str(release / "runtime.json"),
+                   "SOOTA_KNOWLEDGE_RUNTIME_FILE": str(release / "runtime.json"),
+                   "SOOTA_KNOWLEDGE_COMPONENTS_LOCK": str(source / "components.lock.json"),
                    "SOOTA_AUTO_UPDATE": "false", "CUBOX_NO_UPDATE_NOTIFIER": "1", "PYTHONNOUSERSITE": "1",
                    "PYTHONDONTWRITEBYTECODE": "1"}
-    write_launcher(release / "bin/lorehub", [python, "-I", "-B", "-m", "lorehub.cli"], environment)
+    # 两个产品命令始终进入同一模块；旧 bundle 仍使用其中已封存的 lorehub 模块。
+    for name in ("lorelab", "lorehub"):
+        write_launcher(release / "bin" / name, [python, "-I", "-B", "-m", f"{product_name(source)}.cli"], environment)
     write_launcher(release / "bin/soota", tools["soota"], environment)
     # 幕布脚本依靠相邻 mubu/ 导入，不能加会移除脚本目录的 -I。
     write_launcher(release / "bin/mubu-cli", tools["mubu"], environment)
     (release / "skills").mkdir()
-    for name, path in SKILLS.items():
+    for name, path in product_skills(source).items():
         (release / "skills" / name).symlink_to(f"../source/{path}", target_is_directory=True)
     return runtime
 
@@ -125,8 +133,9 @@ def install_environment(release: Path, uv: Path) -> None:
     env = uv_environment(release / "toolchain")
     python = create_venv(uv, release / "venv", env)
     wheels = sorted((release / "source/packaging/wheels").glob("*.whl"))
-    if not wheels:
-        raise PackagingError("bundle contains no dependency wheels")
+    for package in (product_name(release / "source"), "soota"):
+        if not any(wheel.name.startswith(f"{package}-") for wheel in wheels):
+            raise PackagingError(f"bundle is missing its local {package} wheel; no registry fallback is allowed")
     run([uv, "--no-config", "pip", "install", "--python", python, "--no-index", "--no-deps", *wheels], env=env)
     run([uv, "--no-config", "pip", "check", "--python", python], env=env)
     shutil.rmtree(release / "toolchain/cache", ignore_errors=True)
@@ -134,7 +143,7 @@ def install_environment(release: Path, uv: Path) -> None:
 
 def smoke_check(release: Path) -> None:
     # 使用临时 HOME 和纯系统 PATH；--help/version 不登录、不读取真实用户资料。
-    with tempfile.TemporaryDirectory(prefix="lorehub-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="lorelab-smoke-") as temporary:
         env = {"HOME": temporary, "PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8",
                "XDG_CONFIG_HOME": temporary + "/config", "XDG_CACHE_HOME": temporary + "/cache",
                "SOOTA_AUTO_UPDATE": "false", "CUBOX_NO_UPDATE_NOTIFIER": "1"}
@@ -145,10 +154,11 @@ def smoke_check(release: Path) -> None:
 
 
 def activate(prefix: Path, release: Path, skills_dir: Path | None) -> None:
-    check_destinations(prefix, skills_dir)
+    skills = product_skills(release / "source")
+    check_destinations(prefix, skills_dir, skills=skills)
     links = [(prefix / "bin" / name, Path("../current/bin") / name) for name in COMMANDS]
     if skills_dir is not None:
-        links += [(skills_dir / name, prefix / "current/skills" / name) for name in SKILLS]
+        links += [(skills_dir / name, prefix / "current/skills" / name) for name in skills]
     created = []
     pending = prefix / f".current-{uuid.uuid4().hex}"
     try:
@@ -188,7 +198,7 @@ def install(root: Path, prefix: Path, skills_dir: Path | None = None) -> Path:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise PackagingError("another installation is using this prefix") from error
-        check_destinations(prefix, skills_dir)
+        check_destinations(prefix, skills_dir, skills=product_skills(root))
         (prefix / "releases").mkdir(exist_ok=True)
         files = list(bundle["files"]) + [BUNDLE] if bundle else source_files(root)
         fingerprint = bundle["release_id"] if bundle else "source-" + hashlib.sha256(
@@ -222,7 +232,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         release = install(Path(__file__).resolve().parents[1], args.prefix, args.skills_dir)
-        print(f"Installed LoreHub: {release}\nCommands: {release.parent.parent / 'bin'}")
+        print(f"Installed LoreLab: {release}\nCommands: {release.parent.parent / 'bin'}")
         return 0
     except (PackagingError, OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"installation failed: {error}", file=sys.stderr)

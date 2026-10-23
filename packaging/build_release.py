@@ -25,6 +25,7 @@ from common import (
     copy_source,
     get_uv,
     platform_tag,
+    product_name,
     seal_bundle,
     sha256,
     source_files,
@@ -38,7 +39,7 @@ def build(root: Path, output_dir: Path) -> Path:
     verify_inputs(root)
     files = source_files(root)
     output_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="lorehub-build-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="lorelab-build-") as temporary:
         work = Path(temporary)
         source = work / "source"
         copy_source(root, source, files)
@@ -49,7 +50,7 @@ def build(root: Path, output_dir: Path) -> Path:
         verify_inputs(source)
         bundle = seal_bundle(source)
         verify_bundle(source)
-        name = f"lorehub-{bundle['release_id']}-{platform_tag()}"
+        name = f"{product_name(source)}-{bundle['release_id']}-{platform_tag()}"
         output = output_dir / f"{name}.tar.gz"
         if output.exists():
             raise PackagingError(f"refusing to overwrite release: {output}")

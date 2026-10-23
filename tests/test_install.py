@@ -35,18 +35,21 @@ def put(root, name, value, executable=False):
     return path
 
 
-def fixture_source(root):
+def fixture_source(root, product="lorelab"):
     put(root, "NOTICE.md", "Synthetic license notice\n")
     put(root, "uv.lock", "# source test lock\n")
     put(root, "docs/overview.md", "[Licenses](../NOTICE.md)\n")
-    put(root, "src/lorehub/__init__.py", "")
-    put(root, "src/lorehub/cli.py", """import json, os, sys
+    put(root, f"src/{product}/__init__.py", "")
+    put(root, f"src/{product}/cli.py", """import json, os, sys
 if __name__ == '__main__':
     print(json.dumps({'root': os.environ['LOREHUB_ROOT'],
         'runtime': os.environ['LOREHUB_RUNTIME_FILE'], 'args': sys.argv[1:],
-        'auto_update': os.environ['SOOTA_AUTO_UPDATE']}))
+        'auto_update': os.environ['SOOTA_AUTO_UPDATE'],
+        'new_root': os.environ.get('LORELAB_ROOT'), 'new_runtime': os.environ.get('LORELAB_RUNTIME_FILE'),
+        'knowledge_runtime': os.environ.get('SOOTA_KNOWLEDGE_RUNTIME_FILE'),
+        'knowledge_lock': os.environ.get('SOOTA_KNOWLEDGE_COMPONENTS_LOCK')}))
 """)
-    put(root, "src/lorehub/components.py", """import hashlib, json
+    put(root, f"src/{product}/components.py", """import hashlib, json
 def verify(root):
     expected = json.loads((root / 'components.lock.json').read_text())['test_sha256']
     actual = hashlib.sha256((root / 'modules/cubox-cli/main.go').read_bytes()).hexdigest()
@@ -54,8 +57,11 @@ def verify(root):
 """)
     code = put(root, "modules/cubox-cli/main.go", "package main\n")
     common.write_json(root / "components.lock.json", {"schema_version": 1,
-        "product": {"version": "0.1.0"}, "test_sha256": common.sha256(code)})
-    for path in common.SKILLS.values():
+        "product": {"name": product, "version": "0.1.0"}, "test_sha256": common.sha256(code)})
+    if product == "lorelab":
+        put(root, "src/lorehub/__init__.py", "")
+        put(root, "src/lorehub/cli.py", "import runpy; runpy.run_module('lorelab.cli', run_name='__main__')\n")
+    for path in common.product_skills(root).values():
         put(root, f"{path}/SKILL.md", "[Guide](docs/guide.md) and [entry](scripts/entry.py)\n")
         put(root, f"{path}/docs/guide.md", "[More](../references/more.md)\n")
         put(root, f"{path}/references/more.md", "Complete guide\n")
@@ -66,7 +72,8 @@ def verify(root):
     put(root, "packaging/requirements.lock", "")
     put(root, "packaging/build-requirements.lock", "")
     put(root, "packaging/prebuilt/cubox-cli", "#!/bin/sh\nprintf 'bundled cubox\\n'\n", True)
-    put(root, "packaging/wheels/fixture.whl", "fixture only")
+    put(root, f"packaging/wheels/{product}-0.1.0-py3-none-any.whl", "fixture only")
+    put(root, "packaging/wheels/soota-0.1.0-py3-none-any.whl", "fixture only")
     common.seal_bundle(root)
 
 
@@ -119,6 +126,9 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((self.prefix / "current").resolve(), release)
         runtime = json.loads((release / "runtime.json").read_text())
         self.assertEqual(runtime["schema_version"], 1)
+        self.assertEqual(runtime["product"], "lorelab")
+        self.assertEqual(runtime["source_root"], str(release / "source"))
+        self.assertEqual(runtime["components_lock"], str(release / "source/components.lock.json"))
         self.assertEqual(runtime["release_id"], release.name)
         self.assertEqual(runtime["components_lock_sha256"], common.sha256(release / "source/components.lock.json"))
         self.assertEqual(runtime["tools"]["mubu"][1], str(release / "source/modules/mubu-cli/scripts/mubu_api.py"))
@@ -132,6 +142,12 @@ class InstallTests(unittest.TestCase):
         data = json.loads(output)
         self.assertEqual(data["root"], str(release / "source"))
         self.assertEqual(data["runtime"], str(release / "runtime.json"))
+        self.assertEqual(data["new_root"], data["root"])
+        self.assertEqual(data["new_runtime"], data["runtime"])
+        self.assertEqual(data["knowledge_runtime"], data["runtime"])
+        self.assertEqual(data["knowledge_lock"], str(release / "source/components.lock.json"))
+        new_output = subprocess.check_output([self.prefix / "bin/lorelab", "two words", "$(touch nope)"], text=True)
+        self.assertEqual(json.loads(new_output), data)
         self.assertEqual(data["auto_update"], "false")
         self.assertEqual(data["args"], ["two words", "$(touch nope)"])
 
@@ -181,6 +197,72 @@ class InstallTests(unittest.TestCase):
         for name in common.COMMANDS:
             self.assertEqual(os.readlink(self.prefix / "bin" / name), f"../current/bin/{name}")
 
+    def test_legacy_bundle_and_prefix_upgrade_preserve_old_release(self):
+        legacy_source = self.base / "legacy bundle"
+        fixture_source(legacy_source, product="lorehub")
+        original_bundle = (legacy_source / common.BUNDLE).read_bytes()
+        common.verify_bundle(legacy_source)
+        common.verify_inputs(legacy_source)
+        with self.local_dependencies():
+            old = installer.install(legacy_source, self.prefix, self.skills)
+        # 模拟原安装器生成的四命令 prefix 与旧 runtime，不移动旧 release。
+        legacy_runtime = json.loads((old / "runtime.json").read_text())
+        legacy_runtime["product"] = "lorehub"
+        legacy_runtime.pop("source_root")
+        legacy_runtime.pop("components_lock")
+        common.write_json(old / "runtime.json", legacy_runtime)
+        (self.prefix / "bin/lorelab").unlink()
+        (old / "bin/lorelab").unlink()
+        old_files = {p.relative_to(old).as_posix(): p.read_bytes()
+                     for p in old.rglob("*") if p.is_file() and not p.is_symlink()}
+        new = self.install()
+        self.assertEqual((self.prefix / "current").resolve(), new)
+        self.assertEqual(json.loads((new / "runtime.json").read_text())["product"], "lorelab")
+        self.assertEqual((legacy_source / common.BUNDLE).read_bytes(), original_bundle)
+        for name, content in old_files.items():
+            self.assertEqual((old / name).read_bytes(), content, name)
+        for name in ("lorelab", "lorehub"):
+            output = subprocess.check_output([self.prefix / "bin" / name, "--version"], text=True)
+            self.assertEqual(json.loads(output)["root"], str(new / "source"))
+            self.assertTrue((self.skills / name / "SKILL.md").is_file())
+
+    def test_soota_launcher_receives_independent_runtime_binding(self):
+        release = self.install()
+        installer.write_launcher(release / "venv/bin/soota", [release / "venv/bin/python", "-c",
+            "import json,os; print(json.dumps({k:v for k,v in os.environ.items() if k.startswith(('LORE','SOOTA_KNOWLEDGE'))}))"], {})
+        output = subprocess.check_output([self.prefix / "bin/soota"], text=True)
+        env = json.loads(output)
+        self.assertEqual(env["LORELAB_ROOT"], env["LOREHUB_ROOT"])
+        self.assertEqual(env["LORELAB_RUNTIME_FILE"], env["LOREHUB_RUNTIME_FILE"])
+        self.assertEqual(env["SOOTA_KNOWLEDGE_RUNTIME_FILE"], str(release / "runtime.json"))
+        self.assertEqual(env["SOOTA_KNOWLEDGE_COMPONENTS_LOCK"], str(release / "source/components.lock.json"))
+
+    def test_missing_local_product_or_soota_wheel_never_uses_registry(self):
+        release = self.base / "incomplete release"
+        common.copy_source(self.source, release / "source", list(common.verify_bundle(self.source)["files"]))
+        for package in ("lorelab", "soota"):
+            with self.subTest(package=package):
+                wheel = release / f"source/packaging/wheels/{package}-0.1.0-py3-none-any.whl"
+                content = wheel.read_bytes()
+                wheel.unlink()
+                with patch.object(installer, "create_venv", return_value=release / "venv/bin/python"), \
+                     patch.object(installer, "run", side_effect=AssertionError("registry must not be used")), \
+                     self.assertRaisesRegex(common.PackagingError, f"local {package} wheel"):
+                    installer.install_environment(release, Path("/unused/uv"))
+                wheel.write_bytes(content)
+
+    def test_wheel_install_has_both_local_packages_and_no_index(self):
+        release = self.base / "offline release"
+        common.copy_source(self.source, release / "source", list(common.verify_bundle(self.source)["files"]))
+        with patch.object(installer, "create_venv", return_value=release / "venv/bin/python"), \
+             patch.object(installer, "run") as run:
+            installer.install_environment(release, Path("/unused/uv"))
+        command = [str(arg) for arg in run.call_args_list[0].args[0]]
+        self.assertIn("--no-index", command)
+        self.assertIn("--no-deps", command)
+        self.assertIn(str(release / "source/packaging/wheels/lorelab-0.1.0-py3-none-any.whl"), command)
+        self.assertIn(str(release / "source/packaging/wheels/soota-0.1.0-py3-none-any.whl"), command)
+
     def test_existing_foreign_skill_directory_and_broken_symlink_are_not_overwritten(self):
         self.skills.mkdir()
         for name, make in [("cubox", lambda p: p.mkdir()),
@@ -188,7 +270,7 @@ class InstallTests(unittest.TestCase):
             with self.subTest(name=name):
                 foreign = self.skills / name
                 make(foreign)
-                with self.assertRaisesRegex(common.PackagingError, "non-LoreHub"):
+                with self.assertRaisesRegex(common.PackagingError, "non-LoreLab/LoreHub"):
                     self.install()
                 self.assertTrue(os.path.lexists(foreign))
                 self.assertFalse(os.path.lexists(self.prefix / "current"))
@@ -233,7 +315,7 @@ class InstallTests(unittest.TestCase):
 
     def test_conflicting_command_is_not_replaced(self):
         existing = put(self.prefix, "bin/soota", "existing user's CLI")
-        with self.assertRaisesRegex(common.PackagingError, "non-LoreHub"):
+        with self.assertRaisesRegex(common.PackagingError, "non-LoreLab/LoreHub"):
             self.install()
         self.assertEqual(existing.read_text(), "existing user's CLI")
 
@@ -257,10 +339,22 @@ class InstallTests(unittest.TestCase):
         self.assertFalse(self.prefix.exists())
 
     def test_component_verifier_missing_is_not_silently_skipped(self):
-        (self.source / "src/lorehub/components.py").unlink()
+        (self.source / "src/lorelab/components.py").unlink()
         common.seal_bundle(self.source)
         with self.assertRaisesRegex(common.PackagingError, "verify\\(root\\)"):
             self.install()
+
+    def test_new_product_requires_canonical_cli_and_skill_without_legacy_fallback(self):
+        for name in ("src/lorelab/cli.py", "skills/lorelab/SKILL.md"):
+            with self.subTest(name=name):
+                path = self.source / name
+                content = path.read_bytes()
+                path.unlink()
+                common.seal_bundle(self.source)
+                with self.assertRaisesRegex(common.PackagingError, "incomplete product"):
+                    self.install()
+                path.write_bytes(content)
+                common.seal_bundle(self.source)
 
     def test_bundle_mode_and_platform_tamper_fail(self):
         binary = self.source / "packaging/prebuilt/cubox-cli"

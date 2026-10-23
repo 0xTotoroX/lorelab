@@ -20,8 +20,9 @@ import sys
 from pathlib import Path, PurePosixPath
 
 PYTHON_VERSION = "3.12.12"
-COMMANDS = ("lorehub", "cubox-cli", "soota", "mubu-cli")
+COMMANDS = ("lorelab", "lorehub", "cubox-cli", "soota", "mubu-cli")
 SKILLS = {
+    "lorelab": "skills/lorelab",
     "lorehub": "skills/lorehub",
     "cubox": "modules/cubox-cli/skills/cubox",
     "soota": "modules/soota/skills/soota",
@@ -93,24 +94,38 @@ def copy_source(root: Path, destination: Path, files: list[str]) -> None:
         shutil.copy2(root / name, target)
 
 
+def product_name(root: Path) -> str:
+    name = json.loads((root / "components.lock.json").read_text())["product"]["name"]
+    if name not in {"lorelab", "lorehub"}:
+        raise PackagingError("unsupported product in components.lock.json")
+    return name
+
+
+def product_skills(root: Path) -> dict[str, str]:
+    # 旧 bundle 的文件清单不可改写；只核对其中原有的完整 Skill 闭包。
+    product = product_name(root)
+    return {name: path for name, path in SKILLS.items() if name != "lorelab" or product == "lorelab"}
+
+
 def verify_components(root: Path, python: str | Path = sys.executable) -> None:
-    if not (root / "src/lorehub/components.py").is_file():
-        raise PackagingError("missing src/lorehub/components.py: integrate verify(root) before building")
-    code = """import sys
+    product = product_name(root)
+    if not (root / f"src/{product}/components.py").is_file():
+        raise PackagingError(f"missing src/{product}/components.py: integrate verify(root) before building")
+    code = """import importlib, sys
 from pathlib import Path
 root = Path(sys.argv[1])
 sys.path.insert(0, str(root / 'src'))
-from lorehub.components import verify
-result = verify(root)
+result = importlib.import_module(sys.argv[2] + '.components').verify(root)
 if not isinstance(result, dict) or result.get('ok') is not True:
     raise SystemExit('component verification failed: ' + str(result))
 """
-    run([python, "-I", "-B", "-c", code, root])
+    run([python, "-I", "-B", "-c", code, root, product])
 
 
 def verify_inputs(root: Path) -> None:
-    for name in ["src/lorehub/cli.py", "packaging/requirements.lock", "packaging/build-requirements.lock",
-                 "modules/mubu-cli/scripts/mubu_api.py", *(f"{p}/SKILL.md" for p in SKILLS.values())]:
+    for name in [f"src/{product_name(root)}/cli.py", "src/lorehub/cli.py", "packaging/requirements.lock",
+                 "packaging/build-requirements.lock", "modules/mubu-cli/scripts/mubu_api.py",
+                 *(f"{p}/SKILL.md" for p in product_skills(root).values())]:
         if not (root / name).is_file():
             raise PackagingError(f"incomplete product source: missing {name}")
     verify_components(root)
@@ -162,7 +177,10 @@ def verify_bundle(root: Path) -> dict:
 
 
 def get_uv(root: Path, scratch: Path) -> Path:
-    supplied = os.environ.get("LOREHUB_INSTALL_UV")
+    current, legacy = os.environ.get("LORELAB_INSTALL_UV"), os.environ.get("LOREHUB_INSTALL_UV")
+    if current and legacy and Path(current).resolve() != Path(legacy).resolve():
+        raise PackagingError("conflicting LORELAB_INSTALL_UV and LOREHUB_INSTALL_UV")
+    supplied = current or legacy
     uv = Path(supplied) if supplied else Path(run(
         ["/bin/sh", root / "packaging/uv.sh", scratch / "uv"], capture=True).stdout.strip())
     if not uv.is_absolute() or not uv.is_file():
@@ -202,7 +220,7 @@ def build_payload(root: Path, scratch: Path, uv: Path) -> None:
     (scratch / "tmp").mkdir(parents=True)
     env["TMPDIR"] = str(scratch / "tmp")
     # 本地 C 扩展不能把发布者目录写入调试信息或 __FILE__；不复用外部 wheel 构建缓存。
-    env["CFLAGS"] = "-g0 " + shlex.quote(f"-ffile-prefix-map={scratch}=/lorehub-build")
+    env["CFLAGS"] = "-g0 " + shlex.quote(f"-ffile-prefix-map={scratch}=/lorelab-build")
     env["CPPFLAGS"] = ""
     env["LDFLAGS"] = ""
     env.update(CGO_ENABLED="0", GOOS="darwin", GOARCH="arm64", GOWORK="off", GOFLAGS="")
@@ -219,5 +237,5 @@ def build_payload(root: Path, scratch: Path, uv: Path) -> None:
          "wheel", "--no-deps", "--no-build-isolation",
          "--require-hashes", "--wheel-dir", wheels, "-r", root / "packaging/requirements.lock"], env=env)
     run([python, "-I", "-m", "pip", "--isolated", "--cache-dir", scratch / "pip-cache",
-         "wheel", "--no-deps", "--no-build-isolation",
+         "wheel", "--no-index", "--no-deps", "--no-build-isolation",
          "--wheel-dir", wheels, root, root / "modules/soota"], env=env)

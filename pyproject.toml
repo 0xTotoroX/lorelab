@@ -3,24 +3,29 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "lorehub"
+name = "lorelab"
 version = "0.1.0"
 description = "Agent-driven knowledge extraction with independently usable CLIs and Skills."
 requires-python = ">=3.12"
 license = "GPL-3.0-only"
+dependencies = ["soota>=0.1.0"]
 
 [project.scripts]
-lorehub = "lorehub.cli:main"
+lorelab = "lorelab.cli:main"
+lorehub = "lorelab.cli:main"
+
+[tool.uv.sources]
+soota = { path = "modules/soota" }
 
 [dependency-groups]
 dev = ["pytest>=8,<9", "PyYAML>=6,<7", "ruff>=0.14,<1"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/lorehub"]
+packages = ["src/lorelab", "src/lorehub"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "modules/soota/src"]
 
 [tool.ruff]
 line-length = 120
