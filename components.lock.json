@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "product": {
+    "name": "lorehub",
+    "version": "0.1.0"
+  },
+  "components": {
+    "cubox": {
+      "path": "modules/cubox-cli",
+      "repository": "git@github.com:0xTotoroX/cubox-cli.git",
+      "revision": "d9e6edb6919741817af4fa11f6f4b02827097823",
+      "version": "1.0.10+fork.d9e6edb",
+      "skill": {
+        "name": "cubox",
+        "path": "modules/cubox-cli/skills/cubox"
+      },
+      "tree_sha256": "ecbbc35c548afbaf6d948db0a30f6a4549ee925dd91a4bca68a8f405021c3ec4"
+    },
+    "soota": {
+      "path": "modules/soota",
+      "repository": "git@github.com:0xTotoroX/soota.git",
+      "revision": "d0f20bcec998bca208a0d8a38bdf6956d20f0c3e",
+      "version": "0.1.0+d0f20bc",
+      "skill": {
+        "name": "soota",
+        "path": "modules/soota/skills/soota"
+      },
+      "tree_sha256": "b839aed0aefc1abe1dab9f985aadf736dfd2a1d8fa39c81eb68f0e685c3c509a"
+    },
+    "mubu": {
+      "path": "modules/mubu-cli",
+      "repository": "https://github.com/0xTotoroX/mubu-cli.git",
+      "revision": "bfa8bb6bc62d6b0ec9083e24694583539d0eaa74",
+      "version": "1.4.0+bfa8bb6",
+      "skill": {
+        "name": "mubu-integration",
+        "path": "modules/mubu-cli"
+      },
+      "tree_sha256": "325f75cfbf7d57b0ae052e4bebbea82ccf00f0e91cdb0bec492df54cae6eeb92"
+    }
+  }
+}
