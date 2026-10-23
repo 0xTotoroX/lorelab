@@ -6,12 +6,11 @@
 
 import argparse
 import json
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 
-from . import __version__
-from . import runtime
+from . import __version__, runtime
 
 
 def parser() -> argparse.ArgumentParser:
@@ -49,6 +48,7 @@ def parser() -> argparse.ArgumentParser:
     prepare.add_argument("--mubu-auth", choices=["desktop", "password"])
     prepare.add_argument("--delete-verified", action=argparse.BooleanOptionalAction, default=None)
     prepare.add_argument("--state-root", type=Path)
+    prepare.add_argument("--source-bundles", type=Path, help="JSON：收藏 ID 到已取得的 Soota 内容包路径")
     submit = commands.add_parser("submit")
     submit.add_argument("job")
     submit.add_argument("--file", type=Path, required=True)
@@ -77,7 +77,7 @@ def doctor() -> dict:
         try:
             cmd = runtime.tool_command(name)
             result = subprocess.run(cmd + ["--help"], capture_output=True, text=True,
-                                    env=runtime.tool_environment(), timeout=30)
+                                    env=runtime.tool_environment(), timeout=30, check=False)
             checks.append({"component": name, "ok": result.returncode == 0, "command": cmd})
         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as exc:
             checks.append({"component": name, "ok": False, "error": str(exc)})
@@ -126,7 +126,8 @@ def dispatch(args: argparse.Namespace) -> object:
             fields["vault"] = Path(fields["vault"])
             fields["mubu_auth"] = fields["mubu_auth"] or "desktop"
             fields["delete_verified"] = bool(fields["delete_verified"])
-            return workflow.prepare(args.ids_file, state_root=args.state_root, **fields)
+            bundles = json.loads(args.source_bundles.read_text(encoding="utf-8")) if args.source_bundles else None
+            return workflow.prepare(args.ids_file, state_root=args.state_root, source_bundles=bundles, **fields)
         if args.action == "submit":
             return workflow.submit(args.job, args.file)
         if args.action == "cleanup":

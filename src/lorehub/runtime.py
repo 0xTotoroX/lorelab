@@ -7,8 +7,8 @@
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
+from pathlib import Path
 
 
 class ToolError(RuntimeError):
@@ -72,7 +72,7 @@ def run_json(tool: str, args: list[str], receipt: Path | None = None,
              acceptable_codes: tuple[int, ...] = (0,)) -> dict | list | None:
     try:
         result = subprocess.run(tool_command(tool) + args, capture_output=True, text=True,
-                                env=tool_environment(), timeout=600)
+                                env=tool_environment(), timeout=600, check=False)
     except subprocess.TimeoutExpired as exc:
         raise ToolError(f"{tool} 超时；若是云端写入，先只读对账，不可直接重发。") from exc
     try:
