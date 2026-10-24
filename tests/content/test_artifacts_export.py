@@ -1,12 +1,12 @@
 import json
 
 import pytest
-
 from soota.artifacts.bundle import content_from_markdown, write_artifact, write_bundle
-from soota.artifacts.export import export_bundle
 from soota.errors import InputError
 from soota.models import MediaItem
 from soota.routing import recognize
+
+from lorelab.content.export import export_bundle
 
 
 def source(tmp_path):

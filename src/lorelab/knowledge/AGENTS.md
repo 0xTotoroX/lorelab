@@ -2,14 +2,14 @@
 
 > L2 | 父级: ../AGENTS.md
 
-LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/`，跨来源知识文章与学习任务在此独立保存状态。此模块复用 Soota 内容包契约，不调用服务私有 API。
+LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/`，单来源分析与产物校验调用相邻 `content/`，跨来源知识文章与学习任务在此独立保存状态。此模块复用 Soota 内容包契约，不调用服务私有 API。
 
 - `__init__.py`：知识模块入口。
 - `cli.py`：LoreLab knowledge/study 参数、配置及 init/batch 别名。
 - `runtime.py`：独立 CLI 发现或受管绑定调用；旧配置兼容；JSON 回执与无 shell 的 argv。
 - `workflow.py`：文章批次、可选组合交付、核对与授权清理入口。
 - `bundles.py`：已验证 v2 正文/字幕包输入，源包只读并保留指纹。
-- `workflow_sources.py`：Cubox 来源与保护范围、补抓及 Soota 采集/分析任务交接。
+- `workflow_sources.py`：Cubox 来源与保护范围、补抓及 LoreLab content 采集/分析任务交接。
 - `workflow_review.py`：来源覆盖、证据映射、Agent 提交与完成产物冻结。
 - `workflow_publish.py`：Markdown 交付与幕布单次派发、整树核对；保持旧共享锁。
 - `workflow_cleanup.py`：仅 Cubox 的适用授权清理和删除回查，未知结果不重发。

@@ -17,6 +17,7 @@ def parser() -> argparse.ArgumentParser:
     app = argparse.ArgumentParser(prog="lorelab", description="把收藏提炼为文章，按需整理学习大纲。")
     app.add_argument("--version", action="version", version=f"LoreLab {__version__}")
     sub = app.add_subparsers(dest="command", required=True)
+    sub.add_parser("content", help="分析、笔记、文章、内容交付与旧任务恢复", add_help=False)
     check = sub.add_parser("doctor", help="核对源码、Skill 和受管 CLI，不查询账号")
     check.add_argument("--plugin-root", type=Path, help="额外核对插件包与当前 CLI 同版")
     tool = sub.add_parser("tool", help="调用当前产品绑定的独立 CLI")
@@ -128,6 +129,11 @@ def dispatch(args: argparse.Namespace) -> object:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] == ["content"]:
+        from .content.cli import main as content_main
+
+        return content_main(argv[1:])
     args = parser().parse_args(argv)
     try:
         if args.command == "tool":

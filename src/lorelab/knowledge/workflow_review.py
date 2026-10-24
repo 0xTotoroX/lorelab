@@ -263,8 +263,8 @@ def complete(run, job: Path, state: dict, review: dict):
         call(
             run,
             job,
-            "soota",
-            ["jobs", "resume", state["soota_task_id"], "--analysis", str(directory), "--max-cost", "0", "--json"],
+            "lorelab",
+            ["content", "resume", state["soota_task_id"], "--analysis", str(directory), "--max-cost", "0", "--json"],
             "soota-resume",
             (0, 2),
         )

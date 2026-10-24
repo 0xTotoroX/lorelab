@@ -95,9 +95,11 @@ def _command(value: object) -> list[str]:
 
 
 def tool_command(tool: str) -> list[str]:
-    if tool not in {"cubox", "soota", "mubu"}:
+    if tool not in {"cubox", "soota", "mubu", "lorelab"}:
         raise ToolError("未知组件。")
     managed = _managed()
+    if tool == "lorelab":
+        return _command([sys.executable, "-m", "lorelab.cli"])
     if managed is not None:
         tools = managed.get("tools")
         if not isinstance(tools, dict):

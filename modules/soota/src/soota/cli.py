@@ -190,7 +190,7 @@ def ingest(
         str | None,
         typer.Option(
             "--want",
-            help="目标产物，逗号分隔：video/audio/transcript/context/markdown/images/data/analysis/note/outline/article",
+            help="目标产物，逗号分隔：video/audio/transcript/context/markdown/images/data",
         ),
     ] = None,
     optional: Annotated[str | None, typer.Option("--optional", help="可选产物，失败不影响必需目标")] = None,
@@ -211,9 +211,9 @@ def ingest(
     max_bytes: Annotated[int, typer.Option("--max-bytes", help="单个媒体文件字节上限")] = 2 * 1024**3,
     max_pages: Annotated[int, typer.Option("--max-pages")] = 10,
     workers: Annotated[int, typer.Option("--workers", min=1, max=8, help="独立条目并发数；枚举仍有序")] = 1,
-    destination: Annotated[Path | None, typer.Option("--destination", help="另外导出到指定目录")] = None,
-    vault: Annotated[Path | None, typer.Option("--vault", help="显式 Obsidian Vault 目录")] = None,
-    subdir: Annotated[str, typer.Option("--subdir", help="Vault 内目录，不猜测分类")] = "Soota",
+    destination: Annotated[Path | None, typer.Option("--destination", hidden=True, help="另外导出到指定目录")] = None,
+    vault: Annotated[Path | None, typer.Option("--vault", hidden=True, help="显式 Obsidian Vault 目录")] = None,
+    subdir: Annotated[str, typer.Option("--subdir", hidden=True, help="Vault 内目录，不猜测分类")] = "Soota",
     provider: Annotated[
         str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/monid/http/local/downie")
     ] = None,
@@ -281,7 +281,7 @@ def ingest(
     )
 
 
-@app.command()
+@app.command(hidden=True)
 def render(
     bundle: Annotated[Path, typer.Option("--bundle", help="manifest.json 或内容包目录")],
     analysis: Annotated[Path, typer.Option("--analysis", help="Analysis JSON")],
@@ -310,7 +310,7 @@ def jobs_resume(
     workers: Annotated[
         int | None, typer.Option("--workers", min=1, max=8, help="覆盖并保存条目并发数；默认沿用任务设置")
     ] = None,
-    analysis: Annotated[Path | None, typer.Option("--analysis", help="带任务身份与正文指纹的分析提交")] = None,
+    analysis: Annotated[Path | None, typer.Option("--analysis", hidden=True, help="兼容旧任务，转交 LoreLab")] = None,
     force: Annotated[bool, typer.Option("--force")] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:

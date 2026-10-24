@@ -1,3 +1,9 @@
+"""[INPUT]: 已核验的内容包及显式目的地。
+[OUTPUT]: 保护人工修改的目录交付与旧导出回执。
+[POS]: LoreLab 内容交付；沿用 .soota-export.json 数据兼容。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import hashlib

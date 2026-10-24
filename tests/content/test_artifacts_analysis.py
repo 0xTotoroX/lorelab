@@ -1,10 +1,11 @@
 import pytest
-
-from soota.artifacts.analysis import AnalysisSubmission, render_analysis
 from soota.artifacts.bundle import content_from_markdown, write_bundle
 from soota.errors import InputError
-from soota.models import Analysis, KeyPoint, MediaItem, TranscriptDocument, TranscriptSegment, TranscriptSource
+from soota.models import MediaItem, TranscriptDocument, TranscriptSegment, TranscriptSource
 from soota.routing import recognize
+
+from lorelab.content.analysis import AnalysisSubmission, render_analysis
+from lorelab.content.models import Analysis, KeyPoint
 
 
 def source(tmp_path):

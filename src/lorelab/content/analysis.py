@@ -1,10 +1,15 @@
+"""[INPUT]: 原文指纹、证据与 Agent 提交。
+[OUTPUT]: 校验并保存分析、笔记、文章或大纲。
+[POS]: LoreLab 派生产物实现；原文文件不改写。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
 from pydantic import BaseModel, model_validator
-
 from soota.artifacts.bundle import (
     _check_writable,
     bundle_folder,
@@ -16,8 +21,10 @@ from soota.artifacts.bundle import (
 )
 from soota.artifacts.models import BundleV2
 from soota.errors import InputError
-from soota.models import Analysis, AnalysisManifest, AnalysisStatus
+from soota.models import AnalysisManifest, AnalysisStatus
 from soota.render.bundle import STALE_WARNING
+
+from lorelab.content.models import Analysis
 
 
 class AnalysisSubmission(BaseModel):

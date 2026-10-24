@@ -118,6 +118,11 @@ class FakeCLI:
                 if self.delete_timeout:
                     raise RuntimeError("simulated delete timeout")
                 return {"dry_run": False, "count": len(ids)}
+        if tool == "lorelab" and args[0] == "content":
+            args = args[1:]
+            if args[0] == "resume":
+                args = ["jobs", *args]
+            tool = "soota"
         if tool == "soota":
             if args[0] == "ingest":
                 want = arg("--want").split(",")

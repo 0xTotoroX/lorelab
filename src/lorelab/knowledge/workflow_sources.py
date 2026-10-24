@@ -291,8 +291,9 @@ def handoffs(run, job: Path, state: dict):
             call(
                 run,
                 job,
-                "soota",
+                "lorelab",
                 [
+                    "content",
                     "ingest",
                     "--inputs-file",
                     str(job / "source-inputs.json"),

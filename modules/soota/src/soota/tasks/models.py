@@ -19,6 +19,8 @@ from pydantic import BaseModel, ConfigDict, Field, FiniteFloat, PrivateAttr, mod
 
 from soota.models import TranscriptMode
 
+# Old semantic/output fields are retained only for persisted request compatibility.
+# New source tasks are restricted by inputs.parse_outputs and workflow_compat.
 OutputKind = Literal[
     "video", "audio", "transcript", "context", "markdown", "images", "data", "note", "article", "analysis", "outline"
 ]

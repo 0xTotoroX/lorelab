@@ -26,16 +26,11 @@ class NoUnix(importlib.abc.MetaPathFinder):
         if fullname in {'fcntl', 'resource', 'termios'}:
             raise ImportError('not on Windows')
 sys.meta_path.insert(0, NoUnix())
-import soota.cli, soota.providers.downie, mubu_api
+import soota.cli, soota.providers.downie
 print('portable imports')
 """
-    root = Path(__file__).resolve().parents[3]
-    # This test also runs in a standalone Soota checkout without Mubu installed.
-    mubu = root / "mubu-cli" / "scripts"
-    if not mubu.is_dir():
-        script = script.replace(", mubu_api", "")
     env = platform_support.utf8_environment()
-    env.update(PYTHONPATH=os.pathsep.join([str(Path(__file__).resolve().parents[2] / "src"), str(mubu)]))
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2] / "src")
     result = subprocess.run([sys.executable, "-B", "-c", script], capture_output=True, env=env, timeout=15)
     assert result.returncode == 0, result.stderr.decode()
     assert b"portable imports" in result.stdout

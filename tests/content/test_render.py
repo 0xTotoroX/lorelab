@@ -2,22 +2,13 @@ import json
 from pathlib import Path
 
 from soota.errors import InputError
-from soota.models import TranscriptMode
-from soota.pipeline import ingest, render
-from tests.unit.test_resolver import FakeAsr, _youtube_requester
+from soota.pipeline import render
+
+from .test_context_bundle import source_bundle
 
 
 def test_render_writes_evidence_links(settings) -> None:
-    result = ingest(
-        settings,
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        provider="tikhub",
-        transcript=TranscriptMode.AUTO,
-        max_cost=0.1,
-        requester=_youtube_requester(),
-        asr=FakeAsr(),
-    )
-    folder = Path(result.data["output"])
+    folder, _, _, _ = source_bundle(settings.output_dir)
     analysis = {
         "schema_version": 1,
         "summary": "一首经典歌曲。",
@@ -37,15 +28,7 @@ def test_render_writes_evidence_links(settings) -> None:
 
 
 def test_invalid_analysis_does_not_clobber(settings) -> None:
-    result = ingest(
-        settings,
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        provider="tikhub",
-        max_cost=0.1,
-        requester=_youtube_requester(),
-        asr=FakeAsr(),
-    )
-    folder = Path(result.data["output"])
+    folder, _, _, _ = source_bundle(settings.output_dir)
     (folder / "content.md").write_text("用户已经编辑的文章", encoding="utf-8")
     original = (folder / "content.md").read_text(encoding="utf-8")
     bad = folder / "bad.json"

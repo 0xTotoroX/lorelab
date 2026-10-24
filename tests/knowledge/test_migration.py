@@ -67,7 +67,7 @@ def test_bundle_to_article_never_calls_cubox_or_deletes_source(isolated, monkeyp
     fake = FakeCLI([])
 
     def invoke(tool, *args, **kwargs):
-        assert tool == "soota", "bundle article flow must be independent of optional services"
+        assert tool == "lorelab", "bundle article flow must be independent of optional services"
         return fake(tool, *args, **kwargs)
 
     monkeypatch.setattr(workflow, "run_json", invoke)
