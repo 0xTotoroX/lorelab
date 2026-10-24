@@ -44,6 +44,11 @@ def test_plugin_keeps_four_independent_skills_and_version_binding(tmp_path, monk
         if path.is_file():
             os.utime(path, (0, 0))
     archive = build_plugin.build(bundle, tmp_path / "dist")
+    for path in bundle.rglob("*"):
+        if path.is_file():
+            os.utime(path, (1735689600, 1735689600))
+    repeated = build_plugin.build(bundle, tmp_path / "repeat-dist")
+    assert repeated.read_bytes() == archive.read_bytes()
     with zipfile.ZipFile(archive) as zipped:
         zipped.extractall(tmp_path / "plugin")
     root = tmp_path / "plugin/lorelab"

@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import subprocess
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -16,13 +17,16 @@ SPEC.loader.exec_module(publisher)
 @pytest.fixture
 def release(tmp_path, monkeypatch):
     plugin = tmp_path / "lorelab-plugin-1.0.0-source-test.zip"
-    plugin.write_bytes(b"synthetic reproducible asset")
+    with zipfile.ZipFile(plugin, "w") as archive:
+        archive.writestr("lorelab/lorelab-binding.json", json.dumps({"version": "1.0.0",
+            "source_fingerprint": "source-test", "components_lock_sha256": "c" * 64}))
     plugin.with_name(plugin.name + ".sha256").write_text(f"{publisher.digest(plugin)}  {plugin.name}\n")
     receipt = {"ok": True, "executed": True, "versions": {"soota": "1.0.0", "lorelab": "1.0.0"},
                "soota": {"repository": "git@github.com:example/soota.git", "commit": "a" * 40, "tag": "v1.0.0"},
                "lorelab": {"repository": "https://github.com/example/lorelab.git",
                            "commit": "b" * 40, "tag": "v1.0.0"}}
     state = {"releases": {}, "calls": [], "fail_upload": False, "lookup_error": False}
+    monkeypatch.setattr(publisher, "source_identity", lambda _source: ("b" * 40, "source-test", "c" * 64))
 
     def gh(*args):
         args = list(map(str, args))
@@ -34,7 +38,10 @@ def release(tmp_path, monkeypatch):
                 return subprocess.CompletedProcess(args, 0, json.dumps({"sha": receipt[name]["commit"]}), "")
             if state["lookup_error"]:
                 return subprocess.CompletedProcess(args, 1, '{"status":"503"}', "unavailable")
-            if key not in state["releases"]:
+            if operation.startswith("releases?"):
+                entries = [state["releases"][key]["value"]] if key in state["releases"] else []
+                return subprocess.CompletedProcess(args, 0, json.dumps([entries]), "")
+            if key not in state["releases"] or state["releases"][key]["value"]["draft"]:
                 return subprocess.CompletedProcess(args, 1, '{"status":"404"}', "not found")
             return subprocess.CompletedProcess(args, 0, json.dumps(state["releases"][key]["value"]), "")
         action = args[1]
@@ -42,7 +49,8 @@ def release(tmp_path, monkeypatch):
         if action == "create":
             state["releases"][repo] = {"value": {"name": args[args.index("--title") + 1],
                 "body": Path(args[args.index("--notes-file") + 1]).read_text(), "draft": True,
-                "prerelease": False, "assets": [], "html_url": "https://github.com/" + repo}, "bytes": {}}
+                "prerelease": False, "tag_name": "v1.0.0", "assets": [],
+                "html_url": "https://github.com/" + repo}, "bytes": {}}
         elif action == "upload":
             if state["fail_upload"]:
                 state["fail_upload"] = False
@@ -121,3 +129,25 @@ def test_empty_notes_or_unexecuted_receipt_cannot_publish(release):
     with pytest.raises(ValueError, match="executed"):
         publisher.publish(receipt, directory, "Product notes", "Soota notes")
     assert not state["releases"]
+
+
+def test_other_plugin_name_cannot_bypass_same_version_protection(release):
+    receipt, directory, state = release
+    publisher.publish(receipt, directory, "Product notes", "Soota notes")
+    state["releases"]["example/lorelab"]["value"]["assets"].append({"name": "lorelab-plugin-1.0.0-other.zip"})
+    state["calls"].clear()
+    with pytest.raises(ValueError, match="different plugin"):
+        publisher.publish(receipt, directory, "Product notes", "Soota notes")
+    assert all(c[0] == "api" for c in state["calls"])
+
+
+def test_candidate_plugin_must_match_committed_source_and_binding(release):
+    receipt, directory, state = release
+    plugin = next(directory.glob("*.zip"))
+    with zipfile.ZipFile(plugin, "w") as archive:
+        archive.writestr("lorelab/lorelab-binding.json", json.dumps({"version": "1.0.0",
+            "source_fingerprint": "different-source", "components_lock_sha256": "c" * 64}))
+    plugin.with_name(plugin.name + ".sha256").write_text(f"{publisher.digest(plugin)}  {plugin.name}\n")
+    with pytest.raises(ValueError, match="plugin binding"):
+        publisher.publish(receipt, directory, "Product notes", "Soota notes")
+    assert not state["calls"]

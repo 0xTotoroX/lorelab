@@ -17,14 +17,14 @@ def publish(root: Path, *, product_repository: str, soota_repository: str | None
     product_repository = sync.repository(product_repository)
     product_tag = "v" + numbers["lorelab"]
     soota_tag = "v" + numbers["soota"]
-    with sync.plan(root, target=soota_repository, branch=soota_branch) as prepared:
+    with sync.plan(root, target=soota_repository, branch=soota_branch, tag=soota_tag) as prepared:
         if product_repository == prepared.target:
             raise ValueError("LoreLab and standalone Soota must use different repositories")
         source = prepared.source
         branch_ref = sync.ref(prepared.bare, "heads", branch)
         tag_ref = sync.ref(prepared.bare, "tags", product_tag)
         refs = sync.remote_refs(prepared.bare, product_repository, branch_ref, tag_ref)
-        if refs.get(branch_ref) != source:
+        if branch_ref not in refs or (refs[branch_ref] != source and not prepared.fixed_tag):
             raise ValueError("publish the reviewed LoreLab source commit to its branch before creating a release")
         product_exists = tag_ref in refs
         if product_exists:
@@ -34,8 +34,11 @@ def publish(root: Path, *, product_repository: str, soota_repository: str | None
         prepared.check_tag(soota_tag)
         # 取回主源对象用于产品 tag；独立仓库中不会出现 LoreLab 的整仓历史。
         sync.git(prepared.bare, "fetch", "--no-tags", "--", product_repository, branch_ref)
-        if sync.git(prepared.bare, "rev-parse", "FETCH_HEAD^{commit}") != source:
+        product_tip = sync.git(prepared.bare, "rev-parse", "FETCH_HEAD^{commit}")
+        if product_tip != refs[branch_ref]:
             raise ValueError("LoreLab branch changed during release preflight")
+        # Soota 标签已落地时，从固定版本继续；后续主分支可前进，不能因此回退它们。
+        sync.git(prepared.bare, "merge-base", "--is-ancestor", source, product_tip)
         result = {"ok": True, "executed": execute, "versions": numbers,
                   "lorelab": {"repository": product_repository, "commit": source, "tag": product_tag},
                   "soota": prepared.report(tag=soota_tag)}

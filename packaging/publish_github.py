@@ -10,7 +10,9 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 
@@ -34,7 +36,12 @@ def lookup(repo, tag):
         except ValueError:
             raise RuntimeError("GitHub release lookup failed; no release was created") from None
         if str(error.get("status")) == "404":
-            return None
+            # 按 tag 查询只返回已发布版本；草稿需要有 push 权限的 releases 列表。
+            pages = json.loads(checked("api", f"repos/{repo}/releases?per_page=100", "--paginate", "--slurp"))
+            matches = [item for page in pages for item in page if item["tag_name"] == tag]
+            if len(matches) > 1:
+                raise ValueError(f"{repo}: multiple release drafts use {tag}; resolve them before retrying")
+            return matches[0] if matches else None
         raise RuntimeError("GitHub release lookup failed; no release was created")
     return json.loads(response.stdout)
 
@@ -50,13 +57,36 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def publish(receipt, plugin_dir, product_notes, soota_notes):
+def source_identity(source):
+    from lorelab.component_sync import clean_source
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from repository import fingerprint
+
+        return clean_source(source), fingerprint(source), digest(source / "components.lock.json")
+    finally:
+        sys.path.pop(0)
+
+
+def publish(receipt, plugin_dir, product_notes, soota_notes, source=None):
     if receipt.get("ok") is not True or receipt.get("executed") is not True:
         raise ValueError("publish requires an executed, verified paired-tag receipt")
+    commit, identity, lock_hash = source_identity(source or Path(__file__).resolve().parents[1])
+    if commit != receipt["lorelab"]["commit"]:
+        raise ValueError("plugin source commit differs from the paired-tag receipt")
     plugins = list(plugin_dir.glob(f"lorelab-plugin-{receipt['versions']['lorelab']}-*.zip"))
     if len(plugins) != 1:
         raise ValueError("expected exactly one plugin matching the LoreLab version")
     plugin = plugins[0]
+    expected_name = f"lorelab-plugin-{receipt['versions']['lorelab']}-{identity}.zip"
+    if plugin.name != expected_name:
+        raise ValueError("plugin filename does not match the released source identity")
+    with zipfile.ZipFile(plugin) as archive:
+        binding = json.loads(archive.read("lorelab/lorelab-binding.json"))
+    if (binding.get("source_fingerprint") != identity or binding.get("components_lock_sha256") != lock_hash
+            or binding.get("version") != receipt["versions"]["lorelab"]):
+        raise ValueError("plugin binding does not match the released source")
     checksum = plugin.with_name(plugin.name + ".sha256")
     if checksum.read_text(encoding="utf-8").split() != [digest(plugin), plugin.name]:
         raise ValueError("plugin checksum mismatch")
@@ -76,6 +106,10 @@ def publish(receipt, plugin_dir, product_notes, soota_notes):
         if existing and (existing["name"] != title or existing["body"].strip() != notes.strip()
                          or existing["prerelease"]):
             raise ValueError(f"{repo}: existing release differs from the reviewed notes; refusing replacement")
+        if name == "lorelab" and existing:
+            expected = {p.name for p in assets}
+            if any(a["name"].startswith("lorelab-plugin-") and a["name"] not in expected for a in existing["assets"]):
+                raise ValueError(f"{repo}: this version already contains a different plugin; prepare a new version")
         planned.append((repo, tag, title, notes, assets, existing))
     results = []
     with tempfile.TemporaryDirectory(prefix="lorelab-github-release-") as temporary:
@@ -112,6 +146,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--receipt", type=Path, required=True)
     parser.add_argument("--plugin-dir", type=Path, required=True)
+    parser.add_argument("--source", type=Path, default=Path(__file__).resolve().parents[1])
     args = parser.parse_args()
     print(json.dumps(publish(json.loads(args.receipt.read_text(encoding="utf-8")), args.plugin_dir,
-                             os.environ.get("PRODUCT_NOTES"), os.environ.get("SOOTA_NOTES")), indent=2))
+                             os.environ.get("PRODUCT_NOTES"), os.environ.get("SOOTA_NOTES"), args.source), indent=2))

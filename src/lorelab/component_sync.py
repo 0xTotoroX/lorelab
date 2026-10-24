@@ -141,12 +141,14 @@ class SyncPlan:
     source: str
     fingerprint: str
     version: str
+    fixed_tag: bool = False
 
     def report(self, *, executed: bool = False, tag: str | None = None) -> dict:
         return {"ok": True, "component": "soota", "repository": self.target,
                 "branch": self.branch, "previous_commit": self.old, "commit": self.commit,
                 "source_commit": self.source, "tree_sha256": self.fingerprint, "version": self.version,
-                "changed": self.old != self.commit, "executed": executed, "tag": tag}
+                "changed": not self.fixed_tag and self.old != self.commit, "executed": executed, "tag": tag,
+                "fixed_tag": self.fixed_tag, "branch_commit": self.old if self.fixed_tag else self.commit}
 
     def check_tag(self, tag: str) -> bool:
         tag_ref = ref(self.bare, "tags", tag)
@@ -161,22 +163,22 @@ class SyncPlan:
     def push(self, *, tag: str | None = None) -> dict:
         branch_ref = ref(self.bare, "heads", self.branch)
         tag_exists = self.check_tag(tag) if tag else False
-        refs = [f"{self.commit}:{branch_ref}"] if self.old != self.commit else []
+        refs = [f"{self.commit}:{branch_ref}"] if not self.fixed_tag and self.old != self.commit else []
         if tag and not tag_exists:
             refs.append(f"{self.commit}:{ref(self.bare, 'tags', tag)}")
         if refs:
             # 快进拒绝并发分歧，--atomic 保证同仓库分支与 tag 一起成功。
             git(self.bare, "push", "--atomic", "--", self.target, *refs)
         actual = remote_refs(self.bare, self.target, branch_ref)
-        if actual.get(branch_ref) != self.commit:
+        if actual.get(branch_ref) != (self.old if self.fixed_tag else self.commit):
             raise RuntimeError("standalone branch changed during sync; inspect the remote before retrying")
-        if tag:
-            self.check_tag(tag)
+        if tag and not self.check_tag(tag):
+            raise RuntimeError("standalone tag is missing after publication")
         return self.report(executed=True, tag=tag)
 
 
 @contextlib.contextmanager
-def plan(root: Path, *, target: str | None = None, branch: str | None = None):
+def plan(root: Path, *, target: str | None = None, branch: str | None = None, tag: str | None = None):
     root = root.resolve()
     source = clean_source(root)
     lock = components._load(root)
@@ -191,7 +193,13 @@ def plan(root: Path, *, target: str | None = None, branch: str | None = None):
         branch_ref = ref(bare, "heads", branch)
         git(bare, "fetch", "--no-tags", "--", target, branch_ref)
         tip = git(bare, "rev-parse", "FETCH_HEAD^{commit}")
-        previous = _check_previous(root, bare, tip, entry, source)
+        tag_tip = None
+        if tag and remote_refs(bare, target, ref(bare, "tags", tag)):
+            git(bare, "fetch", "--no-tags", "--", target, ref(bare, "tags", tag))
+            tag_tip = git(bare, "rev-parse", "FETCH_HEAD^{commit}")
+        previous = _check_previous(root, bare, tag_tip or tip, entry, source)
+        if tag_tip and previous is None:
+            raise ValueError(f"{tag} already names a different standalone version without a managed receipt")
         parent = tip
         if previous is None:
             baseline = entry.get("sync", {}).get("initial_revision", entry["revision"])
@@ -220,8 +228,10 @@ def plan(root: Path, *, target: str | None = None, branch: str | None = None):
         same = (previous and previous["tree_sha256"] == provenance["tree_sha256"]
                 and previous["sync"]["modes"] == modes and previous["version"] == entry["version"])
         if same:
-            commit = tip
+            commit = tag_tip or tip
         else:
+            if tag_tip:
+                raise ValueError(f"{tag} already names a different standalone version; prepare a new version")
             provenance["sync"] = {"schema_version": 1, "source_commit": source,
                                   "source_path": entry["path"], "modes": modes}
             provenance_path.write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -235,7 +245,8 @@ def plan(root: Path, *, target: str | None = None, branch: str | None = None):
             commit = git(bare, "commit-tree", tree, "-p", parent, data=message.encode(), env=identity)
         if clean_source(root) != source:
             raise ValueError("source changed while preparing synchronization")
-        yield SyncPlan(bare, target, branch, tip, commit, source, provenance["tree_sha256"], entry["version"])
+        yield SyncPlan(bare, target, branch, tip, commit, source, provenance["tree_sha256"], entry["version"],
+                       fixed_tag=tag_tip is not None)
 
 
 def synchronize(root: Path, *, target: str | None = None, branch: str | None = None,

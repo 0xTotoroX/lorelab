@@ -6,6 +6,7 @@ import pytest
 from test_component_sync import change, commit, fixture_repositories
 
 from lorelab.component_sync import git, synchronize
+from lorelab.release_versions import prepare
 from lorelab.releases import publish
 
 
@@ -91,3 +92,28 @@ def test_version_mismatch_stops_before_touching_remote(repos):
         publish(source, product_repository=str(product), execute=True)
     assert git(soota, "rev-parse", "main") == baseline
     assert not git(product, "tag")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX Git test hook")
+def test_partial_release_can_resume_after_both_main_branches_advance(repos, tmp_path):
+    source, soota, product, _, _ = repos
+    hook = product / "hooks/pre-receive"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    old_source = tmp_path / "release-a"
+    git(tmp_path, "clone", "--quiet", str(source), str(old_source))
+    with pytest.raises(RuntimeError, match="push failed"):
+        publish(source, product_repository=str(product), execute=True)
+    tag_a = git(soota, "rev-parse", "v1.0.0")
+    hook.unlink()
+    change(source, text="Later development stays on main")
+    prepare(source, "1.0.1", "1.0.1")
+    source_b = commit(source)
+    git(source, "push", "--quiet", str(product), "main")
+    soota_b = synchronize(source, execute=True)["commit"]
+    resumed = publish(old_source, product_repository=str(product), execute=True)
+    assert resumed["soota"]["fixed_tag"] and not resumed["soota"]["changed"]
+    assert resumed["soota"]["commit"] == tag_a
+    assert git(soota, "rev-parse", "main") == soota_b
+    assert git(product, "rev-parse", "main") == source_b
+    assert git(product, "rev-parse", "v1.0.0") == git(old_source, "rev-parse", "HEAD")

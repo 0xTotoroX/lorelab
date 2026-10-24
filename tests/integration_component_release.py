@@ -34,7 +34,8 @@ def main():
                LOCALAPPDATA=str(home / "local"), XDG_CONFIG_HOME=str(home / ".config"),
                XDG_DATA_HOME=str(home / ".local/share"), XDG_STATE_HOME=str(home / ".local/state"),
                XDG_CACHE_HOME=str(home / ".cache"), PYTHONUTF8="1", PYTHONIOENCODING="utf-8",
-               SOOTA_OUTPUT_DIR=str(home / "content"), SOOTA_AUTO_UPDATE="false")
+               SOOTA_OUTPUT_DIR=str(home / "content"), SOOTA_DATA_DIR=str(home / "data/soota"),
+               SOOTA_CONFIG_DIR=str(home / ".config/soota"), SOOTA_AUTO_UPDATE="false")
     results = {}
 
     def run(name, command, cwd=None, *, expect=0):
@@ -56,9 +57,11 @@ def main():
 
     windows = os.name == "nt"
     source = base / "lorelab-source"
-    run("clone-product", ["git", "clone", "--no-hardlinks", args.root.resolve(), source])
+    # 使用 Git 传输，避免本地对象复制与源仓库后台 gc 的临时 pack 文件竞争。
+    run("clone-product", ["git", "clone", "--no-local", args.root.resolve(), source])
+    run("validation-branch", ["git", "branch", "-M", "main"], source)
     product = base / "lorelab.git"
-    run("product-remote", ["git", "clone", "--bare", source, product])
+    run("product-remote", ["git", "clone", "--no-local", "--bare", source, product])
     run("bind-product-remote", ["git", "remote", "set-url", "origin", product], source)
     manifest = json.loads((source / "components.lock.json").read_text(encoding="utf-8"))
     baseline = manifest["components"]["soota"]["revision"]
@@ -77,7 +80,7 @@ def main():
                                                "--repository", soota, "--execute"]))
     run("history-preserved", ["git", "merge-base", "--is-ancestor", baseline, first_sync["commit"]], soota)
     standalone = base / "standalone"
-    run("clone-standalone", ["git", "clone", soota, standalone])
+    run("clone-standalone", ["git", "clone", "--no-local", soota, standalone])
     env.pop("PYTHONPATH")
     run("standalone-install", [uv, "sync", "--python", "3.12", "--locked", "--no-dev"], standalone)
     vbin = "Scripts" if windows else "bin"
@@ -101,11 +104,13 @@ def main():
     managed_soota = prefix / "bin" / cli_name
     first_release = (prefix / "current").resolve()
     run("managed-ingest", [managed_soota, "ingest", text, "--want", "context", "--max-cost", "0", "--json"])
+    jobs_before = json.loads(run("jobs-before", [independent_cli, "jobs", "list", "--json"]))
+    assert len(list((home / "data/soota/jobs").glob("*.json"))) >= 2
 
     def fingerprint(path):
         return [hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns]
 
-    retained = {str(p): fingerprint(p) for folder in [home / "content", home / ".config/soota", home / ".local/state/soota"]
+    retained = {str(p): fingerprint(p) for folder in [home / "content", home / ".config/soota", home / "data/soota"]
                 if folder.exists() for p in folder.rglob("*") if p.is_file()}
     (base / "retained-before.json").write_text(json.dumps(retained, indent=2), encoding="utf-8")
     component = source / "modules/soota"
@@ -161,6 +166,8 @@ def main():
             assert hashlib.sha256((directory / relative).read_bytes()).hexdigest() == expected, (directory, relative)
     assert (home / "skills/soota/SKILL.md").read_bytes() == skill.read_bytes()
     assert all(fingerprint(Path(p)) == value for p, value in retained.items())
+    for name, cli in [("independent", independent_cli), ("managed", managed_soota)]:
+        assert json.loads(run(name + "-jobs-after", [cli, "jobs", "list", "--json"])) == jobs_before
     assert len(list((home / "content").rglob("context.md"))) >= 1
     result = {"ok": True, "platform": sys.platform, "steps": results, "versions": released["versions"],
               "source_commit": released["lorelab"]["commit"], "soota_commit": released["soota"]["commit"],
