@@ -7,22 +7,23 @@
 解压可信来源的发行包，并在解压目录执行：
 
 ```sh
-sh install.sh --prefix "$HOME/.local/share/lorelab"
+sh install.sh
+"$HOME/.local/share/lorelab/bin/lorelab" setup
 "$HOME/.local/share/lorelab/bin/lorelab" doctor
 ```
 
 若发布者提供 `.sha256`，可先在压缩包所在目录运行 `shasum -a 256 -c <文件名>.sha256`。包内清单用于检测损坏、遗漏及源码与二进制错配，不代替对发行来源的信任或签名。
 
-只在需要注册到 Agent 时显式指定 Skills 目录：
+默认向 `~/.local/bin` 注册四个命令，向 `~/.agents/skills` 注册四套 Skill；可显式指定目录：
 
 ```sh
 sh install.sh --prefix "$HOME/.local/share/lorelab" \
   --skills-dir "$HOME/.agents/skills"
 ```
 
-安装仅提供 `lorelab`、`cubox-cli`、`soota`、`mubu-cli` 四个 CLI，四套 Skill 注册为 `lorelab`、`cubox`、`soota`、`mubu-integration`。同名非 LoreLab 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选一个空目录。没有 `--skills-dir` 时，完整 Skills 仍位于 release 内，但不会向 Agent 全局目录注册。
+安装仅提供 `lorelab`、`cubox-cli`、`soota`、`mubu-cli` 四个 CLI，四套 Skill 注册为 `lorelab`、`cubox`、`soota`、`mubu-integration`。同名非 LoreLab 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选空目录，或用 `--no-skills` / `--no-bin` 跳过新增外部注册；随包 Skills 和 prefix 内的命令始终存在。这两个参数不撤销已有注册。
 
-安装器不修改 shell profile、不执行 `npm install`，也不替换已有全局 CLI。可以一直使用完整命令路径；需要时自行为当前终端设置：
+安装器不修改 shell profile、不执行 `npm install`，也不替换已有外部 CLI。`setup` 单独处理命令路径：默认向当前 zsh 的 `~/.zshrc` 或 bash 登录终端的 `~/.bash_profile` 追加带标记的配置，保留其余字节；未知 shell 不自动改文件。可用 `--shell-profile FILE` 指定文件或 `--shell-profile none` 跳过。可以一直使用完整命令路径，或仅为当前终端设置：
 
 ```sh
 export PATH="$HOME/.local/share/lorelab/bin:$PATH"
@@ -41,11 +42,13 @@ python3 packaging/install.py --prefix "/path/with spaces/LoreLab" \
 PREFIX/
   .install.lock
   current -> releases/ID
+  install.json      # 注册目录和可选更新源，不含账号凭据
+  env.sh            # setup 生成的命令路径
+  toolchain/        # 固定 Python、uv 和下载缓存，多 release 复用
   bin/{lorelab,cubox-cli,soota,mubu-cli} -> ../current/bin/NAME
   releases/ID/
     source/          # 产品、组件、Skills、固定依赖与 bundle 清单
     venv/            # 该 release 的 Python 包
-    toolchain/python/# uv 管理的 Python 3.12.12，位于此 release 内
     bin/             # 产品入口与三个独立 CLI
     runtime.json
     skills/
@@ -57,11 +60,59 @@ PREFIX/
 
 幕布 Skill 指向整个组件根目录，保留它引用的 `docs/`、`scripts/` 和其他资源。其余 Skills 也保留完整目录，组件完整源码同时留在 `source/modules/`。
 
-安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorelab.components.verify(root)` → 检查目标冲突 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 四个 CLI 的离线 help/version 检查及再次组件校验 → 原子替换 `current`。终端安装不会重新解析依赖版本，也不会编译 Cubox。并行安装由 prefix 内的文件锁拒绝。
+安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorelab.components.verify(root)` → 检查目标冲突 → 比较内容身份 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 四个 CLI 的离线 help/version 检查及再次组件校验 → 原子替换 `current`。相同包先校验已装源码和入口，再复用当前 release、补齐已记录的缺失注册，不下载或重装；损坏时停止，可显式 `--force` 在新 release 修复。
+
+固定 Python 3.12.12 与下载缓存保存在 prefix 的 `toolchain/`，引导阶段和正式安装使用同一目录，各 release 仍有自己的 venv。旧版本的私有 Python 不搬动、不删除。终端安装不会重新解析依赖版本或编译 Cubox。并行安装和 setup 由 prefix 文件锁拒绝。
 
 安装过程失败时不切换 `current`，清除本次未完成 release；旧 release 保留。已有命令和注册 Skills 都间接指向 `current`，升级后一起切换。原子切换失败会移除本次新建的链接。强制断电或 `SIGKILL` 可能留下未启用 release，`current` 仍指向切换前或已完整检查的新版本。
 
 环境含绝对路径，不支持把安装后的 prefix 或 release 直接搬到其他目录。需要换位置时重新安装。
+
+## 首次设置与账号
+
+```sh
+lorelab setup
+lorelab setup --non-interactive --vault /path/to/KnowledgeVault --subdir 知识
+lorelab setup --check-accounts --non-interactive
+```
+
+`setup` 原位沿用兼容配置路径，仅合并显式字段、保留未知字段。没有提供新的知识参数时不改配置字节或修改时间；已有删除授权和缺失字段的旧默认条件不变。新知识配置默认保留收藏。更换 `--mubu-doc` 时清除旧文档的父节点绑定，可同时指定 `--mubu-parent`；空字符串表示文档根节点。setup 不新建笔记、不读写任务、不执行云端写入。
+
+账号检查仅在 `--check-accounts` 时执行：Cubox 读取文件夹；已配置幕布目标时调用 `auth-status`，只报告成功与否，不输出 token 或服务正文。安装成功与账号可用分别报告；登录使用组件自己的流程。路径设置成功不代表 Agent 已重新加载 Skills。
+
+## 更新
+
+```sh
+lorelab update --from /path/to/lorelab-release.tar.gz --check
+lorelab update --from /path/to/lorelab-release.tar.gz
+lorelab update --from /path/to/extracted-bundle
+```
+
+更新调用现有安装事务，自动沿用 `install.json` 中的命令与 Skill 注册目录。更新失败不切换 current；原配置、任务和旧 release 保留。`--check` 校验候选包并比较内容身份，不安装或切换；远程包仍可能需要下载。显式 `--force` 用于相同包的修复安装。
+
+需要自动选择包时，由发布者提供更新清单，并设置一次：
+
+```sh
+lorelab setup --update-feed https://example.org/lorelab/latest.json --non-interactive
+lorelab update
+```
+
+地址是占位示例，产品不预置尚未发布的下载地址。清单格式：
+
+```json
+{
+  "schema_version": 1,
+  "product": "lorelab",
+  "platform": "darwin-arm64",
+  "url": "https://example.org/lorelab/release.tar.gz",
+  "sha256": "<发布者提供的64位SHA256>",
+  "bundle_id": "<包内packaging/bundle.json的release_id>"
+}
+```
+
+`bundle_id` 可选，提供时须匹配。清单也可来自显式本地文件，包路径可相对该文件；远程清单只能指向 HTTPS 包。直接下载包使用 `update --from HTTPS_URL --sha256 HASH`。下载按 SHA256 缓存，每次复用前重新校验；断流或校验失败不留下可用缓存，已核对的同一包不重复下载。哈希检查不替代对发布来源的信任。
+
+四套 Skill 的外部链接随 CLI 的 current 一起切换。插件宿主管理的 Skill 另由插件包分发，使用同次构建的插件和 CLI，见[插件说明](plugins.md)。
 
 ## 产品运行时接口
 
@@ -143,4 +194,4 @@ python3 -B -m unittest discover -s tests -p 'test_install*.py' -v
 
 这些检查验证安装和本地入口，不登录账号、不写入云端，也不代表站点、媒体下载、可选 ASR、ffmpeg 或其他平台工具已完成配置。当前不提供其他 CPU/系统的发行包，也不是完全离线安装包：Python 和缺失的 uv 仍需下载。
 
-重新运行安装命令会生成新 release，保留旧版本。需要回退时，在确认旧 release 仍完整后，创建指向旧 `releases/ID` 的临时符号链接，再用 `os.replace` 原子替换 `PREFIX/current`；不要搬动旧 release。删除 prefix 前先移除指向该 prefix 的显式 Skill 注册链接，勿删除同名用户目录。卸载不会清理组件在其他位置保存的用户配置或资料。
+不同内容的安装包会生成新 release，相同包默认复用已装版本。需要回退时，在确认旧 release 仍完整后，创建指向旧 `releases/ID` 的临时符号链接，再用 `os.replace` 原子替换 `PREFIX/current`；不要搬动旧 release。删除 prefix 前先移除指向该 prefix 的显式 Skill 和命令链接，勿删除同名用户目录；如使用 setup 配置 PATH，再移除对应的标记块。卸载不会清理组件在其他位置保存的用户配置或资料。

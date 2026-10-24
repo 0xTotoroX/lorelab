@@ -28,7 +28,7 @@ SKILLS = {
     "mubu-integration": "modules/mubu-cli",
 }
 ROOT_FILES = {"AGENTS.md", "LICENSE", "NOTICE.md", "pyproject.toml", "uv.lock", "components.lock.json", "install.sh",
-              "README.md", "README.zh-CN.md", "THIRD_PARTY_NOTICES.md"}
+              "README.md", "README.zh-CN.md", "THIRD_PARTY_NOTICES.md", "Install.command"}
 ROOT_DIRS = {"src", "skills", "packaging", "docs", "tests", "LICENSES"}
 MODULES = {"cubox-cli", "soota", "mubu-cli"}
 EXCLUDED = {".git", ".private", "private", "dist", "build", "cache", ".cache", "__pycache__",

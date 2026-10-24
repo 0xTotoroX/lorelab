@@ -44,19 +44,34 @@ Soota 负责生成 context 和采集任务恢复；LoreLab 负责跨来源的文
 
 ## 安装
 
-当前构建目标为 **macOS Apple Silicon（arm64）**。在完整安装包的解压目录中执行：
+当前构建目标为 **macOS Apple Silicon（arm64）**。解压完整安装包后，双击 `Install.command`，或在解压目录执行：
 
 ```sh
-sh install.sh --prefix "$HOME/.local/share/lorelab" \
-  --skills-dir "$HOME/.agents/skills"
-export PATH="$HOME/.local/share/lorelab/bin:$PATH"
+sh install.sh
+"$HOME/.local/share/lorelab/bin/lorelab" setup
 lorelab doctor
 lorelab skills list
 ```
 
-`--skills-dir` 指定 Agent 的 Skill 注册目录，可以按使用的 Agent 调整。遇到已有的非 LoreLab 同名 Skill，安装会停止并保留原内容；可以改用空目录，或省略此参数，仅安装工具与随包 Skills。
+默认安装到 `~/.local/share/lorelab`，四个命令注册到 `~/.local/bin`，四套 Skill 注册到 `~/.agents/skills`。`setup` 引导选择知识库，并向 zsh/bash 配置追加命令路径；已有配置只合并明确设置的字段，不改任务或清理授权。新终端生效，当前终端按 setup 输出加载路径。可用 `--prefix`、`--bin-dir`、`--skills-dir` 指定目录；`--no-bin`、`--no-skills` 跳过新增注册。
 
-安装包包含 Cubox 二进制、Python 依赖 wheel、组件源码与完整 Skills。首次安装仍可能联网获取 uv 和 Python；账号登录、浏览器桥接及可选媒体工具按任务配置。安装器不修改 shell 配置，以上 `export` 只影响当前终端。从源码目录安装还需要 Go 和构建工具，详见[安装、更新与恢复](docs/installation.md)。
+遇到外部同名命令或 Skill 时停止，保留原内容。安装包包含 Cubox 二进制、Python 依赖 wheel、组件源码与完整 Skills；首次联网准备 uv/Python，后续复用固定版本和缓存。同一个包重复安装会校验并复用当前版本。账号登录、浏览器桥接及可选媒体工具按任务配置。
+
+升级使用可信的完整安装包，也可通过 `setup --update-feed` 配置发布者提供的更新清单：
+
+```sh
+lorelab update --from /path/to/lorelab-release.tar.gz --check
+lorelab update --from /path/to/lorelab-release.tar.gz
+lorelab update  # 已配置更新清单时使用
+```
+
+四个 CLI 和四套 Skill 一起切换，已有配置、任务和旧 release 保留。没有配置更新源时会明确提示，不自动改用上游项目的发行包。详细参数、缓存与回退见[安装、更新与恢复](docs/installation.md)。
+
+### 插件与安卓
+
+同一份发行包可生成一个 **LoreLab 插件**，其中仍是 `lorelab`、`soota`、`cubox`、`mubu-integration` 四套独立 Skill，并附带同版 CLI 安装包。插件模式通过 `--no-skills` 避免新增一份全局 Skill 注册，`lorelab doctor --plugin-root DIR` 检查插件与 CLI 是否匹配。
+
+插件需要本地执行环境。当前没有 Android/Termux 原生安装包；安卓可通过支持远程连接的宿主访问 Mac 上的工具，仍需满足账号和配对条件。插件包校验不等于手机或插件宿主已验收。详见[插件分发与安卓使用边界](docs/plugins.md)。
 
 ## 开始使用
 
@@ -143,6 +158,7 @@ python3 packaging/build_release.py --output-dir dist
 | 主题 | 入口 |
 | --- | --- |
 | 安装、更新、恢复与源码构建 | [安装说明](docs/installation.md) |
+| 四套独立 Skill 的插件打包与安卓边界 | [插件说明](docs/plugins.md) |
 | 版本绑定、组件维护与独立导出 | [组件维护](docs/components.md) |
 | 采集目标、任务状态与恢复 | [Soota 任务文档](modules/soota/docs/tasks.md) |
 | 知识文章、学习任务与交付核对 | [LoreLab 知识流程](docs/knowledge.md) |

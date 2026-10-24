@@ -218,12 +218,47 @@ class InstallTests(unittest.TestCase):
 
     def test_upgrade_reuses_owned_links(self):
         old = self.install()
+        put(self.source, "docs/overview.md", "Updated product documentation\n")
+        common.seal_bundle(self.source)
         new = self.install()
         self.assertNotEqual(old, new)
         self.assertTrue(old.is_dir())
         self.assertEqual((self.skills / "mubu-integration").resolve(), new / "source/modules/mubu-cli")
         for name in common.COMMANDS:
             self.assertEqual(os.readlink(self.prefix / "bin" / name), f"../current/bin/{name}")
+
+    def test_identical_bundle_reuses_release_without_uv_or_environment_install(self):
+        old = self.install()
+        record = (self.prefix / "install.json").read_bytes()
+        (self.skills / "cubox").unlink()
+        with patch.object(installer, "get_uv", side_effect=AssertionError("no download")), \
+             patch.object(installer, "install_environment", side_effect=AssertionError("no reinstall")):
+            same = installer.install(self.source, self.prefix)
+        self.assertEqual(old, same)
+        self.assertEqual(list((self.prefix / "releases").iterdir()), [old])
+        self.assertEqual((self.prefix / "install.json").read_bytes(), record)
+        self.assertTrue((self.skills / "cubox/SKILL.md").is_file())
+
+    def test_update_restores_recorded_skill_and_cli_registration_without_arguments(self):
+        bins = self.base / "global bin"
+        with self.local_dependencies():
+            old = installer.install(self.source, self.prefix, self.skills, bins)
+        put(self.source, "docs/overview.md", "Updated release\n")
+        common.seal_bundle(self.source)
+        (bins / "soota").unlink()
+        with self.local_dependencies():
+            new = installer.install(self.source, self.prefix)
+        self.assertNotEqual(old, new)
+        for name in common.COMMANDS:
+            self.assertEqual((bins / name).resolve(), (new / "bin" / name).resolve())
+        self.assertEqual((self.skills / "soota").resolve(), new / "source/modules/soota/skills/soota")
+
+    def test_identical_bundle_does_not_hide_installed_corruption(self):
+        old = self.install()
+        (old / "source/docs/overview.md").write_text("changed after installation")
+        with self.assertRaisesRegex(common.PackagingError, "inventory/hash"):
+            self.install()
+        self.assertEqual((self.prefix / "current").resolve(), old)
 
     def assert_legacy_upgrade(self, product):
         old = self.legacy_install(product)
@@ -255,9 +290,11 @@ class InstallTests(unittest.TestCase):
         legacy = [self.prefix / "bin/lorehub", self.skills / "lorehub"]
         original_links = {link: os.readlink(link) for link in legacy}
         current = os.readlink(self.prefix / "current")
+        replace = os.replace
 
         def reject_switch(source, destination):
-            self.assertEqual(destination, self.prefix / "current")
+            if destination != self.prefix / "current":
+                return replace(source, destination)
             for link in legacy:
                 self.assertFalse(os.path.lexists(link))
             raise OSError("activation failed")
@@ -271,6 +308,7 @@ class InstallTests(unittest.TestCase):
         self.assertFalse(os.path.lexists(self.skills / "lorelab"))
         self.assertEqual(list((self.prefix / "releases").iterdir()), [old])
         self.assertFalse(list(self.prefix.glob(".current-*")))
+        self.assertFalse((self.prefix / "install.json").exists())
         self.assertEqual(subprocess.check_output([legacy[0]], text=True), "old release\n")
 
     def test_failed_retirement_restores_prior_link_without_switching_current(self):

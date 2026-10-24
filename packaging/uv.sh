@@ -4,11 +4,15 @@
 # [POS]: install.sh 与 Python 构建/安装器共用的引导入口。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 set -eu
+dest=$1
+if [ -x "$dest/uv" ]; then
+    printf '%s\n' "$dest/uv"
+    exit 0
+fi
 if command -v uv >/dev/null 2>&1; then
     command -v uv
     exit 0
 fi
-dest=$1
 mkdir -p "$dest"
 script="$dest/install-uv.sh"
 curl --proto '=https' --tlsv1.2 -fsSL https://astral.sh/uv/0.9.26/install.sh -o "$script"

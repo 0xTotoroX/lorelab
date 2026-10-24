@@ -17,7 +17,8 @@ def parser() -> argparse.ArgumentParser:
     app = argparse.ArgumentParser(prog="lorelab", description="把收藏提炼为文章，按需整理学习大纲。")
     app.add_argument("--version", action="version", version=f"LoreLab {__version__}")
     sub = app.add_subparsers(dest="command", required=True)
-    sub.add_parser("doctor", help="核对源码、Skill 和受管 CLI，不查询账号")
+    check = sub.add_parser("doctor", help="核对源码、Skill 和受管 CLI，不查询账号")
+    check.add_argument("--plugin-root", type=Path, help="额外核对插件包与当前 CLI 同版")
     tool = sub.add_parser("tool", help="调用当前产品绑定的独立 CLI")
     tool.add_argument("name", choices=["cubox", "soota", "mubu"])
     tool.add_argument("args", nargs=argparse.REMAINDER)
@@ -30,6 +31,9 @@ def parser() -> argparse.ArgumentParser:
     export.add_argument("destination", type=Path)
     skills = sub.add_parser("skills", help="查看配套 Skill 入口")
     skills.add_argument("action", choices=["list"])
+    from .maintenance import register as maintenance_register
+
+    maintenance_register(sub)
     from lorelab.knowledge.cli import register
 
     register(sub)
@@ -78,8 +82,18 @@ def doctor() -> dict:
 
 
 def dispatch(args: argparse.Namespace) -> object:
+    if args.command in {"setup", "update"}:
+        from .maintenance import dispatch as maintenance_dispatch
+
+        return maintenance_dispatch(args)
     if args.command == "doctor":
-        return doctor()
+        result = doctor()
+        if args.plugin_root:
+            from .plugins import check
+
+            result["plugin"] = check(args.plugin_root)
+            result["ok"] = result["ok"] and result["plugin"]["ok"]
+        return result
     if args.command == "skills":
         return skill_list()
     if args.command == "components":
@@ -102,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         result = dispatch(args)
         print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         return 1 if isinstance(result, dict) and result.get("ok") is False else 0
-    except (RuntimeError, ValueError, OSError, KeyError) as exc:
+    except (RuntimeError, ValueError, OSError, KeyError, subprocess.SubprocessError) as exc:
         print(json.dumps({"ok": False, "error": str(exc)}, ensure_ascii=False), file=sys.stderr)
         return 1
 

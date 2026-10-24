@@ -42,7 +42,13 @@ LoreLab 负责跨来源文章、学习大纲和交付流程，打包自行维护
 
 ## 安装与组件维护
 
-阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。四个 CLI 与四套 Skill 随产品版本绑定，注册目录由 `--skills-dir` 指定，保留整个 Skill 引用闭包。安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
+阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。`sh install.sh` 默认一起安装四个 CLI、注册四套 Skill；`setup` 配置知识目的地和命令路径，显式参数只合并对应字段。Agent 使用 `--non-interactive`，已有配置无须重填；检查账号须显式 `--check-accounts`。
+
+升级使用 `lorelab update --from FILE`，或事先通过 `setup --update-feed` 配置发布者清单；没有配置时不猜下载地址。相同包复用现有安装，更新保留注册目录、任务和清理条件。新目录可用 `--skills-dir` / `--bin-dir` 指定，外部同名内容不覆盖。
+
+作为[四 Skill 插件](../../docs/plugins.md)加载时，先按插件内 RUNTIME 约定检查 `doctor --plugin-root`，CLI 与插件须同版。插件已提供 Skill 时安装和 setup 带 `--no-skills`，避免新增重复注册；不主动删除已有 Skill。当前运行环境仅 macOS arm64，不把安卓远程操作写成手机本机支持。
+
+安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
 
 组件源码和对应 Skill 在 `modules/` 内维护；工作流源码在 `src/lorelab/knowledge/`，流程和提示词在本 Skill 中维护。审阅改动并完成验证后刷新组件锁，再重建受管 runtime。`components export` 导出独立组件及其 Skill，不携带 LoreLab 工作流、不自动同步外部仓库或切换原作者版本。
 
