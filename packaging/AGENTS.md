@@ -5,6 +5,7 @@
 - `common.py`：明确的源码选择、组件 `verify(root)` 接口、bundle 文件校验和本机工具链。
 - `build_release.py`：供旧包兼容，从本地源码构建当前平台 Cubox、依赖 wheel 和 tar.gz；输出校验文件。
 - `build_plugin.py`：从源码生成仅含四套独立 Skill、文档引用闭包与安装指引的插件；不上传或改宿主配置。
+- `publish_github.py`：依据已回读的配对标签和审阅说明创建两个 GitHub Release，逐项核对既有内容，分发纯 Skill 插件，不替换已发布 asset。
 - `install.py`：隔离构建 release，生成绝对路径 runtime、四个命令和 Skills；检查后退役归属本 prefix 的旧入口，再按平台切换 current 并保护失败恢复。
 - `uv.sh`：复用已安装 uv，或引导固定版 uv；不修改 shell profile。
 - `requirements.lock`：Python 3.12 运行依赖的精确版本与分发文件 SHA256。

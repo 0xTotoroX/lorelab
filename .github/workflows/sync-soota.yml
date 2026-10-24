@@ -1,0 +1,51 @@
+name: Sync standalone Soota
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'modules/soota/**'
+      - 'components.lock.json'
+      - 'src/lorelab/component_sync.py'
+      - '.github/workflows/sync-soota.yml'
+permissions:
+  contents: read
+concurrency:
+  group: soota-distribution
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned development environment
+        run: |
+          runner_uv=$(sh packaging/uv.sh "$RUNNER_TEMP/lorelab-uv")
+          "$runner_uv" sync --frozen
+      - name: Verify source, Skill and synchronization
+        run: |
+          .venv/bin/python -m lorelab.cli components verify
+          .venv/bin/python -m pytest -q tests/test_components.py tests/test_component_sync.py tests/test_releases.py tests/test_release_versions.py tests/test_skills.py
+          .venv/bin/python -m pytest -q modules/soota/tests
+      - name: Authenticate independent repository
+        env:
+          SOOTA_SYNC_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
+        run: |
+          test -n "$SOOTA_SYNC_TOKEN" || { echo 'Configure SOOTA_SYNC_TOKEN with contents write access to the standalone Soota repository.' >&2; exit 1; }
+          git config --global url.https://github.com/.insteadOf 'git@github.com:'
+          git config --global credential.helper '!f() { printf "%s\n" username=x-access-token "password=$SOOTA_SYNC_TOKEN"; }; f'
+      - name: Sync committed source and complete Skill
+        env:
+          SOOTA_SYNC_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
+        run: .venv/bin/python -m lorelab.cli components sync soota --source . --execute > "$RUNNER_TEMP/sync-receipt.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: soota-sync-receipt
+          path: ${{ runner.temp }}/sync-receipt.json

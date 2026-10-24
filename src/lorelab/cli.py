@@ -22,18 +22,27 @@ def parser() -> argparse.ArgumentParser:
     tool = sub.add_parser("tool", help="调用当前产品绑定的独立 CLI")
     tool.add_argument("name", choices=["cubox", "soota", "mubu"])
     tool.add_argument("args", nargs=argparse.REMAINDER)
-    component = sub.add_parser("components", help="校验、刷新和独立导出组件源码")
+    component = sub.add_parser("components", help="校验、导出组件和同步独立 Soota 仓库")
     component_sub = component.add_subparsers(dest="action", required=True)
     component_sub.add_parser("verify")
     component_sub.add_parser("refresh")
     export = component_sub.add_parser("export")
     export.add_argument("name", choices=["cubox", "soota", "mubu"])
     export.add_argument("destination", type=Path)
+    sync = component_sub.add_parser("sync", help="预览 Soota 单向同步；--execute 才写入目标仓库")
+    sync.add_argument("name", choices=["soota"])
+    sync.add_argument("--source", type=Path, required=True, help="唯一开发源 LoreLab checkout")
+    sync.add_argument("--repository", help="默认使用组件锁中的独立仓库")
+    sync.add_argument("--branch")
+    sync.add_argument("--execute", action="store_true")
     skills = sub.add_parser("skills", help="查看配套 Skill 入口")
     skills.add_argument("action", choices=["list"])
     from .maintenance import register as maintenance_register
 
     maintenance_register(sub)
+    from .releases import register as release_register
+
+    release_register(sub)
     from lorelab.knowledge.cli import register
 
     register(sub)
@@ -83,6 +92,10 @@ def doctor() -> dict:
 
 
 def dispatch(args: argparse.Namespace) -> object:
+    if args.command == "release":
+        from .releases import dispatch as release_dispatch
+
+        return release_dispatch(args)
     if args.command in {"setup", "update"}:
         from .maintenance import dispatch as maintenance_dispatch
 
@@ -100,6 +113,10 @@ def dispatch(args: argparse.Namespace) -> object:
     if args.command == "components":
         from . import components
 
+        if args.action == "sync":
+            from .component_sync import synchronize
+
+            return synchronize(args.source, target=args.repository, branch=args.branch, execute=args.execute)
         if args.action == "export":
             return components.export_component(runtime.root(), args.name, args.destination)
         return getattr(components, args.action)(runtime.root())

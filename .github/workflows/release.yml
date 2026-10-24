@@ -1,0 +1,67 @@
+name: Publish LoreLab and Soota
+on:
+  workflow_dispatch:
+    inputs:
+      product_notes:
+        description: Reviewed LoreLab release notes
+        required: true
+        type: string
+      soota_notes:
+        description: Reviewed standalone Soota release notes
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: soota-distribution
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require reviewed notes for both releases
+        env:
+          PRODUCT_NOTES: ${{ inputs.product_notes }}
+          SOOTA_NOTES: ${{ inputs.soota_notes }}
+        run: |
+          python3 -c 'import os; assert os.environ["PRODUCT_NOTES"].strip() and os.environ["SOOTA_NOTES"].strip(), "Both reviewed release notes are required"'
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install and verify the committed candidate
+        run: |
+          runner_uv=$(sh packaging/uv.sh "$RUNNER_TEMP/lorelab-uv")
+          "$runner_uv" sync --frozen
+          .venv/bin/python -m lorelab.cli components verify
+          .venv/bin/python -m pytest -q
+          .venv/bin/python -m pytest -q modules/soota/tests
+      - name: Build Skills-only plugin
+        run: .venv/bin/python packaging/build_plugin.py --output-dir dist
+      - name: Authenticate the two release repositories
+        env:
+          SOOTA_SYNC_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
+        run: |
+          test -n "$SOOTA_SYNC_TOKEN" || { echo 'Configure SOOTA_SYNC_TOKEN with contents write access to LoreLab and standalone Soota.' >&2; exit 1; }
+          git config --global url.https://github.com/.insteadOf 'git@github.com:'
+          git config --global credential.helper '!f() { printf "%s\n" username=x-access-token "password=$SOOTA_SYNC_TOKEN"; }; f'
+      - name: Publish matching source tags and read back
+        env:
+          SOOTA_SYNC_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
+          PRODUCT_REPOSITORY: ${{ github.repository }}
+        run: .venv/bin/python -m lorelab.cli release publish --source . --repository "https://github.com/$PRODUCT_REPOSITORY.git" --execute > "$RUNNER_TEMP/release-receipt.json"
+      - name: Create GitHub releases without replacing existing versions
+        env:
+          GH_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
+          PRODUCT_REPOSITORY: ${{ github.repository }}
+          PRODUCT_NOTES: ${{ inputs.product_notes }}
+          SOOTA_NOTES: ${{ inputs.soota_notes }}
+        run: .venv/bin/python packaging/publish_github.py --receipt "$RUNNER_TEMP/release-receipt.json" --plugin-dir dist
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-receipt
+          path: ${{ runner.temp }}/release-receipt.json

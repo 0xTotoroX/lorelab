@@ -161,7 +161,12 @@ def build(root: Path, output_dir: Path) -> Path:
             with zipfile.ZipFile(pending, "w", compression=zipfile.ZIP_DEFLATED, strict_timestamps=False) as archive:
                 for path in sorted(plugin.rglob("*")):
                     if path.is_file():
-                        archive.write(path, path.relative_to(plugin.parent))
+                        # 相同源生成相同插件，发布中断后可比对已有 asset 而不覆盖。
+                        info = zipfile.ZipInfo(path.relative_to(plugin.parent).as_posix(), (1980, 1, 1, 0, 0, 0))
+                        info.create_system = 3
+                        info.external_attr = 0o100644 << 16
+                        info.compress_type = zipfile.ZIP_DEFLATED
+                        archive.writestr(info, path.read_bytes())
             os.replace(pending, output)
         finally:
             pending.unlink(missing_ok=True)

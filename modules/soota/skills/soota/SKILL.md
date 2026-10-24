@@ -9,6 +9,8 @@ Use an installed `soota` command. For a source checkout, resolve this SKILL.md s
 
 In a managed LoreLab installation, use `lorelab tool soota -- ORIGINAL_ARGS` and locate the bound source with `lorelab doctor` / `lorelab skills list`. This Skill owns collection, parsing, context and acquisition recovery. It remains usable in an independent Soota installation without LoreLab.
 
+For Soota development or CLI upgrades, read [maintenance](../../docs/maintenance.md). Source and this complete Skill have one editable home, LoreLab `modules/soota/`; the standalone repository is generated. Do not patch both copies or replace a managed CLI with a separately installed version.
+
 Knowledge articles, cross-source composition, study outlines, destination readback and authorized cleanup belong to the **LoreLab Skill**. Locate it through `lorelab skills list` when installed; do not recreate that workflow here. Old `soota knowledge/study` commands only forward to LoreLab and are hidden from ordinary help. Existing task paths and configuration remain readable through LoreLab; the old `lorehub` command is removed.
 ## Choose the requested output
 

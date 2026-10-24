@@ -50,6 +50,6 @@ LoreLab 负责跨来源文章、学习大纲和交付流程，从本仓库安装
 
 安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
 
-组件源码和对应 Skill 在 `modules/` 内维护；工作流源码在 `src/lorelab/knowledge/`，流程和提示词在本 Skill 中维护。审阅改动并完成验证后刷新组件锁，再重建受管 runtime。`components export` 导出独立组件及其 Skill，不携带 LoreLab 工作流、不自动同步外部仓库或切换原作者版本。
+组件源码和对应 Skill 在 `modules/` 内维护；工作流源码在 `src/lorelab/knowledge/`，流程和提示词在本 Skill 中维护。Soota 的唯一修改入口是 `modules/soota/`，独立仓库由单向同步生成；开发、同步或发布时读[同步与发布](../../docs/releases.md)。审阅验证后刷新组件锁并提交，`components sync soota --source CHECKOUT` 默认预览，`--execute` 才推送；`release prepare/publish` 联动两包版本和标签。独立修改、过期源或标签冲突先停止核对，不强推、不改回执跳过校验。`components export` 仍只导出完整源码及 Skill，不自行推送。同步/发布授权与用户内容交付授权分别核对；版本就绪不代表云端工作流已启用。
 
 个人账号、凭据、资料和执行记录留在用户配置、状态目录或指定知识库中，核对其 Git 与同步边界。历史安装 prefix 包含绝对路径，升级原位切换，不为改名搬动安装目录。

@@ -19,7 +19,7 @@ LoreLab 在一个仓库中维护 Soota、Cubox CLI、幕布 CLI 和四套独立 
 
 **四个 CLI、四套 Skill，随同一个产品版本安装。** LoreLab Skill 负责文章、学习、交付流程与产品维护，Soota Skill 负责采集和内容包，Cubox 和幕布 Skill 分别负责各自服务的操作。每套 Skill 保留完整引用文件，各 CLI 也可独立使用。
 
-本仓库的 `modules/` 是成套产品的开发主源；上表链接是各组件的自有仓库入口。安装时使用 [components.lock.json](components.lock.json) 绑定的源码与版本，不追随原作者的最新版，也不假定外部组件仓库已包含本仓库的全部修改。组件导出与仓库同步是两个步骤，详见[组件维护](docs/components.md)。
+本仓库的 `modules/` 是开发主源；上表链接是各组件的自有仓库入口。**Soota 源码与 Skill 只改一处**：检查通过后可自动同步到独立 Soota 仓库，保留原历史和独立安装能力。安装使用 [components.lock.json](components.lock.json) 绑定版本。同步需要配置工作流与认证，见[同步与统一发布](docs/releases.md)；Cubox、幕布继续支持独立导出。
 
 ## 内容如何流转
 
@@ -150,7 +150,16 @@ lorelab components verify
 lorelab components export soota /path/to/new-soota-checkout
 ```
 
-开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁、重建并安装。独立导出包含源码、构建文件、完整 Skill 和许可证；导出的 Soota 可独立采集、下载、解析与恢复任务，不依赖 LoreLab Python 包；知识整理和学习交付在 LoreLab 中运行。导出不会自动提交或同步到上表的外部仓库。
+开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁并提交。Soota 的自动同步与正式发布使用同一份已提交源码：
+
+```sh
+lorelab components sync soota --source /path/to/lorelab
+lorelab components sync soota --source /path/to/lorelab --execute
+# 发布准备示例，两个版本号可不同：
+lorelab release prepare --source /path/to/lorelab --version 0.2.0 --soota-version 0.1.1
+```
+
+同步默认预览，加 `--execute` 才推送；已配置的 GitHub 主分支工作流验证后自动同步。正式发布入口统一绑定两包版本、提交与标签，拒绝覆盖已有版本。独立导出仍包含源码、构建文件、完整 Skill 和许可证，`export` 本身不推送。独立 Soota 的采集、下载、解析与恢复不依赖 LoreLab；知识整理和学习交付在 LoreLab 运行。详见[同步、发布与中断恢复](docs/releases.md)。
 
 在本仓库验证与构建：
 
@@ -168,6 +177,7 @@ python3 packaging/build_plugin.py --output-dir dist
 | 安装、更新、恢复与源码构建 | [安装说明](docs/installation.md) |
 | 四套独立 Skill 的插件与源码安装 | [插件说明](docs/plugins.md) |
 | 版本绑定、组件维护与独立导出 | [组件维护](docs/components.md) |
+| Soota 单主源、自动同步与统一发布 | [同步与发布](docs/releases.md) |
 | 采集目标、任务状态与恢复 | [Soota 任务文档](modules/soota/docs/tasks.md) |
 | 知识文章、学习任务与交付核对 | [LoreLab 知识流程](docs/knowledge.md) |
 | Agent 的审阅与写作提示词 | [LoreLab 提示词](skills/lorelab/references/prompts.md) |
