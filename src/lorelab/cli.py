@@ -24,11 +24,13 @@ def parser() -> argparse.ArgumentParser:
     tool.add_argument("args", nargs=argparse.REMAINDER)
     component = sub.add_parser("components", help="校验、导出组件和同步独立 Soota 仓库")
     component_sub = component.add_subparsers(dest="action", required=True)
-    component_sub.add_parser("verify")
-    component_sub.add_parser("refresh")
+    for action in ("verify", "refresh"):
+        command = component_sub.add_parser(action)
+        command.add_argument("--source", type=Path, help="指定开发主源；省略则使用当前绑定源码")
     export = component_sub.add_parser("export")
     export.add_argument("name", choices=["cubox", "soota", "mubu"])
     export.add_argument("destination", type=Path)
+    export.add_argument("--source", type=Path, help="指定开发主源，保留默认受管导出行为")
     sync = component_sub.add_parser("sync", help="预览 Soota 单向同步；--execute 才写入目标仓库")
     sync.add_argument("name", choices=["soota"])
     sync.add_argument("--source", type=Path, required=True, help="唯一开发源 LoreLab checkout")
@@ -118,8 +120,8 @@ def dispatch(args: argparse.Namespace) -> object:
 
             return synchronize(args.source, target=args.repository, branch=args.branch, execute=args.execute)
         if args.action == "export":
-            return components.export_component(runtime.root(), args.name, args.destination)
-        return getattr(components, args.action)(runtime.root())
+            return components.export_component(args.source or runtime.root(), args.name, args.destination)
+        return getattr(components, args.action)(args.source or runtime.root())
     from lorelab.knowledge.cli import dispatch as knowledge_dispatch
 
     return knowledge_dispatch(args)

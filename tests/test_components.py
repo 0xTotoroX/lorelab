@@ -73,6 +73,23 @@ class ComponentsTest(unittest.TestCase):
         self.assertEqual(report["components"]["demo"]["file_count"], len(self.contents))
         self.assertEqual((self.root / "components.lock.json").read_bytes(), original)
 
+    def test_cli_explicit_source_refreshes_checkout_instead_of_managed_snapshot(self):
+        from lorelab.cli import dispatch, parser
+
+        (self.component / "main.py").write_text("print('new checkout source')\n")
+        installed = self.base / "installed-snapshot"
+        installed.mkdir()
+        marker = installed / "keep.txt"
+        marker.write_bytes(b"installed source is preserved")
+        with patch("lorelab.cli.runtime.root", return_value=installed) as bound:
+            args = parser().parse_args(["components", "refresh", "--source", str(self.root)])
+            self.assertTrue(dispatch(args)["ok"])
+            args = parser().parse_args(["components", "verify", "--source", str(self.root)])
+            self.assertTrue(dispatch(args)["ok"])
+            bound.assert_not_called()
+        self.assertEqual(marker.read_bytes(), b"installed source is preserved")
+        self.assertEqual(list(installed.iterdir()), [marker])
+
     def test_source_skill_build_and_ignored_source_tampering_is_detected(self):
         for relative in ("main.py", "skills/demo/SKILL.md", "skills/demo/references/guide.md",
                          "pyproject.toml", "ignored-source.py", "bin/source-helper.py", ".env.example"):

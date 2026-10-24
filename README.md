@@ -153,6 +153,7 @@ lorelab components export soota /path/to/new-soota-checkout
 开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁并提交。Soota 的自动同步与正式发布使用同一份已提交源码：
 
 ```sh
+lorelab components refresh --source /path/to/lorelab
 lorelab components sync soota --source /path/to/lorelab
 lorelab components sync soota --source /path/to/lorelab --execute
 # 发布准备示例，两个版本号可不同：

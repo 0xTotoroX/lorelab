@@ -20,6 +20,15 @@ def release(tmp_path, monkeypatch):
     with zipfile.ZipFile(plugin, "w") as archive:
         archive.writestr("lorelab/lorelab-binding.json", json.dumps({"version": "1.0.0",
             "source_fingerprint": "source-test", "components_lock_sha256": "c" * 64}))
+        archive.writestr("lorelab/skills/soota/SKILL.md", "Synthetic original Skill")
+    canonical = plugin.read_bytes()
+
+    def build_expected(_source, destination):
+        result = destination / plugin.name
+        result.write_bytes(canonical)
+        return result
+
+    monkeypatch.setattr(publisher, "build_expected_plugin", build_expected)
     plugin.with_name(plugin.name + ".sha256").write_text(f"{publisher.digest(plugin)}  {plugin.name}\n")
     receipt = {"ok": True, "executed": True, "versions": {"soota": "1.0.0", "lorelab": "1.0.0"},
                "soota": {"repository": "git@github.com:example/soota.git", "commit": "a" * 40, "tag": "v1.0.0"},
@@ -149,5 +158,19 @@ def test_candidate_plugin_must_match_committed_source_and_binding(release):
             "source_fingerprint": "different-source", "components_lock_sha256": "c" * 64}))
     plugin.with_name(plugin.name + ".sha256").write_text(f"{publisher.digest(plugin)}  {plugin.name}\n")
     with pytest.raises(ValueError, match="plugin binding"):
+        publisher.publish(receipt, directory, "Product notes", "Soota notes")
+    assert not state["calls"]
+
+
+def test_altered_skill_with_unchanged_binding_and_new_outer_checksum_is_rejected(release):
+    receipt, directory, state = release
+    plugin = next(directory.glob("*.zip"))
+    with zipfile.ZipFile(plugin) as archive:
+        binding = archive.read("lorelab/lorelab-binding.json")
+    with zipfile.ZipFile(plugin, "w") as archive:
+        archive.writestr("lorelab/lorelab-binding.json", binding)
+        archive.writestr("lorelab/skills/soota/SKILL.md", "Different Skill despite the original binding")
+    plugin.with_name(plugin.name + ".sha256").write_text(f"{publisher.digest(plugin)}  {plugin.name}\n")
+    with pytest.raises(ValueError, match="plugin content differs"):
         publisher.publish(receipt, directory, "Product notes", "Soota notes")
     assert not state["calls"]

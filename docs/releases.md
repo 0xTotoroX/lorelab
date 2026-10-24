@@ -5,7 +5,7 @@ Soota 源码和完整 Skill 只在 LoreLab 的 `modules/soota/` 修改。独立 
 ## 日常修改与自动同步
 
 1. 修改 `modules/soota/` 内的源码、测试、文档和 Skill，运行受影响检查。
-2. 在源码环境运行 `lorelab components refresh`，审查 diff 后提交。刷新指纹不代表发布新版本。
+2. 运行 `lorelab components refresh --source /path/to/lorelab`，审查 diff 后提交。显式指定开发主源，避免把已安装的受管快照当作编辑入口；刷新指纹不代表发布新版本。
 3. 启用 GitHub 工作流后，推送 `main` 中相关改动会运行组件、Skill、同步边界与 Soota 测试，通过后执行 `components sync soota`。主源必须是干净、已提交且指纹一致的 LoreLab checkout。
 
 手动执行同一个入口可预览或恢复；预览获取远端状态并创建临时 Git 对象，不写入目标仓库或用户工作区：

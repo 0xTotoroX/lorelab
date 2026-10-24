@@ -32,8 +32,8 @@ tree_sha256 = sha256(
 
 ```text
 lorelab components verify
-lorelab components refresh
-lorelab components verify
+lorelab components refresh --source /path/to/lorelab
+lorelab components verify --source /path/to/lorelab
 ```
 
 修改源码或 Skill 后先审查 diff，再显式 refresh；不能把 refresh 当成对未知变化的自动认可。`verify` 只读，任何组件指纹不匹配即 `ok=false`，同时保留能计算出的实际指纹。`refresh` 先验证所有路径及 Skill 入口，全部有效才用临时文件和原子替换更新 lock 中的所有 `tree_sha256`。失败不写入部分组件，也不修改源码或导入 revision。操作期间保持组件源码静止；若源码并发变化，最终复核可能失败，应先停止其他写入再检查。

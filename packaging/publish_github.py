@@ -69,10 +69,21 @@ def source_identity(source):
         sys.path.pop(0)
 
 
+def build_expected_plugin(source, destination):
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    try:
+        from build_plugin import build
+
+        return build(source, destination)
+    finally:
+        sys.path.pop(0)
+
+
 def publish(receipt, plugin_dir, product_notes, soota_notes, source=None):
     if receipt.get("ok") is not True or receipt.get("executed") is not True:
         raise ValueError("publish requires an executed, verified paired-tag receipt")
-    commit, identity, lock_hash = source_identity(source or Path(__file__).resolve().parents[1])
+    source = source or Path(__file__).resolve().parents[1]
+    commit, identity, lock_hash = source_identity(source)
     if commit != receipt["lorelab"]["commit"]:
         raise ValueError("plugin source commit differs from the paired-tag receipt")
     plugins = list(plugin_dir.glob(f"lorelab-plugin-{receipt['versions']['lorelab']}-*.zip"))
@@ -90,6 +101,11 @@ def publish(receipt, plugin_dir, product_notes, soota_notes, source=None):
     checksum = plugin.with_name(plugin.name + ".sha256")
     if checksum.read_text(encoding="utf-8").split() != [digest(plugin), plugin.name]:
         raise ValueError("plugin checksum mismatch")
+    # 使用唯一构建器从已提交主源再生成，比对完整字节，不能仅信任 ZIP 自述的 binding。
+    with tempfile.TemporaryDirectory(prefix="lorelab-plugin-check-") as temporary:
+        expected = build_expected_plugin(source, Path(temporary))
+        if digest(expected) != digest(plugin):
+            raise ValueError("plugin content differs from the committed source; rebuild it before publishing")
     planned = []
     for name, notes, assets in (("soota", soota_notes, []), ("lorelab", product_notes, [plugin, checksum])):
         item = receipt[name]
