@@ -34,7 +34,7 @@ def _satisfied(folder, bundle, goal, spec, row):
 
 
 def _finish_item(settings, spec, job, row):
-    if row.bundle is None:
+    if row.bundle is None or row.status in {"blocked", "failed"}:
         return
     folder = Path(row.bundle)
     with _bundle_lock(folder):
@@ -79,6 +79,9 @@ def _finish_item(settings, spec, job, row):
 
 def _status(job, spec):
     statuses = [row.status for row in job.items[: spec.max_items]]
+    if not statuses:
+        # Acquisition distinguishes an empty, completed enumeration from a failed one.
+        return
     if all(x == "completed" for x in statuses):
         job.status = "completed"
     elif all(x in {"completed", "waiting_analysis"} for x in statuses):
@@ -127,9 +130,10 @@ def execute(settings: SootaSettings, spec, *, job=None, analysis=None, dry_run=F
                         raise InputError("本地输入自任务创建后已变化，不能接收旧分析。")
                 _apply_analysis(settings, job, Path(analysis), force=spec.force)
             source.execute(settings, spec.source_spec(), job=job, _locked=True)
-            for row in job.items[: spec.max_items]:
-                _finish_item(settings, spec, job, row)
-            _status(job, spec)
+            if job.status not in {"blocked", "failed", "paused"}:
+                for row in job.items[: spec.max_items]:
+                    _finish_item(settings, spec, job, row)
+                _status(job, spec)
             save_job(settings, job)
         except KeyboardInterrupt:
             job.status = "paused"

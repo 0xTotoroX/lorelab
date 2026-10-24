@@ -119,8 +119,12 @@ def test_online_content_updates_once_and_dry_run_never_updates(settings, monkeyp
         return {"providers": [], "warnings": []}
 
     monkeypatch.setattr("soota.auto_updates.automatic_update", update)
+
     # Scope this test to update routing, with no provider/network work.
-    monkeypatch.setattr("soota.tasks.runner.execute", lambda *a, **k: None)
+    def complete_empty_source(*a, job, **k):
+        job.status, job.expanded = "completed", True
+
+    monkeypatch.setattr("soota.tasks.runner.execute", complete_empty_source)
     cli = CliRunner()
     args = ["ingest", "https://example.org/source", "--want", "note", "--json"]
     target = old_app if legacy else app
@@ -138,3 +142,49 @@ def test_product_content_entry_reports_usage_without_traceback(capsys):
     assert main(["content", "resume"]) == 2
     output = capsys.readouterr()
     assert "job_id" in output.err.lower() and "Traceback" not in output.err
+
+
+def test_changed_source_keeps_blocked_state_and_does_not_deliver_old_note(settings, article, monkeypatch):
+    target = article.parent / "delivery"
+    first = api.ingest(settings, str(article), want="note", provider="local", destination=target)
+    folder = Path(first.data["output"])
+    handoff = json.loads((folder / "analysis-request.json").read_text())
+    submission = article.parent / "submission.json"
+    submission.write_text(
+        json.dumps(
+            {
+                **{k: handoff[k] for k in ("task_id", "item_id", "context_fingerprint")},
+                "note_markdown": "Supported note.",
+            }
+        )
+    )
+    assert api.resume(settings, first.data["job_id"], analysis=submission).ok
+    original = (folder / "context.md").read_bytes()
+    delivered = {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+    article.write_text("Changed input.")
+    monkeypatch.setattr("lorelab.content.tasks.export_bundle", lambda *a, **k: pytest.fail("delivered stale input"))
+    result = api.resume(settings, first.data["job_id"])
+    assert not result.ok and result.exit_code != 0
+    assert result.data["job_status"] == "blocked"
+    assert result.data["items"][0]["status"] == "blocked"
+    assert (folder / "context.md").read_bytes() == original
+    assert {p: p.read_bytes() for p in target.rglob("*") if p.is_file()} == delivered
+
+
+def test_failed_enumeration_is_not_successful_empty_content(settings):
+    result = api.ingest(
+        settings,
+        operation="opencli.youtube.search",
+        params=["query=example"],
+        expand=True,
+        provider="tikhub",
+        want="note",
+    )
+    assert not result.ok and result.exit_code != 0
+    assert result.data["items"] == [] and result.data["job_status"] == "blocked"
+
+
+def test_successful_empty_enumeration_remains_complete(settings, article, monkeypatch):
+    monkeypatch.setattr("soota.tasks.runner.expand_inputs", lambda *a: [])
+    result = api.ingest(settings, str(article), provider="local", want="note")
+    assert result.ok and result.data["items"] == []
