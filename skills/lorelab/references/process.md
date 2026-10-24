@@ -23,9 +23,9 @@ lorelab knowledge prepare --ids-file FILE --vault PATH --subdir SUBDIR --no-dele
 
 先逐项区分可用正文、仅摘要、链接占位、获取失败和原始来源自身的缺口。需要补采且在当前请求范围内时，按[采集任务](../../../modules/soota/skills/soota/references/tasks.md)使用 `soota ingest`，复用标准任务、预算和缓存。
 
-独立补采默认停在 `context.md`，Agent 直接读取 context 写作。文章批次向 Soota 请求 `context,note` 并接收分析交接，不需要大纲或额外的阅读文章中间步骤。免费来源默认优先；确认无字幕轨道后 `auto` 才进入音频与本地转写，未知或获取失败不等于无字幕。付费、登录、限流和失败恢复继续遵守 Soota 的业务边界，不新建服务私有 API、Provider 链或 LLM 服务。
+独立补采默认停在 `context.md`，Agent 直接读取 context 写作。文章批次经 LoreLab content 请求 `context,note`，采集仍复用 Soota，并接收分析交接，不需要大纲或额外的阅读文章中间步骤。免费来源默认优先；确认无字幕轨道后 `auto` 才进入音频与本地转写，未知或获取失败不等于无字幕。付费、登录、限流和失败恢复继续遵守 Soota 的业务边界，不新建服务私有 API、Provider 链或 LLM 服务。
 
-围绕实际问题对照已有知识，用原始证据写成连贯文章，可综合多个来源。讲清观点之间的关系、适用条件、操作和例外，完整以足够理解和使用为准，不追求篇幅或强制要点化。具体取舍见[通用提炼提示](prompts.md)。已有内容冲突需单独审阅合并；当前批量发布不会自动更新已有文章，不能为避开冲突另存重复主题。
+围绕实际问题对照已有知识，用原始证据写成连贯文章，可综合多个来源。讲清观点之间的关系、适用条件、操作和例外，完整以足够理解和使用为准，不追求篇幅或强制要点化。具体取舍见[通用提炼提示](prompts.md)。分类、查重及已有内容合并由 Agent 审阅，按当前授权单独实施并回读；`knowledge publish` 只接受新路径或字节相同的已有文件，不自动更新或合并已有文章，不能为避开冲突另存重复主题。
 
 可在适用授权下并行阅读和草拟不同主题，每个 Agent 使用独立草稿，保留来源身份、指纹与证据映射。一个协调者合并文章并形成提交；同一知识文件和幕布文档只由一个写入者操作。
 
@@ -44,7 +44,7 @@ lorelab knowledge verify JOB
 lorelab knowledge status JOB
 ```
 
-提交冻结来源审阅、文章和完成产物；发布使用同一份快照。重试提交只接受已冻结内容，不在发布中途改文案，不强制覆盖 Soota 分析。文章模式只要求已验证的 context、note、analysis 产物及其 manifest，不生成 `outline.json`。
+提交冻结来源审阅、文章和完成产物；发布使用同一份快照。重试提交只接受已冻结内容，不在发布中途改文案，不强制覆盖 LoreLab content 的来源分析。文章模式只要求已验证的 context、note、analysis 产物及其 manifest，不生成 `outline.json`。
 
 发布后实际回读知识文件和来源，核对正文、证据、覆盖及已有内容保全。命令成功或写入回执不能代替目标回读。相同路径的现有文件只有字节 hash 相同才可复用，不同则停止；不覆盖人工修改。文章模式 publish/verify/cleanup 均不调用幕布，`verified` 表示文章交付已核对，到此结束；若已有适用删除授权，再按下文清理。
 
@@ -94,4 +94,4 @@ study 和显式组合批次共用单一云端写入者：同一文档串行写�
 
 用户明确要求同一批完成两处交付时，在 `lorelab knowledge prepare` 增加 `--with-outline --mubu-doc ID`；如授权要求两处完成后才删除，同时传 `--cleanup-after outline`。仅配置了幕布目标不会启用大纲。
 
-此模式才请求 Soota `context,note,outline`，提交额外包含每个来源的 `outline_markdown` 和每篇文章的 `outline`，文章定稿后再制作学习树。两处全部回读才算本批 `verified`，不得用 `cleanup_after=article` 跳过已选的大纲交付。旧持久化任务缺少新字段时仍按此组合语义恢复，不改写为文章模式。
+此模式才经 LoreLab content 请求 `context,note,outline`，提交额外包含每个来源的 `outline_markdown` 和每篇文章的 `outline`，文章定稿后再制作学习树。两处全部回读才算本批 `verified`，不得用 `cleanup_after=article` 跳过已选的大纲交付。旧持久化任务缺少新字段时仍按此组合语义恢复，不改写为文章模式。

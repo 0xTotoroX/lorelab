@@ -65,6 +65,8 @@ lorelab update --repo REPOSITORY --ref REF
 
 旧版只认识 tar.gz 更新时，从新 checkout 再执行安装脚本并指定**原 prefix**。它会读取旧注册记录，在原位置创建新 release；无需搬迁配置和任务。`lorelab update --from 旧安装包.tar.gz` 与旧 `setup --update-feed` 接口保留兼容，已配置的旧 feed 仍可显式使用 `--feed`；新安装默认采用仓库来源。
 
+语义与导出的正式入口为 [LoreLab content](content.md)。旧 Soota 语义/导出 ingest、旧语义或交付任务 resume、render 仅作隐藏兼容转发；独立 Soota 未安装 LoreLab 时明确报需要安装并在修改任务前停止。原 task/item 身份、source 证据、任务路径、预算和产物保留，采集与原文包仍可独立使用。
+
 旧发行包工具 `packaging/build_release.py` 继续保留供已有流程使用，不是普通用户安装前提。历史 schema 1 bundle 仍校验平台、文件哈希和模式；新插件不携带此类包。
 
 失败先检查错误、工具链和网络，不删配置或重建任务。回退选择 prefix/releases 中核对完整的旧版本：macOS 通过临时链接和 os.replace 切回 current；Windows 持安装锁把 current junction 更名备用，创建目标 junction，失败恢复原 junction。旧 release 内绝对路径不变。已经写入的知识和云端内容不随软件回退。

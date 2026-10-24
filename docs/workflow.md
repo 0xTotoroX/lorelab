@@ -1,9 +1,10 @@
 # 知识流程入口
 
-文章整理、学习大纲、交付核对与授权清理的唯一实现和文档主源归 LoreLab。本文保留旧链接入口；完整字段、状态和恢复规则见 [LoreLab 知识流程](knowledge.md)。
+文章整理、学习大纲、交付核对与授权清理的唯一实现和文档主源归 LoreLab。本文保留旧链接入口；知识与学习的完整字段、状态和恢复规则见 [LoreLab 知识流程](knowledge.md)。单来源分析、笔记、文章、大纲、渲染和整包导出见 [LoreLab content](content.md)，分类查重合并由 Agent 审阅，CLI 不自动合并旧笔记。
 
 | 产品命令 | 正式命令 |
 | --- | --- |
+| 单来源语义产物、渲染与整包导出 | `lorelab content ingest/resume/render/export` |
 | `lorelab init` | `lorelab knowledge init` |
 | `lorelab batch prepare/submit/publish/verify/cleanup/status` | `lorelab knowledge prepare/submit/publish/verify/cleanup/status` |
 | `lorelab study prepare/submit/publish/verify/status` | `lorelab study prepare/submit/publish/verify/status` |
@@ -16,7 +17,7 @@
 
 ## Python 接口
 
-见 [LoreLab 知识模块接口](knowledge.md#python-接口)。唯一实现在 `lorelab.knowledge`。
+见 [LoreLab 知识模块接口](knowledge.md#python-接口)。知识与学习编排位于 `lorelab.knowledge`，内部语义处理调用 `lorelab.content`；采集复用 Soota。
 
 ## 交付选择与旧任务
 

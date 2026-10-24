@@ -13,7 +13,7 @@ description: 幕布 CLI：文档管理、手动导入导出、节点编辑、图
 
 Windows 独立源码调用可使用 `python` 或 `py -3` 替代 `python3`；文本输入、操作记录和标准输出均为 UTF-8。文件锁与已有 Token 原子替换适用于 Windows，不能为解决启动问题跳过互斥。Windows 桌面会话仍从本机 `APPDATA` 下发现，不复制 Mac 的桌面数据路径。
 
-在 LoreLab 中使用 `lorelab tool mubu -- ORIGINAL_ARGS`，例如 `lorelab tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorelab doctor` 和 `lorelab skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。已有知识或学习任务使用 `lorelab knowledge`、`lorelab study` 发布与核对，不能另起写入者绕过批次状态。下方 `python3 scripts/mubu_api.py` 示例是独立源码形式；LoreLab 安装中统一把该前缀替换为 `lorelab tool mubu --`，保留其后的 `--agent`、认证选项和子命令，使用产品绑定的解释器与依赖。
+在 LoreLab 中使用 `lorelab tool mubu -- ORIGINAL_ARGS`，例如 `lorelab tool mubu -- --agent --auth desktop nodes DOC_ID`；通过 `lorelab doctor` 和 `lorelab skills list` 核对绑定的 CLI 与 Skill。独立导出仍可从本 Skill 所在目录运行 `python3 scripts/mubu_api.py --agent ...`。单来源分析、笔记、文章及本地大纲整理交给 LoreLab Skill 的 `content` 流程，普通聊天总结不要求入库或写幕布。明确要求从选定文章制作学习树时使用 `lorelab study`。已有知识或学习任务使用 `lorelab knowledge`、`lorelab study` 发布与核对，不能另起写入者绕过批次状态。下方 `python3 scripts/mubu_api.py` 示例是独立源码形式；LoreLab 安装中统一把该前缀替换为 `lorelab tool mubu --`，保留其后的 `--agent`、认证选项和子命令，使用产品绑定的解释器与依赖。
 
 - 在用户已授权的范围内完成读取、预览与执行，不为 `--execute` 再次索要相同授权。
 - 节点/媒体执行必须带预览的 `--expect-version`；同一文档串行操作。

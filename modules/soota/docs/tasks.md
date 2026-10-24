@@ -10,11 +10,12 @@ Windows 的任务文件、缓存和恢复输入按 UTF-8 读写，任务锁与�
 
 | 目的 | 入口 | 契约 |
 | --- | --- | --- |
-| 采集原文、媒体、单项分析产物或整包导出 | `soota ingest`，以 `soota jobs resume` 接续 | 本文 |
+| 采集原文、媒体或数据 | `soota ingest`，以 `soota jobs resume` 接续 | 本文 |
+| 单来源分析、笔记、文章、大纲、渲染或整包导出 | 外部 `lorelab content` | [迁移说明](knowledge.md) |
 | 从 Cubox 收藏或已有内容包整理多源文章、写入并核对 | 外部 `lorelab knowledge` | [迁移说明](knowledge.md) |
 | 从明确选定的已有文章制作学习大纲 | 外部 `lorelab study` | [迁移说明](knowledge.md) |
 
-知识任务和学习任务是显式请求的流程，不修改普通 ingest 默认停在原文 context 的行为。`note/article/outline` 是内容包产物；LoreLab 的 `knowledge/study` 管理跨来源归并、最终目的地与写入回读。内容判断和写作由 Agent 完成，程序只做确定性处理与核验。
+知识任务和学习任务是显式请求的流程，不修改普通 ingest 默认停在原文 context 的行为。`note/article/analysis/outline` 及目的地导出由 LoreLab content 实现；LoreLab 的 `knowledge/study` 管理知识文章、学习与交付回读。分类、查重和合并由 Agent 审阅，publish 不自动覆盖合并旧笔记。内容判断和写作由 Agent 完成，程序只做确定性处理与核验。
 
 ## 选择目标
 
@@ -47,12 +48,8 @@ soota ingest "文章 URL" --want context --optional images --max-cost 0 --json
 | `markdown` | 未加工正文的 Markdown 输出目标，沿用 context 的处理边界 |
 | `images` | 实际取得并验证的图片；图文正文使用相对附件链接 |
 | `data` | 原生读取结果或该输入的结构化数据；不自动猜测任意 JSON 的正文含义 |
-| `analysis` | Agent 显式提交的摘要、要点及证据等分析 |
-| `note` | Agent 按用户要求整理的笔记 |
-| `outline` | 独立大纲，可与笔记相互链接 |
-| `article` | Agent 明确按详细阅读要求整理的文章 |
 
-保存网站已有文章正文使用 `context` 或 `markdown`；`article` 会要求 Agent 进行后续文章整理。CLI 自身不调用大模型。
+新 Soota 任务的 `--want` / `--optional` 仅接受以上七种采集目标。保存网站已有文章正文使用 `context` 或 `markdown`；语义文章、分析、笔记和大纲交给 LoreLab content，CLI 不调用大模型。
 
 `--language` 要求实际字幕语言，不能用语言未知或其他语言的轨道冒充。本地字幕未提供可靠语言元数据时保留未知，不按默认偏好填成中文。`--min-height` 指定视频最低高度，`--max-bytes` 限制单个媒体文件大小。字幕导出支持 `srt,vtt,txt,json`；缺少时间轴时可以导出 TXT/JSON，不能生成虚构时间的 SRT/VTT。
 
@@ -71,7 +68,7 @@ soota ingest "/path/to/video.mp4" --want audio,context --json
 soota ingest "/path/to/audio.m4a" --want transcript,context --json
 soota ingest "/path/to/captions.vtt" --want transcript --subtitle-format srt,json --json
 soota ingest "/path/to/article.md" --want context,images --json
-soota ingest "/path/to/bundle/manifest.json" --want note --json
+soota ingest "/path/to/bundle/manifest.json" --want context --json
 soota ingest --inputs-file "/path/to/links.txt" --want context --workers 2 --max-items 20 --max-cost 0 --json
 ```
 
@@ -103,9 +100,9 @@ soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
   --output "/path/to/source-bundles" --json
 ```
 
-如需跨来源归档，把返回的内容包交给 LoreLab Skill，由 `lorelab knowledge` 接续。Soota 到源内容包结束，不自行选择知识目录、写作规则或清理策略。
+如需单来源分析、笔记、文章、大纲或整包导出，把返回的内容包交给 LoreLab Skill，由 `lorelab content` 接续；知识文章交付使用 `lorelab knowledge`。Soota 到源内容包结束，不自行选择知识目录、写作规则或清理策略。
 
-CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 不调用模型，单份 `note.md` 与整包导出也不代替多主题知识交付。
+CLI 当前没有纯粘贴正文或标准输入入口；位置参数中的分享文本只提取链接，`--inputs-file` 读取的是条目清单。本地文件的 `full` 仅说明完整读取了该文件，不证明取得原帖全文。CLI 不调用模型，LoreLab content 保存的单份笔记或整包导出也不代替多主题知识交付。
 
 Cubox 批次读取、补抓编排、文章交付与幕布学习任务由 LoreLab 负责；相关操作使用其工作流与 Skill，不在独立 Soota 中复制。旧 `soota knowledge/study` 命令的兼容边界见[迁移说明](knowledge.md)。
 
@@ -113,9 +110,9 @@ Cubox 批次读取、补抓编排、文章交付与幕布学习任务由 LoreLab
 
 统一任务使用 `--workers N` 指定同时处理的独立条目数，范围 **1–8**，默认 **1**。集合枚举与分页保持顺序；去重保留来源第一次出现的位置，结果 `items` 按输入顺序返回，完成顺序可能不同。非默认 `--workers` 也会选择统一任务入口；省略它的旧单视频命令保持原契约。
 
-并行的是每个条目的完整获取／转换／保存流程，不会让单条目的多个步骤同时写入。调度器最多提交 N 个在途条目，每次提交独立复制 `contextvars`，保留共享预算和调用上下文。同一实际内容包目录的不同输入按原顺序处理；跨进程内容包锁继续防止其他任务同时修改。任务内导出串行执行，并锁定导出目标目录；若目标正在作为另一个任务的源内容包使用，该次导出报告冲突并保留已有文件。
+并行的是每个条目的完整获取／转换／保存流程，不会让单条目的多个步骤同时写入。调度器最多提交 N 个在途条目，每次提交独立复制 `contextvars`，保留共享预算和调用上下文。同一实际内容包目录的不同输入按原顺序处理；跨进程内容包锁继续防止其他任务同时修改。语义产物和目的地导出归 LoreLab content，本采集调度器不承担这些执行。
 
-worker 修改自己的条目副本，保存时在锁内合并该行、序列化并原子替换任务记录，保留其他条目的最新进度。单项获取、格式或本地输入变化错误只阻塞对应条目；枚举、任务记录或分析提交错误仍可能阻塞任务级步骤。并发竞争付费额度时以实际预留顺序分配，不能保证输入靠前者优先获得预算。
+worker 修改自己的条目副本，保存时在锁内合并该行、序列化并原子替换任务记录，保留其他条目的最新进度。单项获取、格式或本地输入变化错误只阻塞对应条目；枚举或任务记录错误仍可能阻塞任务级步骤。并发竞争付费额度时以实际预留顺序分配，不能保证输入靠前者优先获得预算。
 
 Ctrl-C 停止新条目调度，取消尚未开始的调用，等待已经开始的 worker 完成写入后保存 `paused` 并释放任务锁。收尾期间再次 Ctrl-C 不提前释放锁；等待时间取决于在途 Provider 的超时。强制终止进程不具备同样的收尾保证；已有预算预留仍保留。此实现使用标准库线程池，不新增任务服务或模型调用。
 
@@ -187,7 +184,7 @@ soota jobs resume JOB_ID --max-items 40 --max-pages 6 --max-cost 0.10 --json
 
 条数、页数和费用恢复参数表示新的总上限。`workers` 保存在任务请求中；resume 省略时沿用，显式值校验后保存，旧请求缺少此字段时按 1 处理。单独改变 workers 不重置预算、不改变费用上限，也不重做已经完成的枚举；旧 `catalog` 任务不接受这个覆盖选项。
 
-已有目录的 Provider 和游标语义继续保留，不把一个来源的游标交给另一个。下载或导出失败时，已经保存的有效产物保留；再次运行会校验文件与采集条件，补做未满足的步骤。新任务将未绑定浏览器的随机执行作用域一并持久化，重复恢复不会仅因新建随机标识而重新采集；不同新任务仍隔离，已知 profile、采集设置或有效文件变化时会重新校验。没有此作用域的历史请求沿用首次恢复时的重新校验行为。输入文件在任务创建后变化时，仅该条目阻塞，使用新任务处理新的输入。
+已有目录的 Provider 和游标语义继续保留，不把一个来源的游标交给另一个。下载或转换失败时，已经保存的有效产物保留；再次运行会校验文件与采集条件，补做未满足的步骤。新任务将未绑定浏览器的随机执行作用域一并持久化，重复恢复不会仅因新建随机标识而重新采集；不同新任务仍隔离，已知 profile、采集设置或有效文件变化时会重新校验。没有此作用域的历史请求沿用首次恢复时的重新校验行为。输入文件在任务创建后变化时，仅该条目阻塞，使用新任务处理新的输入。
 
 有效缓存和现有产物不会重复采集或重复预留；失败或结果不确定的付费调用仍保留原预留，重新尝试也必须从剩余额度预留。此账本不能证明上游恰好执行一次，也不把估算当作账单。
 
@@ -198,7 +195,7 @@ OpenCLI 原生读取和标准 Provider 共用安全诊断：错误 `details` 包
 | 状态 | 如何理解 |
 | --- | --- |
 | `completed` | 本次范围内的必需产物完成；仍需查看集合完整性和可选目标结果 |
-| `waiting_analysis` | 原文已准备，仍需 Agent 提交用户要求的分析产物 |
+| `waiting_analysis`（旧语义任务） | 交由 LoreLab content 接续；新 Soota 采集任务不产生语义交接 |
 | `partial` | 部分目标已保存，还有缺失产物或未完成的枚举 |
 | `blocked` / `failed` | 查看条目的 `steps`、`errors` 和任务警告，处理对应原因后恢复 |
 | `paused` | 中断已收尾并保存；使用同一任务编号恢复 |
@@ -207,31 +204,9 @@ JSON 中 `workers` 表示本次并发设置，`items` 分别记录每项的 `bun
 
 ## 分析接续
 
-```bash
-soota ingest "内容 URL" --want note,outline --max-cost 0 --json
-```
+单来源分析、笔记、文章、大纲及其提交校验、渲染全部归 LoreLab content。新操作用 `lorelab content ingest INPUT --want context,note`、`lorelab content resume JOB --analysis FILE`；由 Agent 读取实际 context 写作，CLI 校验，不强加文章前置。完整操作与 schema 指导从 LoreLab Skill 进入，Soota 不再维护第二份。
 
-CLI 保存原文后返回 `waiting_analysis`，内容包中的 `analysis-request.json` 记录目标、task/item 身份、原文指纹、提交 schema 和恢复命令。Agent 读取实际 context，按照用户明确要求生成结果。需要结构化摘要时填写 `analysis`；笔记、大纲和详细文章分别填写 `note_markdown`、`outline_markdown`、`article_markdown`。
-
-以下是提交结构示例；身份、指纹和证据 ID 必须从当前请求及原文读取，不能照抄占位值：
-
-```json
-{
-  "task_id": "JOB_ID",
-  "item_id": "ITEM_ID",
-  "context_fingerprint": "CURRENT_CONTEXT_SHA256",
-  "note_markdown": "# 笔记\n\n按用户要求写出的笔记正文。",
-  "outline_markdown": "# 大纲\n\n- 按原文证据组织的主题"
-}
-```
-
-```bash
-soota jobs resume JOB_ID --analysis "/path/to/submission.json" --json
-```
-
-也可传入包含多个提交 JSON 的目录。任务接续核验 task/item 身份；渲染核验 context 指纹及所引用的 `seg-*` 字幕 ID、`para-*` 正文块 ID。过期原文或不存在的证据会拒绝写入。相同提交可用于恢复；替换已有分析产物需明确 `--force`。显式渲染不会重写原文。
-
-独立 `render --bundle ... --analysis ...` 保留旧 v1 Analysis 用法；v2 接受带 `context_fingerprint` 的 `AnalysisSubmission`。有未完成任务时使用 `jobs resume --analysis`，让原任务继续验证目标并完成导出。
+旧语义或交付任务通过隐藏兼容桥恢复，原 `task_id/item_id`、source 证据、路径、预算和产物保持。未安装 LoreLab 时明确报需要安装，并在修改任务或文件前停止。旧 `TaskSpec` 语义词/目标字段与 `AnalysisManifest` 状态仅保留数据兼容，没有对应的语义生成或导出实现。兼容桥只动态调用同一 Python 环境的 LoreLab；交接身份、指纹和目标不变时，LoreLab 保留 `analysis-request.json` 原字节与冻结 hash。见[迁移说明](knowledge.md)。
 
 ## 内容包与导出
 
@@ -246,27 +221,16 @@ v2 的 `manifest.json` 保留兼容来源、字幕、分析和费用字段，并
 | `body.md` / `content.json` | 取得文章正文时保存的原始 Markdown 与有序正文块 |
 | `attachments/` | 视频、音频、图片等实际文件 |
 | `data.json` | 请求的数据产物 |
-| `analysis.md` / `analysis.json` | 显式分析及提交记录 |
-| `note.md` / `outline.md` / `content.md` | 显式请求的笔记、大纲、阅读文章 |
+| 既有 `analysis.md` / `analysis.json` / `note.md` / `outline.md` / `content.md` | 历史或 LoreLab 写入的语义产物，采集保留；新写入、校验和渲染由 LoreLab content 负责 |
 
 媒体成功需要文件有效、可解码、目标轨道与质量符合要求，并在已知来源时长时校验时长。文件哈希匹配只说明文件未变；来源时长未知时，不能据此宣称视频全长。标题、简介、节选或范围未知的正文也不能当作全文分析。
 
-```bash
-# 在输出内容包之外另外导出
-soota ingest "内容 URL" --want context,images \
-  --destination "/path/to/archive" --max-cost 0 --json
+Soota 的 `--output` / `SOOTA_OUTPUT_DIR` 只设置采集包位置；整包导出使用 `lorelab content export --bundle PATH --destination PATH`，或 `--vault PATH --subdir DIR`。即使仅导出原文包，目的地写入也由 LoreLab content 负责。
 
-# 指定 Obsidian Vault 和库内目录
-soota ingest "/path/to/bundle" --want note,outline \
-  --vault "/path/to/vault" --subdir "收件箱/Soota" --json
-```
-
-导出保留包内相对链接，按来源生成稳定目录名，并用 `.soota-export.json` 记录受管文件的 SHA。再次导出先检查目标文件；存在未登记文件或人工修改时返回冲突，保留手写内容。采集或渲染的 `--force` 不取消导出冲突保护。
-
-CLI 只写显式目的地，不自动寻找 Vault、重组知识库、选择知识分类或解释 `AGENTS.md`。Agent 应先读取用户指定目的地的约定，再选择目录和分析方式。目标文件夹自身的 Git/同步策略也需要由用户配置。
+旧 `soota ingest` 的导出参数只走隐藏兼容桥，不保留独立导出实现。导出沿用稳定目录、相对附件链接及 `.soota-export.json` 人工修改保护；采集或渲染 `--force` 不绕过导出冲突。CLI 不解释 `AGENTS.md` 或推断分类；Agent 按 LoreLab Skill 读取目的地规则及相关旧笔记，审阅分类、查重和合并。采集与原文包独立不依赖 LoreLab。
 
 ## 实现与验证边界
 
-任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，内容包和整包导出位于 `artifacts/`；跨来源文章、学习与交付位于外部 LoreLab 产品，见[职责图](providers.md#处理流程与职责)。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
+任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，原文内容包和文件校验位于 `artifacts/`；语义提交、渲染与整包导出位于 LoreLab content，知识文章、学习与交付位于 LoreLab knowledge/study，见[职责图](providers.md#处理流程与职责)。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
 
 自动测试使用合成内容、模拟网络响应和本地媒体样本，检查费用、恢复、文件与证据契约。它们不证明某个真实网站已登录、某份视频已完整下载或付费接口当前可用；应按实际来源单独记录运行验收。

@@ -4,11 +4,11 @@
 
 源码和配套 Skill 统一在 LoreLab 的 `modules/soota/` 开发，独立 Soota 仓库由同步流程生成，保留原有提交历史。使用 Soota 不需要安装 LoreLab；独立安装、升级与开发入口见[维护说明](docs/maintenance.md)。
 
-Soota 是本地优先的内容采集与解析 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context，只有明确请求时才由 Agent 分析、写笔记或整理详细阅读文章。
+Soota 是本地优先的内容采集与解析 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context。需要保存分析、笔记或阅读文章时，由 Agent 写作并提交给 LoreLab content，Soota 不生成这些语义产物。
 
 YouTube/Bilibili 字幕按平台和能力的费用规则选择来源，支持手动优先级；Monid 为可选付费 Provider，免费来源默认优先。确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
 
-常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，多源文章与学习交付由 LoreLab 负责，见[工作流迁移说明](docs/knowledge.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
+常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，语义分析、笔记、文章、大纲、整包导出及知识学习交付由 LoreLab 负责，见[工作流迁移说明](docs/knowledge.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
 
 ## 安装
 
@@ -66,9 +66,6 @@ uv run soota ingest "URL" --transcript auto --max-cost 0.05 --output PATH --json
 uv run soota ingest "视频 URL" --want video,audio,transcript --max-cost 0 --json
 uv run soota ingest "/path/to/captions.vtt" --want context,transcript --subtitle-format srt,json --json
 uv run soota ingest --inputs-file links.txt --want context --workers 2 --max-items 20 --max-cost 0 --json
-uv run soota ingest "内容 URL" --want note,outline --max-cost 0 --json
-uv run soota jobs resume JOB_ID --analysis submission.json --json
-uv run soota render --bundle PATH/manifest.json --analysis analysis.json
 uv run soota jobs list --json
 uv run soota jobs resume JOB_ID --json
 uv run soota jobs resume JOB_ID --workers 2 --json
@@ -78,7 +75,7 @@ uv run soota jobs resume JOB_ID --workers 2 --json
 
 B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优先使用 YouTube，并默认排除已有推广标注。`--no-prefer-youtube` 关闭跨平台检查，`--keep-promotions` 保留推广。过滤保留原字幕供追溯；无标注不代表无推广。详细使用与限制见 [字幕选择与过滤](docs/subtitle-selection.md)。
 
-`--want` 可以组合目标，`--optional` 指定可选产物；只下载视频不会自动转写或总结。`note`、`outline`、`analysis`、`article` 会在原文准备后等待 Agent 提交结果，CLI 不调用大模型。`--want markdown` 保存未加工正文，`--want article` 才要求详细阅读文章。具体区别见 [目标产物](docs/tasks.md#选择目标)。
+`--want` 与 `--optional` 的新采集目标限于 `video/audio/transcript/context/markdown/images/data`；只下载视频不会自动转写或总结，`markdown` 保存未加工正文。语义目标 `note/outline/analysis/article` 使用 LoreLab content，由 Agent 写作、CLI 校验。具体区别见 [目标产物](docs/tasks.md#选择目标)。
 
 用户要求将粘贴文字存成知识时，先保存原文 TXT 并摄取为 context，再由 Agent 按目的地规则整理。位置参数中的正文会被当成分享文本解析链接，不能替代原文保存。见 [粘贴文字与知识归纳](docs/tasks.md#粘贴文字与知识归纳)。
 
@@ -86,19 +83,28 @@ B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优
 
 统一任务支持 `--workers 1..8`，默认 1。枚举和结果列表保持输入顺序，独立条目并行处理，同一内容包目录按顺序写入；条目失败不阻断其他条目。并发设置随任务保存，resume 可以覆盖；所有 worker 共享全批费用预留，恢复不清零。Ctrl-C 会等待在途条目收尾再保存暂停状态，可能需等 Provider 超时。
 
-文章、学习大纲和最终交付由 LoreLab 负责；Soota 采集任务保留自己的 source bundle、预算和恢复记录。
+单来源语义内容、整包导出、知识文章、学习大纲和最终交付由 LoreLab 负责；Soota 采集任务保留自己的 source bundle、预算和恢复记录。
 
 `updates check` 只读检查三个 Provider 的本机版本、npm／PyPI 最新包版本，以及上游主分支相对本机版本标签的提交关系。仓库有新提交不一定代表已有新版可安装；此命令也不会更新程序或同步备份仓库。
 
-执行在线采集、接口调用或目录续跑前，Soota 默认检查三个 Provider 并安装 npm／PyPI 最新已发布包。可用 `soota updates apply --json` 立即检查并更新；帮助、预估、离线预览和笔记渲染不会触发更新。首次运行需要 npm、Node.js 和 uv，并可能花几分钟安装。MCP 包即使更新，接入仍保持停用；浏览器扩展不会自动更新。更新失败会报告原因，已经安装的版本保留。
+执行在线采集、接口调用或目录续跑前，Soota 默认检查三个 Provider 并安装 npm／PyPI 最新已发布包。可用 `soota updates apply --json` 立即检查并更新；帮助、预估和离线预览不会触发更新。首次运行需要 npm、Node.js 和 uv，并可能花几分钟安装。MCP 包即使更新，接入仍保持停用；浏览器扩展不会自动更新。更新失败会报告原因，已经安装的版本保留。
 
 `SOOTA_AUTO_UPDATE=false` 可关闭自动更新；`config.toml` 的 `[updates] interval_seconds = 3600` 可将检查间隔改为一小时，默认 `0` 表示每次在线任务检查。固定版本或执行 `runtime rollback` 后若要继续使用该版，请关闭自动更新。安装位置、外部路径和兼容性检查见 [Provider 架构](docs/providers.md)。
 
 ## 与 LoreLab 配合
 
-Soota 获取、解析和保存原文 context；LoreLab 接收内容包，组织跨来源文章、学习大纲、交付核对与授权清理。这些工作流及提示词由 LoreLab Skill 维护，独立 Soota 不包含工作流代码。
+Soota 获取、解析和保存原文 context；LoreLab content 接收内容包，校验并保存 Agent 写出的分析、笔记、文章、大纲，负责渲染和整包导出。LoreLab knowledge/study 组织知识文章、学习交付与授权清理；分类查重合并由 Agent 审阅，CLI 不自动覆盖合并旧笔记。这些语义流程及提示词仅由 LoreLab 维护。
 
-安装 LoreLab 后，用 `lorelab knowledge` 整理知识、`lorelab study` 制作学习大纲。旧 `soota knowledge/study` 仅作兼容转发，已有任务继续使用原 JOB 路径；采集和下载可以只安装 Soota。兼容边界见[工作流迁移说明](docs/knowledge.md)。
+安装 LoreLab 后，按所需输出使用：
+
+```sh
+lorelab content ingest "内容 URL" --want context,note
+lorelab content resume JOB --analysis /path/to/submission.json
+lorelab content render --bundle /path/to/bundle --analysis /path/to/submission.json
+lorelab content export --bundle /path/to/bundle --destination /path/to/archive
+```
+
+`lorelab knowledge` 整理知识、`lorelab study` 制作学习大纲。旧语义/导出 ingest、旧语义或交付任务 resume、render 以及 `soota knowledge/study` 仅作隐藏兼容转发。未安装 LoreLab 时明确报需要安装且不修改任务；已有 task/item 身份、source 证据、原路径、预算与产物保留。采集、下载和原文包可以只安装 Soota。兼容边界见[工作流迁移说明](docs/knowledge.md)。
 
 ## 多平台查询
 
@@ -133,11 +139,11 @@ uv run soota catalog "频道或 UP 主 URL" --incremental --max-cost 0.004 --jso
 
 ## 输出与个人配置
 
-用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过 `SOOTA_OUTPUT_DIR` 或 `--output` 设置内容包位置；`--destination` 另行导出，`--vault` 与 `--subdir` 明确指定 Obsidian 目的地。导出使用稳定目录、相对附件链接和 SHA 冲突检查，保护人工修改。Soota 不自动定位知识库或选择分类。个人路径、账号选择和凭据从环境变量读取，不应把实际值写入项目或共享 Skill。名单、处理规则和采集结果保存在项目外的私人文件中。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
+用户配置位于 `~/.config/soota/`，输出默认位于 `~/Documents/Soota/`。可通过 `SOOTA_OUTPUT_DIR` 或 `--output` 设置采集包位置。另行导出使用 `lorelab content export --bundle PATH --destination PATH`，或 `--vault PATH --subdir DIR`；导出维持相对附件链接并保护人工修改。Soota 不负责导出、定位知识库或选择分类。个人路径、账号选择和凭据从环境变量读取，不应把实际值写入项目或共享 Skill。名单、处理规则和采集结果保存在项目外的私人文件中。若知识库使用 Git，同样需要明确排除私人目录；详见[终端教程](docs/terminal-tutorial.md#个人资料与知识库规则)。
 
-新的统一任务使用 v2 内容包，`manifest.json` 的 `artifacts` 登记实际文件、类型、字节数、SHA-256、来源和验证信息。视频、音频、正文、字幕和分析可独立存在，未取得的产物不以空文件冒充。既有 v1 包仍可读取；原有单视频命令的输出契约保留。
+新的统一任务使用 v2 内容包，`manifest.json` 的 `artifacts` 登记实际文件、类型、字节数、SHA-256、来源和验证信息。视频、音频、正文和字幕按实际目标保存；历史或 LoreLab 写入的分析字段与产物继续保留，未取得的产物不以空文件冒充。既有 v1 包仍可读取；原有单视频命令的输出契约保留。
 
-`context.md` 保存给 Agent 的原文输入，保留顺序、重复和断句。取得字幕时保存 `transcript.md`、片段 JSON 及请求的字幕导出；取得文章正文时保存 `body.md` 和有序正文块；媒体进入 `attachments/`。`note.md`、`outline.md`、`analysis.md` 和阅读用 `content.md` 仅在明确请求并提交结果后生成。文件结构和旧包处理见 [内容包与导出](docs/tasks.md#内容包与导出)。
+`context.md` 保存给 Agent 的原文输入，保留顺序、重复和断句。取得字幕时保存 `transcript.md`、片段 JSON 及请求的字幕导出；取得文章正文时保存 `body.md` 和有序正文块；媒体进入 `attachments/`。`note.md`、`outline.md`、`analysis.md` 和阅读用 `content.md` 由 LoreLab content 在明确请求并验证 Agent 提交后生成，Soota 采集不会重写它们。文件结构和旧包处理见 [内容包与导出](docs/tasks.md#内容包与导出)。
 
 统一字幕转换支持 SRT、VTT、TTML、SRV/XML、已知字幕 JSON、Whisper TSV/JSONL 和无时间 TXT。获取层选择一份字幕，转换层按实际格式处理；详见 [字幕格式与 context](docs/subtitle-formats.md)。显式选择 TikHub 音频后，获取失败会报告错误，不会自动改用 yt-dlp 重新获取。
 

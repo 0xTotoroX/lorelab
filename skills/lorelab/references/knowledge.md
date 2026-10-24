@@ -4,7 +4,7 @@ This reference covers source preservation for pasted text and retains links from
 
 ## Resolve the destination and preserve the source
 
-Use a destination explicitly chosen by the user or established in the current session/local configuration. Read its applicable `AGENTS.md`, classification rules and relevant writing prompt. Ask for a destination only if none is established; meanwhile, draft the requested knowledge. Read only related existing notes for classification and duplication checks, rather than scanning the entire vault.
+For requested knowledge-base delivery, use a destination explicitly chosen by the user or established in the current session/local configuration. Ordinary chat summaries need no ingest, destination or archive. Read its applicable `AGENTS.md`, classification rules and relevant writing prompt. Ask for a destination only if none is established; meanwhile, draft the requested knowledge. Read only related existing notes for classification and duplication checks, rather than scanning the entire vault.
 
 Read local source-retention/deletion rules, naming, sync/Git rules and Mubu destination choices from that same authorized configuration. Do not infer permission to delete/archive Cubox cards, delete source files, reorganize folders, or write a cloud document from permission to extract knowledge. User-specific policy and prompt text stay outside this shared Skill.
 
@@ -22,11 +22,11 @@ soota ingest "/path/to/sources/CONTENT_SHA256/source.txt" \
 
 Do not pass pasted prose as the positional input or as `--inputs-file`: those inputs interpret links or input-list rows. Ingest the saved text file instead. Preserve the source as context first. A requested knowledge article continues through `knowledge prepare`; it does not require a separate `ingest --want article` intermediate, media acquisition or transcription.
 
-After ingest, record the returned v2 bundle directory or manifest in a JSON string-array file. Run `lorelab knowledge prepare --bundles-file FILE --vault PATH --subdir SUBDIR` and follow its actual review template. The original paste and bundle remain read-only. If the user requested only a per-source note or whole-bundle export, use [the ordinary task contract](../../../modules/soota/skills/soota/references/tasks.md) instead of silently adding classified knowledge delivery.
+After ingest, record the returned v2 bundle directory or manifest in a JSON string-array file. Run `lorelab knowledge prepare --bundles-file FILE --vault PATH --subdir SUBDIR` and follow its actual review template. The original paste and bundle remain read-only. If the user requested only a per-source note or whole-bundle export, use [LoreLab content](content.md) instead of silently adding a knowledge batch. `lorelab content ingest INPUT --want context,note` reuses Soota acquisition; `lorelab content export --bundle PATH --destination PATH` handles explicit export.
 
 ## Cubox batches and source snapshots
 
-Use the selected IDs with `lorelab knowledge prepare --ids-file FILE`. It calls Cubox CLI to read folders and cards, preserves exact source bytes and source identities, protects GitHub projects and creates the Soota analysis handoffs. Missing or description-only content stays incomplete. See [article workflow](process.md#文章任务) and [source supplementation](../../../docs/knowledge.md#cubox-输入与补抓).
+Use the selected IDs with `lorelab knowledge prepare --ids-file FILE`. It calls Cubox CLI to read folders and cards, preserves exact source bytes and source identities, protects GitHub projects and creates the LoreLab content analysis handoffs using Soota source acquisition. Missing or description-only content stays incomplete. See [article workflow](process.md#文章任务) and [source supplementation](../../../docs/knowledge.md#cubox-输入与补抓).
 
 `body_available` means body text exists, not that the original post is complete. Keep Cubox snapshots distinct from supplemental sources. Use existing Soota acquisition for the original URL; a failed read, login problem or `link + null` result remains missing. Never ingest the full CardDetail response as an input list or treat title, AI insight and description as full body text.
 
@@ -34,7 +34,7 @@ Already-saved media and webpage bundles use [bundle input](../../../docs/knowled
 
 ## Organize and place knowledge
 
-Follow [article submission and readback](process.md#提交发布与回读). Read applicable destination rules and related existing notes, merge related source drafts, retain evidence and preserve handwritten content. A generated source note or successful whole-bundle export is not proof that the requested knowledge article was delivered.
+Follow [article submission and readback](process.md#提交发布与回读). Read applicable destination rules and related existing notes, review classification and duplicates, merge related source drafts, retain evidence and preserve handwritten content. Classification and any merge into existing notes are Agent review/editing actions within the current authorization. `knowledge publish` accepts only new paths or existing files with identical bytes; it does not automatically overwrite or merge notes. Review and apply an authorized merge separately, then read it back; do not evade a conflict by creating a duplicate topic. A generated source note or successful whole-bundle export is not proof that the requested knowledge article was delivered.
 
 ## Deliver a requested Mubu outline
 

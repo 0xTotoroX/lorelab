@@ -1,7 +1,7 @@
 interface:
-  display_name: "Soota 内容采集与知识记录"
-  short_description: "采集媒体与正文，按请求整合多源文章、核对知识交付并制作可选学习大纲"
-  default_prompt: "使用 $soota 阅读这些材料，整合为有来源的连贯文章，按指定知识目录保存并核对。"
+  display_name: "Soota 内容采集"
+  short_description: "采集正文、媒体与字幕，保存原文内容包、核对产物并恢复采集任务"
+  default_prompt: "使用 $soota 获取这些来源的原文和所需媒体，保存内容包并报告实际产物与缺口。"
 
 policy:
   allow_implicit_invocation: true

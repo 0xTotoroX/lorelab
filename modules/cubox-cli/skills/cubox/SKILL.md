@@ -12,6 +12,8 @@ Manage Cubox bookmarks via the `cubox-cli` command-line tool.
 
 In LoreLab, use `lorelab tool cubox -- ORIGINAL_ARGS` with the original CLI arguments. Use `lorelab doctor` and `lorelab skills list` to locate the managed CLI/Skill pair; do not substitute an unrelated global binary. Standalone use remains available from the exported component source. This Skill describes the LoreLab-maintained source, not an installation of the upstream release.
 
+For saved per-source analysis, notes, articles, outlines or bundle export, hand the acquired source to the LoreLab Skill and `lorelab content`. For classified knowledge delivery, source review and authorized cleanup, use `lorelab knowledge`; ordinary Cubox lookup or chat summaries do not require an archive. Classification, duplicate review and merging existing knowledge notes are Agent actions; `knowledge publish` only creates new files or reuses identical bytes. Do not bypass a saved job with a second writer or deletion workflow.
+
 ## Authentication and Secrets
 
 If any command fails with "API Key does not exist", never ask the user to paste their API token into chat and never construct commands that embed a literal token in argv. Use one of these safe paths:

@@ -4,7 +4,7 @@ LoreLab 的显式知识任务将选定的 Cubox 收藏或现有内容包整理�
 
 内容理解、全文审阅和语义写作由外部 Agent 完成；程序校验来源身份、指纹、证据链接、目的地及写入结果。用户以后明确要求学习或复习时，使用独立 `study` 任务从选定的现有文章制作幕布大纲。文章完成不会自动触发大纲或定时同步，不建立幕布返回 Obsidian 的索引。
 
-普通 `soota ingest` 仍默认停在未加工的 `context.md`；下载、聊天总结或分析不隐含知识归档。只有明确请求整理、保存知识或制作学习大纲时，才进入本文流程。CLI 不调用语言模型，Agent 负责实读、写作和语义审核。
+普通 `soota ingest` 仍默认停在未加工的 `context.md`；下载、聊天总结或分析不隐含知识归档。单来源语义产物与整包导出使用 [LoreLab content](content.md)；只有明确请求知识文章交付或从选定文章制作学习大纲时，才进入本文流程。CLI 不调用语言模型，Agent 负责实读、写作和语义审核。
 
 ## 默认文章流程
 
@@ -50,7 +50,7 @@ Python 接口位于 `lorelab.knowledge.workflow`，学习接口位于 `lorelab.k
 
 契约失败抛 `WorkflowError(RuntimeError)`；runtime 的工具错误原样传播。prepare 失败会在异常中给出已保存的 job 路径。`prepare_failed` 不能发布，应查看回执后以更正输入准备新批次。
 
-流程的进程边界返回 CLI 的 JSON 结果，不自动重试。独立运行时通过当前 Python 解释器的 `-m soota.cli` 调用 Soota；Cubox 和幕布使用已配置或发现的各自 CLI。受管安装只使用当前 release 绑定的入口，强制 `SOOTA_AUTO_UPDATE=false`，缺失时不退回 PATH。知识模块不查服务私有 API。Cubox 输出指定 `-o json`；幕布所有调用均以全局 `--agent --auth desktop` 开头，可显式选择 `password`。
+流程的进程边界返回 CLI 的 JSON 结果，不自动重试。语义任务内部调用 LoreLab content；采集由 content 复用 Soota，独立运行时使用当前 Python 环境中的 Soota；Cubox 和幕布使用已配置或发现的各自 CLI。受管安装只使用当前 release 绑定的入口，强制 `SOOTA_AUTO_UPDATE=false`，缺失时不退回 PATH。知识模块不查服务私有 API。Cubox 输出指定 `-o json`；幕布所有调用均以全局 `--agent --auth desktop` 开头，可显式选择 `password`。
 
 ## 配置、独立组件与兼容入口
 
@@ -65,7 +65,7 @@ Python 接口位于 `lorelab.knowledge.workflow`，学习接口位于 `lorelab.k
 
 LoreLab 成套安装绑定自己的组件入口。知识和学习的正式入口是 `lorelab knowledge`、`lorelab study`；已有 `lorelab init` 和 `lorelab batch` 分别保留为初始化和 knowledge 的别名。Soota 的旧 `soota knowledge/study` 命令只转发原始参数，需要安装 LoreLab，不再携带工作流实现，也不在普通帮助中展示。
 
-旧任务仍按原 JOB 绝对路径读取，冻结 schema、来源指纹、共享写锁和清理门槛不变；不搬动任务或复制私人配置。`lorehub` 命令、Python 兼容包和 Skill 继续保持移除。`soota ingest/jobs/render` 及采集任务继续在 Soota 运行。
+旧任务仍按原 JOB 绝对路径读取，冻结 schema、来源指纹、共享写锁和清理门槛不变；不搬动任务或复制私人配置。`lorehub` 命令、Python 兼容包和 Skill 继续保持移除。纯采集仍在 Soota 运行；旧语义/导出 ingest、旧语义或交付任务 resume 及 render 只通过隐藏兼容桥转 LoreLab content，缺少 LoreLab 时在修改任务前报需要安装，见[内容兼容契约](content.md#旧入口与恢复)。task/item 身份、source 证据、原路径、预算与产物保持。既有 `analysis-request.json` 的身份、context 指纹与目标一致时保留原字节，旧冻结 hash 不变；不能为修改恢复命令或 schema 文案重写交接。
 
 ## 交付选择与旧任务
 
@@ -92,7 +92,7 @@ CLI 的 `--cleanup-after` 覆盖配置。旧配置缺少该字段时按 `outline
 3. 对有可用来源的非保护项批量调用：
 
    ```text
-   soota ingest --inputs-file source-inputs.json --provider local
+   lorelab content ingest --inputs-file source-inputs.json --provider local
      --want context,note --workers 2 --max-cost 0
      --max-items INPUT_COUNT --output bundles --json
    ```
@@ -182,13 +182,13 @@ Agent 必须实际阅读 `sources[].source_path`、补抓的原包及其媒体�
 
 `body_sha256` 是最终 `markdown.encode("utf-8")` 的 SHA-256，保留全部换行。启用大纲时，节点仅接受 `text`、可选 `note`、`children`；整个提交合计遵守幕布 500 节点、32 层和 512 KiB 限制，不自动分批写入。这些是容量上限，不是写作时要凑齐的数量。
 
-submit 先冻结 candidate，再写按 item 分开的 submissions 并调用 `soota jobs resume TASK --analysis DIRECTORY --max-cost 0 --json`。所有被最终文章引用的 item 必须真实返回 completed，并通过 `context.md`、`note.md`、`analysis.json` 的登记 hash 和字节数核验，连同 manifest 保存完成产物指纹；其他待补 item 可继续 waiting_analysis。通过后冻结 `approved.json` 和完成产物 hash。文章模式不要求 `outline.md`，也不生成 `outline.json`；组合模式额外核验 `outline.md` 并冻结 `outline.json`。重试 submit 只接受同一份冻结内容，不覆盖已有 Soota 分析，不用 `--force`。
+submit 先冻结 candidate，再写按 item 分开的 submissions 并调用 `lorelab content resume TASK --analysis DIRECTORY --max-cost 0 --json`。所有被最终文章引用的 item 必须真实返回 completed，并通过 `context.md`、`note.md`、`analysis.json` 的登记 hash 和字节数核验，连同 manifest 保存完成产物指纹；其他待补 item 可继续 waiting_analysis。通过后冻结 `approved.json` 和完成产物 hash。文章模式不要求 `outline.md`，也不生成 `outline.json`；组合模式额外核验 `outline.md` 并冻结 `outline.json`。重试 submit 只接受同一份冻结内容，不覆盖已有 LoreLab content 来源分析，不用 `--force`。
 
 ## 发布、核验和恢复
 
-knowledge publish 先检查来源、approved 和已完成 Soota 产物；Cubox 批次对用到的卡片再次 batch 比对原快照，内容包批次复核只读原包的登记产物。所有文章只在固定 vault/subdir 内写入，拒绝 `..`、绝对路径、符号链接、隐藏路径及 AGENTS.md/CLAUDE.md。
+knowledge publish 先检查来源、approved 和已完成的来源及 LoreLab content 语义产物；Cubox 批次对用到的卡片再次 batch 比对原快照，内容包批次复核只读原包的登记产物。所有文章只在固定 vault/subdir 内写入，拒绝 `..`、绝对路径、符号链接、隐藏路径及 AGENTS.md/CLAUDE.md。
 
-已有同路径文件只有**字节 hash 相同**才能复用；不同则拒绝并要求 Agent 独立审阅合并。不会覆盖手写内容，当前没有自动合并或更新已有文章的功能。新文件以独占创建方式写入并 fsync，每份文章实读 hash 后登记；中途崩溃留下不同内容时停止，不自动修复或覆盖。
+分类、查重及与既有笔记合并是 Agent 的审阅与编辑行为。publish 只接受新路径或**字节 hash 相同**的已有文件；不同则拒绝，由 Agent 在当前授权内单独审阅合并并回读。不会覆盖手写内容，当前没有自动合并或更新已有文章的功能。新文件以独占创建方式写入并 fsync，每份文章实读 hash 后登记；中途崩溃留下不同内容时停止，不自动修复或覆盖。
 
 文章模式按目的地使用写入锁；publish/verify/cleanup 只走文章及来源核对，不读取或写入幕布。文章回读通过即可完成选定交付。下列幕布规则仅适用于显式组合交付和独立 `study` 任务。
 
@@ -260,9 +260,9 @@ submit 冻结审阅和大纲；后续操作继续核对源文章与快照。原�
 | `workflow.py` | knowledge 批次公共接口、选定交付结果与运行时注入点 |
 | `workflow_state.py` | 原子持久化、锁、路径与不可变 hash |
 | `workflow_sources.py` | Cubox 与内容包快照、保护范围、补抓及分析交接 |
-| `workflow_review.py` | 审阅 schema、证据校验、Soota resume、冻结 |
+| `workflow_review.py` | 审阅 schema、证据校验、LoreLab content resume、冻结 |
 | `workflow_publish.py` | 新文章、共享幕布单写入者、全树对账 |
 | `workflow_cleanup.py` | 授权删除门禁、预览与只读恢复 |
 | `study.py` | 现有文章快照、学习审阅与独立幕布交付，不改源文章或清理收藏 |
 
-上述实现位于 `src/lorelab/knowledge/`，仅由 LoreLab 维护；Soota 提供采集、内容包与单项分析契约，不持有跨来源交付流程。工作流契约测试替换工具 CLI 并使用合成数据；各命令的实际覆盖以当前测试与运行结果为准。历史组合流程测试不代表文章模式或 study 已完成真实验收；mock 契约测试、文档检查均不等于账号、真实站点或真实云写入验收。
+上述实现位于 `src/lorelab/knowledge/`，仅由 LoreLab 维护；语义提交、渲染与导出复用 `src/lorelab/content/`，Soota 只提供采集、原文内容包与采集恢复，不持有语义执行或知识交付流程。工作流契约测试替换工具 CLI 并使用合成数据；各命令的实际覆盖以当前测试与运行结果为准。历史组合流程测试不代表文章模式或 study 已完成真实验收；mock 契约测试、文档检查均不等于账号、真实站点或真实云写入验收。

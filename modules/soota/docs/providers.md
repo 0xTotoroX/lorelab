@@ -14,7 +14,7 @@ Downie、macOS Keychain 和 Apple Silicon MLX 是可选 Mac 功能，不能阻�
 
 ## 处理流程与职责
 
-这张图按职责展示 Soota 的采集、处理、产物与恢复。每个框包含内部的工具、格式和失败处理；只有请求的目标需要某一步时才执行它。默认文字采集到 context 结束，媒体目标直接交付文件。知识整理和学习复习分别由明确请求触发。
+这张图按职责展示 Soota 的采集、处理、产物与恢复。每个框包含内部的工具、格式和失败处理；只有请求的目标需要某一步时才执行它。默认文字采集到 context 结束，媒体目标直接交付文件。语义产物和导出由外部 LoreLab content 执行，知识整理和学习复习分别由明确请求触发。
 
 ```mermaid
 flowchart TD
@@ -25,10 +25,11 @@ flowchart TD
     C -.计费请求前持久预留.-> Q[全批共享预算]
     C --> D[内容处理]
     D --> E[校验与保存 context、媒体及所选产物]
-    E -.明确要求单项分析或文章.-> F[Agent 阅读与提交所选语义产物]
-    F --> E
-    E -.指定整包目的地.-> G[导出]
-    E -.明确请求知识整理或学习.-> K[外部 LoreLab 工作流与 Skill]
+    E -.请求分析、笔记、文章或大纲.-> F[外部 Agent 写作]
+    F --> L[LoreLab content：校验提交、渲染与恢复]
+    E -.指定整包目的地.-> G[LoreLab content：导出]
+    E -.明确请求知识整理或学习.-> K[LoreLab knowledge/study 与 Skill]
+    K -.语义处理.-> L
 
 ```
 
@@ -39,13 +40,12 @@ flowchart TD
 | 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |
 | 内容处理 | 字幕格式统一、本地转写、正文结构转换及媒体处理；默认不做语义改写 | `transcripts/`、`content/`、`media/` |
 | 校验与保存产物 | 校验文件与媒体，登记 v2 产物、来源及校验值，保护既有源文和文章 | `media/probe.py`、`artifacts/bundle.py` |
-| Agent 单项提交 | 外部 Agent 按明确目标读取 context，提交带证据的单项结果；Soota 不生成语义内容 | `skills/soota/references/tasks.md` |
-| 单项语义产物接续 | 校验 Agent 提交的正文指纹、task/item 身份与证据，保存请求的分析、笔记或文章产物 | `tasks/outputs.py`、`artifacts/analysis.py` |
-| 整包导出 | 写入指定目录，维持相对附件链接并检查人工修改冲突 | `artifacts/export.py` |
+| 外部语义处理 | Agent 阅读与写作；LoreLab 校验正文指纹、task/item 身份与证据，保存语义产物 | `lorelab content ingest/resume/render`，LoreLab Skill |
+| 外部整包导出 | 写入指定目录，维持相对附件链接并检查人工修改冲突 | `lorelab content export` |
 
-[统一任务契约](tasks.md)维护采集输入、产物、恢复和单项分析提交；跨来源文章、学习和交付由外部 LoreLab 维护，见[迁移说明](knowledge.md)。职责、阶段顺序或能力改变时，同步更新本图、受影响的表和对应 Skill；不以未来目标代替当前实现。
+[统一任务契约](tasks.md)维护采集输入、原文产物和恢复；语义提交、渲染与导出以及知识文章、学习交付由外部 LoreLab 维护，见[迁移说明](knowledge.md)。职责、阶段顺序或能力改变时，同步更新本图、受影响的表和对应 Skill；不以未来目标代替当前实现。
 
-LoreLab 接收 Soota 内容包并通过 Cubox、幕布各自的 CLI 组织知识交付。独立 Soota 不包含该工作流，也不要求安装 LoreLab。采集任务的并行、预算、缓存和恢复继续属于 Soota；跨来源审阅、单写入者、交付回读和清理属于 LoreLab。正文可用、任务完成或 hash 正确均不证明原始来源完整，语义判断仍由 Agent 负责。单元/契约测试不代表真实站点或收藏批次已验收。
+LoreLab 接收 Soota 内容包并通过 Cubox、幕布各自的 CLI 组织知识交付。独立 Soota 不包含该工作流，也不要求安装 LoreLab。采集任务的并行、预算、缓存和恢复继续属于 Soota；语义目标、提交校验、渲染、导出、知识审阅、单写入者、交付回读和清理属于 LoreLab。旧语义或交付调用仅作隐藏兼容转发，缺少 LoreLab 时在修改任务前停止。正文可用、任务完成或 hash 正确均不证明原始来源完整，语义判断仍由 Agent 负责。单元/契约测试不代表真实站点或收藏批次已验收。
 
 ### 字幕边界
 
@@ -225,10 +225,10 @@ uv run soota runtime rollback --json
 
 | 文件 | 职责 |
 | --- | --- |
-| `tasks/` | 统一输入与目标、步骤组合、集合展开、逐项检查点及分析接续 |
+| `tasks/` | 七类采集目标、步骤组合、集合展开、逐项检查点及采集恢复 |
 | `content/` | 本机能力发现、显式原生读取及受控结果转换 |
 | `media/` | 本地或远程媒体获取、合并、抽音轨及实际文件验证 |
-| `artifacts/` | v1/v2 内容包、产物哈希、分析证据与受保护导出 |
+| `artifacts/` | v1/v2 原文内容包、来源证据与产物哈希；保留旧分析字段的数据兼容 |
 | `storage/task_budget.py` | 全批计费请求的原子预留和恢复预算 |
 | `providers/router.py` | 能力选择、元数据兜底和请求预算 |
 | `mcp_cli.py` | 按需发现并调用 MCP 只读站点命令 |
