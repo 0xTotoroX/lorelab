@@ -14,6 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from test_install import PACKAGING, common, fixture_source, installer, put
+import go_toolchain
 
 spec = importlib.util.spec_from_file_location("lorelab_builder", PACKAGING / "build_release.py")
 builder = importlib.util.module_from_spec(spec)
@@ -121,7 +122,7 @@ class BundleTests(unittest.TestCase):
         shutil.rmtree(self.root / "packaging/prebuilt")
         shutil.rmtree(self.root / "packaging/wheels")
         with patch.object(common, "platform_tag", return_value="darwin-arm64"), \
-             patch.object(common.shutil, "which", return_value="/unused/go"), \
+             patch.object(go_toolchain, "get_go", return_value=Path("/unused/go")), \
              patch.object(common, "create_venv", return_value=self.base / "python"), \
              patch.object(common, "run") as run:
             common.build_payload(self.root, self.base / "scratch", Path("/unused/uv"))

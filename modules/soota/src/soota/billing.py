@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import fcntl
 import math
 import sys
 import time
@@ -11,6 +10,7 @@ from typing import Any
 from soota.config import PaymentConfig, SootaSettings
 from soota.errors import AuthBudgetError, InputError, SootaError
 from soota.models import RequestRecord
+from soota.storage.locking import lock_file
 
 
 class PaymentRequired(AuthBudgetError):
@@ -92,7 +92,7 @@ class PaymentGate:
         self.root.mkdir(parents=True, exist_ok=True)
         name = path.rsplit("/", 1)[-1]
         with (self.root / f"{name}-rate.lock").open("a+") as handle:
-            fcntl.flock(handle, fcntl.LOCK_EX)
+            lock_file(handle)
             handle.seek(0)
             try:
                 previous = float(handle.read() or "0")

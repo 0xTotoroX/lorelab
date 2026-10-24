@@ -197,7 +197,7 @@ def load_settings(*, ignore_payment: bool = False) -> SootaSettings:
         )
         routing_data = dict(data.get("routing") or {})
         provider_path = config_dir / "providers.json"
-        provider_data = json.loads(provider_path.read_text()) if provider_path.is_file() else {}
+        provider_data = json.loads(provider_path.read_text(encoding="utf-8")) if provider_path.is_file() else {}
         if not isinstance(provider_data, dict):
             raise ValueError("providers.json 必须为对象")
         routing_data.update(provider_data.get("routing", {}))

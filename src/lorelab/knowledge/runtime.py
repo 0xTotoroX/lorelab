@@ -36,7 +36,7 @@ def config_path() -> Path:
 
 def read_config() -> dict:
     path = config_path()
-    value = json.loads(path.read_text()) if path.is_file() else {}
+    value = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
     if not isinstance(value, dict):
         raise ToolError("知识配置必须是 JSON 对象。")
     return value
@@ -69,7 +69,7 @@ def _managed() -> dict | None:
     if len(set(bindings)) != 1:
         raise ToolError("新旧受管运行时配置不一致，不能混用组件版本。")
     manifest, lock = bindings[0]
-    value = json.loads(manifest.read_text())
+    value = json.loads(manifest.read_text(encoding="utf-8"))
     expected = hashlib.sha256(lock.read_bytes()).hexdigest()
     if (
         not isinstance(value, dict)
@@ -120,13 +120,13 @@ def tool_command(tool: str) -> list[str]:
 
 
 def tool_environment() -> dict[str, str]:
-    return {**os.environ, "SOOTA_AUTO_UPDATE": "false", "CUBOX_NO_UPDATE_NOTIFIER": "1"}
+    return {**os.environ, "SOOTA_AUTO_UPDATE": "false", "CUBOX_NO_UPDATE_NOTIFIER": "1", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
 
 def run_json(tool: str, args: list[str], receipt: Path | None = None, acceptable_codes: tuple[int, ...] = (0,)):
     try:
         result = subprocess.run(
-            tool_command(tool) + args, capture_output=True, text=True, env=tool_environment(), timeout=600, check=False
+            tool_command(tool) + args, capture_output=True, text=True, encoding="utf-8", env=tool_environment(), timeout=600, check=False
         )
     except subprocess.TimeoutExpired as exc:
         raise ToolError(f"{tool} 超时；若是云端写入，先只读对账，不可直接重发。") from exc

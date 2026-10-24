@@ -1,5 +1,17 @@
 # Provider 与独立运行时
 
+## Windows 运行
+
+核心导入不要求 Unix 的 `fcntl` 或 `resource`。`storage/locking.py` 在 Unix 使用 `flock`，在 Windows 使用 `LockFileEx`，保留共享／排他、等待／立即失败语义；任务互斥、全批预算和运行时更新锁都使用真实内核锁。预算的请求前持久预留与恢复规则不变。
+
+`platform_support.py` 处理虚拟环境入口、npm 包入口和 UTF-8。Windows 虚拟环境使用 `Scripts/python.exe`；OpenCLI、opencli-mcp 与 npm 的 `.cmd` 入口从已安装包的 `bin` 元数据解析为 `node + JS`，参数不拼接到 shell。自定义批处理入口会明确拒绝，可配置 `.exe` 或 Node.js 脚本。独立 Soota 无需 LoreLab 平台模块。
+
+`providers/process_pipes.py` 在 Windows 并发写 stdin、读 stdout/stderr，合计输出上限不变；`windows_process.py` 先将等待派发的进程放入 Job Object，再启动实际命令。超时、超限、取消和失败会清理其子进程树；无法建立保护时不派发。成功的 daemon 启动允许后台服务继续运行。Unix 保留 selector 和进程组逻辑。
+
+Windows 没有这里所需的 `RLIMIT_FSIZE` 等价接口。需要硬文件字节上限的外部 yt-dlp 媒体下载（含 HLS/DASH）、FFmpeg 提取和合轨在派发前返回 `file_limit_unavailable`；不采用轮询文件大小或提示性的 `--max-filesize` 冒充硬上限。直接 HTTP 文件下载在写入前逐块检查上限；已有文件验证、字幕和正文路径仍可使用。调用方不得静默删掉必需媒体目标或绕过预算继续执行。
+
+Downie、macOS Keychain 和 Apple Silicon MLX 是可选 Mac 功能，不能阻止 Windows 导入。Windows 使用环境变量提供 TikHub Key。当前回归含本地子进程、锁竞争、模拟 Windows 分支及 Windows 内核专用测试；在 macOS 上通过不代表已完成真实 Windows、浏览器登录或网站验收。
+
 ## 处理流程与职责
 
 这张图按职责展示 Soota 的采集、处理、产物与恢复。每个框包含内部的工具、格式和失败处理；只有请求的目标需要某一步时才执行它。默认文字采集到 context 结束，媒体目标直接交付文件。知识整理和学习复习分别由明确请求触发。

@@ -221,7 +221,9 @@ def discover_capabilities(settings: SootaSettings) -> dict[str, Any]:
         }
     )
     if monid_enabled:
-        prices = json.loads(Path(__file__).parents[1].joinpath("providers/monid/prices.json").read_text())
+        prices = json.loads(
+            Path(__file__).parents[1].joinpath("providers/monid/prices.json").read_text(encoding="utf-8")
+        )
         for endpoint in registry.preferred():
             if endpoint.path not in prices["tikhub"]:
                 continue

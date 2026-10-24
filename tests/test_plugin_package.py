@@ -6,19 +6,35 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
 import yaml
 from test_install import common, fixture_source
 from test_skills import local_links
 
-from lorelab import plugins, updates
+from lorelab import plugins
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "packaging"))
 import build_plugin
 
 
+@pytest.mark.parametrize("fence", ["```", "````", "~~~"])
+def test_plugin_preserves_runtime_links_in_fenced_examples(tmp_path, fence):
+    (tmp_path / "guide.md").write_text("Guide\n", encoding="utf-8")
+    prose = "[guide](guide.md)\n"
+    example = fence + "markdown\n[context](context.md)\n" + fence + "\n"
+    source = Path("SKILL.md")
+    target = Path("skills/test/SKILL.md")
+    rewritten = build_plugin.rewrite_links(prose + example + prose, source, target, tmp_path)
+    assert example in rewritten
+    assert rewritten.count("../../support/guide.md") == 2
+    assert "context.md" not in build_plugin.CODE_BLOCKS.sub("", prose + example + prose)
+
+
 def test_plugin_keeps_four_independent_skills_and_version_binding(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle"
     fixture_source(bundle)
+    for relative in build_plugin.LICENSES:
+        (bundle / relative).write_text("Synthetic copyright and license notice.\n", encoding="utf-8")
     for name, directory in common.SKILLS.items():
         path = bundle / directory / "SKILL.md"
         path.write_text(f"---\nname: {name}\ndescription: Synthetic test workflow\n---\n" + path.read_text())
@@ -49,10 +65,17 @@ def test_plugin_keeps_four_independent_skills_and_version_binding(tmp_path, monk
     for entry in entries:
         metadata = yaml.safe_load(entry.read_text().split("---", 2)[1])
         assert metadata["name"] == entry.parent.name
-    with updates.unpack(root / "runtime.tar.gz") as runtime:
-        assert common.verify_bundle(runtime)["release_id"] == common.verify_bundle(bundle)["release_id"]
+    assert not (root / "runtime.tar.gz").exists()
+    assert not (root / "install.sh").exists()
+    assert not list(root.rglob("*.py"))
+    assert not list(root.rglob("*.whl"))
+    assert not list(root.rglob("*.exe"))
+    for relative in build_plugin.LICENSES:
+        assert (root / build_plugin.mapped(relative)).read_bytes() == (bundle / relative).read_bytes()
+    assert "install.ps1" in (root / "RUNTIME.md").read_text()
     monkeypatch.setattr(plugins.runtime, "root", lambda: bundle)
     monkeypatch.setattr(plugins.runtime, "runtime_manifest", lambda: {
+        "source_files": common.source_files(bundle),
         "components_lock_sha256": common.sha256(bundle / "components.lock.json")})
     assert plugins.check(root)["ok"]
     (root / "skills/soota/SKILL.md").write_text("changed Skill")

@@ -33,6 +33,7 @@
 
 ## 与 LoreLab 的职责边界
 
+- 组件内部平台适配归 `platform_support.py`、`storage/locking.py`、`providers/process_pipes.py` 与 `providers/windows_process.py`。锁、进程树取消及资源上限不能降级为空操作；平台缺少硬限额时派发前明确失败。对外边界维护在 `docs/providers.md` 的 Windows 运行说明。
 - Soota 负责正文与媒体采集、解析、context、预算、缓存和采集任务恢复。单项分析提交与内容包导出契约保留，程序不自行生成语义内容。
 - 跨来源文章整理、学习大纲、交付核对与授权清理由 LoreLab 及其 Skill 维护；不在 Soota 重建工作流或复制提示词。
 - 旧 `soota knowledge/study` 通过 `workflow_compat.py` 原样转发到已安装的 LoreLab，普通帮助不展示；受管安装缺失时停止，不误用其他产品版本。独立采集不依赖 LoreLab，组件源码与 Skill 引用须自含。

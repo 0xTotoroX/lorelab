@@ -9,9 +9,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
+from typer.core import TyperGroup
 
 from soota.api import platforms as platforms_cmd
 from soota.api_cli import app as api_app
@@ -27,6 +28,7 @@ from soota.pipeline import estimate as estimate_cmd
 from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
+from soota.platform_support import configure_stdio
 from soota.policy_cli import app as policy_app
 from soota.providers_cli import app as providers_app
 from soota.runtime_cli import app as runtime_app
@@ -35,7 +37,16 @@ from soota.tasks.entry import ingest as ingest_cmd
 from soota.tasks.runner import resume as resume_task_cmd
 from soota.updates_cli import app as updates_app
 
+
+class UTF8Group(TyperGroup):
+    def main(self, *args: Any, **kwargs: Any) -> Any:
+        # Configure before eager --help/usage handling, including the :app console entry.
+        configure_stdio()
+        return super().main(*args, **kwargs)
+
+
 app = typer.Typer(
+    cls=UTF8Group,
     add_completion=False,
     no_args_is_help=True,
     help="Soota：采集正文、字幕和媒体，解析为可追溯的 context。",
@@ -52,8 +63,9 @@ app.add_typer(mcp_app, name="mcp")
 
 
 @app.command(
-    "knowledge", hidden=True,
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
+    "knowledge",
+    hidden=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []},
 )
 def knowledge(ctx: typer.Context) -> None:
     """兼容旧命令，将原参数转交 LoreLab knowledge。"""
@@ -63,8 +75,9 @@ def knowledge(ctx: typer.Context) -> None:
 
 
 @app.command(
-    "study", hidden=True,
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []}
+    "study",
+    hidden=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True, "help_option_names": []},
 )
 def study(ctx: typer.Context) -> None:
     """兼容旧命令，将原参数转交 LoreLab study。"""
@@ -325,6 +338,7 @@ def capabilities(
 
 
 def main() -> None:
+    configure_stdio()
     app()
 
 

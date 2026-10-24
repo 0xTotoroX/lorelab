@@ -77,6 +77,8 @@ def parser():
 
 
 def dispatch(args):
+    if getattr(args, "subdir", None) is not None:
+        args.subdir = args.subdir.replace("\\", "/")
     if args.command == "init" or args.command in {"knowledge", "batch"} and args.action == "init":
         vault = args.vault.expanduser().resolve()
         if not vault.is_dir():

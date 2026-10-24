@@ -232,7 +232,7 @@ def _run_item_locked(
     if seed.kind == "operation":
         cached_raw = work / "native.json"
         if cached_raw.is_file():
-            saved = json.loads(cached_raw.read_text())
+            saved = json.loads(cached_raw.read_text(encoding="utf-8"))
             operation = NativeOperation(
                 raw=saved["raw"],
                 provider=saved["provider"],
@@ -428,7 +428,7 @@ def _run_item_locked(
                 raise SourceError("原生读取失败，未生成替代数据。")
             if raw is None:
                 if seed.kind == "file" and Path(seed.value).suffix.lower() == ".json":
-                    raw = json.loads(Path(seed.value).read_text())
+                    raw = json.loads(Path(seed.value).read_text(encoding="utf-8"))
                 elif seed.kind == "url" and not text_goals:
                     from soota.providers.router import inspect_item
 

@@ -5,7 +5,7 @@ description: 将 Cubox 收藏或已有内容包整理为知识文章，按需从
 
 # LoreLab
 
-LoreLab 负责跨来源文章、学习大纲和交付流程，打包自行维护的 Soota、Cubox CLI、幕布 CLI 及完整 Skill。Soota 获取源文本、媒体和 context；Agent 实读来源、理解与写作；LoreLab 冻结审阅、核对交付和恢复状态。CLI 不自行调用语言模型。
+LoreLab 负责跨来源文章、学习大纲和交付流程，从本仓库安装自行维护的 Soota、Cubox CLI、幕布 CLI 及完整 Skill。Soota 获取源文本、媒体和 context；Agent 实读来源、理解与写作；LoreLab 冻结审阅、核对交付和恢复状态。CLI 不自行调用语言模型。
 
 运行 `lorelab doctor` 核对绑定入口，用 `lorelab skills list` 定位实际 Skill source。入口存在不代表账号、来源完整性或云端交付已通过验收，也不代表 Agent 已重新加载 Skill。
 
@@ -42,11 +42,11 @@ LoreLab 负责跨来源文章、学习大纲和交付流程，打包自行维护
 
 ## 安装与组件维护
 
-阅读[安装与恢复](../../docs/installation.md)或[组件维护](../../docs/components.md)，只执行当前请求需要的操作。`sh install.sh` 默认一起安装四个 CLI、注册四套 Skill；`setup` 配置知识目的地和命令路径，显式参数只合并对应字段。Agent 使用 `--non-interactive`，已有配置无须重填；检查账号须显式 `--check-accounts`。
+首次安装和源码更新先读[Agent 安装指引](../../docs/agent-install.md)，详细参数见[安装与恢复](../../docs/installation.md)。使用用户提供的实际仓库地址；本地 Agent 按 macOS `install.sh` / Windows `install.ps1` 选择入口，自动准备缺失工具链并从绑定源码安装四个 CLI 和四套 Skill，不要求下载 LoreLab 安装包。
 
-升级使用 `lorelab update --from FILE`，或事先通过 `setup --update-feed` 配置发布者清单；没有配置时不猜下载地址。相同包复用现有安装，更新保留注册目录、任务和清理条件。新目录可用 `--skills-dir` / `--bin-dir` 指定，外部同名内容不覆盖。
+`setup --non-interactive` 保留已有配置，只合并显式目的地；不猜知识库路径，检查账号须显式 `--check-accounts`。同名外部内容不覆盖，沿用已有 prefix 和任务。普通更新用 `lorelab update --check`、`lorelab update`；从指定源码更新用 `--from CHECKOUT`，或 `--repo REPOSITORY --ref REF`。来源由安装记录保存，更新使用独立快照，不修改用户工作区；相同内容校验后复用，不重复构建。
 
-作为[四 Skill 插件](../../docs/plugins.md)加载时，先按插件内 RUNTIME 约定检查 `doctor --plugin-root`，CLI 与插件须同版。插件已提供 Skill 时安装和 setup 带 `--no-skills`，避免新增重复注册；不主动删除已有 Skill。当前运行环境仅 macOS arm64，不把安卓远程操作写成手机本机支持。
+作为[四 Skill 插件](../../docs/plugins.md)加载时，先按 RUNTIME 检查 `doctor --plugin-root`。插件只分发四套独立 Skill、文档和安装指引，没有 CLI 或运行安装包。缺少 CLI 时由本地 Agent 从用户选择的仓库安装，安装和 setup 带 `--no-skills`，避免重复全局注册。CLI 与插件源码版本需匹配；不修改宿主缓存，不把静态检查或其他平台验证写成 Windows 实机验收。
 
 安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
 

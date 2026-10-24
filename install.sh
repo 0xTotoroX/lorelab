@@ -1,7 +1,7 @@
 #!/bin/sh
 # [INPUT]: 解压后的发行包或源码、--prefix 与可选 --skills-dir。
 # [OUTPUT]: 复用 prefix 的 Python/缓存，调用幂等安装器。
-# [POS]: 无需预装 Python/Go 的发行包引导入口。
+# [POS]: 本地 Agent 从源码安装的 macOS 引导入口。
 # [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -16,7 +16,7 @@ for argument in "$@"; do
             cat <<'HELP'
 Usage: sh install.sh [--prefix DIR] [--skills-dir DIR | --no-skills]
                      [--bin-dir DIR] [--no-bin] [--force]
-Installs four CLIs and four independent Skills on macOS arm64.
+Installs four CLIs and four independent Skills from source on macOS arm64/x64.
 Defaults: ~/.local/share/lorelab, ~/.agents/skills, ~/.local/bin.
 Existing registrations are retained on upgrade. Run lorelab setup afterwards.
 HELP
@@ -26,10 +26,10 @@ done
 if [ "$want_prefix" = true ] || [ -z "$prefix" ]; then
     echo '--prefix requires a directory' >&2; exit 2
 fi
-if [ "$(uname -s)/$(uname -m)" != 'Darwin/arm64' ]; then
-    echo 'LoreLab bundles currently require macOS arm64; Android/Termux is not a supported runtime.' >&2
-    exit 1
-fi
+case "$(uname -s)/$(uname -m)" in
+    Darwin/arm64|Darwin/x86_64) ;;
+    *) echo 'Use install.ps1 on native Windows. This shell entry supports macOS arm64/x64.' >&2; exit 1 ;;
+esac
 # 已有安装直接运行 Python 安装器；相同包检查不需要下载 uv 或 Python。
 if [ -x "$prefix/current/venv/bin/python" ]; then
     exec "$prefix/current/venv/bin/python" -I -B "$root/packaging/install.py" "$@"

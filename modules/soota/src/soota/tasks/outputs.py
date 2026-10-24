@@ -103,7 +103,7 @@ def _images(
     if bundle.content is None:
         raise SourceError("没有可供获取图片的正文。")
     references = work / "references.json"
-    private = json.loads(references.read_text()) if references.is_file() else {}
+    private = json.loads(references.read_text(encoding="utf-8")) if references.is_file() else {}
     raw_body = private.get("body", bundle.content.body_md)
     base = private.get("base", str(Path(seed.value).parent) if seed.kind == "file" else seed.value)
     matches = list(re.finditer(r"!\[[^\]]*\]\(<?([^\s)>]+)>?(?:\s+[^)]*)?\)", raw_body))
@@ -174,7 +174,7 @@ def _apply_analysis(settings: SootaSettings, job: TaskJob, path: Path, *, force:
     paths = sorted(path.glob("*.json")) if path.is_dir() else [path]
     for candidate in paths:
         try:
-            submission = AnalysisSubmission.model_validate_json(candidate.read_text())
+            submission = AnalysisSubmission.model_validate_json(candidate.read_text(encoding="utf-8"))
         except (OSError, ValidationError) as exc:
             raise InputError("分析提交不符合接续契约。") from exc
         if submission.task_id != job.id:
@@ -188,7 +188,7 @@ def _apply_analysis(settings: SootaSettings, job: TaskJob, path: Path, *, force:
             same = False
             if previous.is_file():
                 try:
-                    saved = AnalysisSubmission.model_validate_json(previous.read_text())
+                    saved = AnalysisSubmission.model_validate_json(previous.read_text(encoding="utf-8"))
                     bundle = load_bundle(folder)
                     same = (
                         saved == submission

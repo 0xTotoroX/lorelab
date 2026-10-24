@@ -29,6 +29,8 @@ def knowledge_settings(args):
     for key in ("vault", "subdir", "mubu_doc", "mubu_parent", "mubu_auth"):
         supplied = getattr(args, key)
         if supplied is not None:
+            if key == "subdir":
+                supplied = supplied.replace("\\", "/")
             value[key] = str(supplied.expanduser().resolve()) if key == "vault" else supplied
     if args.mubu_doc is not None and args.mubu_doc != old.get("mubu_doc") and args.mubu_parent is None:
         value.pop("mubu_parent", None)
@@ -50,6 +52,11 @@ def knowledge_settings(args):
 def profile_changes(prefix: Path, selection: str) -> dict[Path, bytes]:
     if selection == "none":
         return {}
+    if os.name == "nt":
+        if selection != "auto":
+            raise ValueError("Windows setup 使用用户 PATH；shell-profile 请选择 auto 或 none。")
+        entry = str(prefix / "bin").replace("'", "''")
+        return {prefix / "env.ps1": f"$env:Path = '{entry};' + $env:Path\n".encode("utf-8-sig")}
     if selection == "auto":
         shell = Path(os.environ.get("SHELL", "")).name
         name = {"zsh": ".zshrc", "bash": ".bash_profile"}.get(shell)
@@ -133,7 +140,10 @@ def setup(args):
                 if content != previous:
                     write_file(file, content, mode)
                     written.append(file)
-            install.activate(prefix, release, skills, bins, changes)
+            from .windows_path import user_path
+
+            with user_path(prefix, args.shell_profile != "none") as windows_path_changed:
+                install.activate(prefix, release, skills, bins, changes)
         except BaseException:
             for file in reversed(written):
                 content, mode = before[file]
@@ -144,7 +154,10 @@ def setup(args):
             "knowledge_configured": bool(value.get("vault") and value.get("subdir")),
             "skills_dirs": settings["skills_dirs"], "bin_dirs": settings["bin_dirs"],
             "files_updated": [str(p) for p in written], "accounts": checks,
+            "windows_user_path_updated": windows_path_changed,
             "next": ["lorelab doctor", "lorelab tool cubox -- auth login",
                      "按需配置幕布；安装和配置不代表账号已通过验证。"],
-            "shell": f"新终端生效；当前终端可执行：. {shlex.quote(str(prefix / 'env.sh'))}"
-                     if prefix / "env.sh" in files else None}
+            "shell": (f"重开终端宿主后生效；当前 PowerShell 可执行：. '{str(prefix / 'env.ps1').replace(chr(39), chr(39)*2)}'"
+                      if prefix / "env.ps1" in files else
+                      f"新终端生效；当前终端可执行：. {shlex.quote(str(prefix / 'env.sh'))}"
+                      if prefix / "env.sh" in files else None)}

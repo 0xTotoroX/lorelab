@@ -37,6 +37,8 @@ Input lists accept one link/path per line or a JSON `inputs`/`items` array. Rela
 
 Respect actual language and media quality requirements. `--language` requests verified subtitle language, `--min-height` sets minimum video height, and `--max-bytes` limits one media file. Untimed source text can be exported as TXT/JSON; do not synthesize SRT/VTT timestamps.
 
+On Windows, external yt-dlp media downloads (including HLS/DASH) and FFmpeg extraction/muxing stop before dispatch because the hard file-size limit is unavailable. Keep the failed required target visible; do not replace the limit with polling, remove it, or silently downgrade the target. Bounded direct HTTP files, existing media verification, captions and UTF-8 task recovery remain usable. Downie is Mac-only; a failure does not authorize paid fallback or a new download.
+
 ## Discover only when needed
 
 Known standard tasks can go directly to `ingest`. For an unfamiliar operation, use `capabilities --search ... --json`; inspect the current input contract and state before choosing a command. This discovery does not query websites or authenticate accounts.

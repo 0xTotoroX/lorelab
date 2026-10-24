@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import sys
 
+from soota.platform_support import utf8_environment
+
 
 def forward(args: list[str]) -> int:
     if not args or args[0] not in {"knowledge", "study"}:
@@ -37,7 +39,9 @@ def forward(args: list[str]) -> int:
         print(json.dumps({"ok": False, "error": error}, ensure_ascii=False), file=sys.stderr)
         return 1
     try:
-        result = subprocess.run(command + args, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            command + args, capture_output=True, text=True, encoding="utf-8", env=utf8_environment(), check=False
+        )
     except OSError as exc:
         print(json.dumps({"ok": False, "error": f"无法启动 LoreLab：{exc}"}, ensure_ascii=False), file=sys.stderr)
         return 1

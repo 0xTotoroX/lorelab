@@ -93,7 +93,11 @@ def auth(
     def configure() -> CommandResult:
         if name != "monid":
             raise InputError("此命令配置 Monid；TikHub 沿用 TIKHUB_API_KEY 或 Keychain。")
-        key = key_file.expanduser().read_text().strip() if key_file else typer.prompt("Monid API Key", hide_input=True)
+        key = (
+            key_file.expanduser().read_text(encoding="utf-8").strip()
+            if key_file
+            else typer.prompt("Monid API Key", hide_input=True)
+        )
         if not key or any(ch.isspace() for ch in key):
             raise InputError("API Key 不能为空或包含空白。")
         path = load_settings().config_dir / "credentials" / "monid.key"

@@ -52,10 +52,12 @@ def register(sub):
     setup.add_argument("--non-interactive", action="store_true")
     setup.add_argument("--check-accounts", action="store_true", help="额外只读检查账号；不会登录或写入云端")
     update = sub.add_parser("update", help="整套升级四个 CLI/Skill，保留配置与任务")
-    update.add_argument("--from", dest="source", help="可信安装包目录、tar.gz 或 HTTPS 地址")
+    update.add_argument("--from", dest="source", help="可信源码目录；也兼容旧 tar.gz 安装包")
+    update.add_argument("--repo", help="明确选择的 Git 仓库；默认沿用首次源码安装记录")
+    update.add_argument("--ref", help="仓库分支、标签或提交；默认沿用记录")
     update.add_argument("--sha256", help="远程安装包必需的 SHA256")
     update.add_argument("--feed", help="本次使用的更新清单；默认使用 setup 保存的地址")
-    update.add_argument("--check", action="store_true", help="只校验候选包并比较，不安装")
+    update.add_argument("--check", action="store_true", help="只获取并校验候选源码，不构建或安装")
     update.add_argument("--force", action="store_true", help="相同包也建立新 release，用于修复")
 
 

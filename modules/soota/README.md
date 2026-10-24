@@ -12,6 +12,8 @@ YouTube/Bilibili 字幕按平台和能力的费用规则选择来源，支持手
 
 需要 Python 3.12+。媒体处理和验证需要 ffmpeg、ffprobe；本地转写支持 `whisper` CLI、`faster-whisper` 和 Apple Silicon 上的 `mlx_whisper` CLI，默认模型为 `base`。MLX 的安装与配置见[本地转写引擎](docs/terminal-tutorial.md#本地转写引擎)。纯 API 查询不需要这些音频工具。
 
+Windows 可运行核心 CLI、任务恢复、预算与运行时管理；文本文件和子进程协议统一使用 UTF-8。Downie、macOS Keychain 和 MLX 仍限对应 Mac 环境，Windows 的 TikHub 凭据使用 `TIKHUB_API_KEY`。当前 Windows 无法为外部媒体工具设置与 Unix `RLIMIT_FSIZE` 等价的硬文件上限，因此 yt-dlp 媒体下载、FFmpeg 提取音轨与合轨会在派发前明确停止；已有媒体验证、受字节上限保护的 HTTP 文件下载及字幕采集不因此停用。不会用下载器提示性上限替代硬限制。具体边界见 [Windows 运行](docs/providers.md#windows-运行)。
+
 ```bash
 cd /path/to/soota
 uv sync --extra dev

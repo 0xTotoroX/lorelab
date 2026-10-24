@@ -42,7 +42,7 @@ def parser() -> argparse.ArgumentParser:
 
 def skill_list() -> list[dict]:
     root = runtime.root()
-    manifest = json.loads((root / "components.lock.json").read_text())
+    manifest = json.loads((root / "components.lock.json").read_text(encoding="utf-8"))
     result = [{"name": "lorelab", "path": str(root / "skills/lorelab/SKILL.md")}]
     for entry in manifest["components"].values():
         result.append({"name": entry["skill"]["name"], "path": str(root / entry["skill"]["path"] / "SKILL.md")})
@@ -61,6 +61,7 @@ def doctor() -> dict:
                 cmd + ["--help"],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
                 env=runtime.tool_environment(),
                 timeout=30,
                 check=False,

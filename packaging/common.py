@@ -19,6 +19,8 @@ import subprocess
 import sys
 from pathlib import Path, PurePosixPath
 
+from platform_support import executable, venv_bin, windows
+
 PYTHON_VERSION = "3.12.12"
 COMMANDS = ("lorelab", "cubox-cli", "soota", "mubu-cli")
 SKILLS = {
@@ -28,7 +30,8 @@ SKILLS = {
     "mubu-integration": "modules/mubu-cli",
 }
 ROOT_FILES = {"AGENTS.md", "LICENSE", "NOTICE.md", "pyproject.toml", "uv.lock", "components.lock.json", "install.sh",
-              "README.md", "README.zh-CN.md", "THIRD_PARTY_NOTICES.md", "Install.command"}
+              "README.md", "README.zh-CN.md", "THIRD_PARTY_NOTICES.md", "Install.command", "install.ps1",
+              ".gitattributes"}
 ROOT_DIRS = {"src", "skills", "packaging", "docs", "tests", "LICENSES"}
 MODULES = {"cubox-cli", "soota", "mubu-cli"}
 EXCLUDED = {".git", ".private", "private", "dist", "build", "cache", ".cache", "__pycache__",
@@ -44,7 +47,7 @@ class PackagingError(RuntimeError):
 
 def run(args, *, cwd=None, env=None, capture=False, timeout=None):
     return subprocess.run([str(a) for a in args], cwd=cwd, env=env, check=True, text=True,
-                          stdout=subprocess.PIPE if capture else None, timeout=timeout)
+                          encoding="utf-8", stdout=subprocess.PIPE if capture else None, timeout=timeout)
 
 
 def sha256(path: Path) -> str:
@@ -96,7 +99,7 @@ def copy_source(root: Path, destination: Path, files: list[str]) -> None:
 
 
 def product_name(root: Path) -> str:
-    name = json.loads((root / "components.lock.json").read_text())["product"]["name"]
+    name = json.loads((root / "components.lock.json").read_text(encoding="utf-8"))["product"]["name"]
     if name == "lorehub":
         raise PackagingError("LoreHub bundles require their original installer; this installer accepts LoreLab only")
     if name != "lorelab":
@@ -129,7 +132,8 @@ def verify_inputs(root: Path) -> None:
 
 
 def platform_tag() -> str:
-    machine = {"aarch64": "arm64", "x86_64": "amd64"}.get(platform.machine(), platform.machine())
+    name = platform.machine().lower()
+    machine = {"aarch64": "arm64", "x86_64": "amd64"}.get(name, name)
     return f"{platform.system().lower()}-{machine}"
 
 
@@ -151,7 +155,7 @@ def inventory(root: Path) -> dict:
 def seal_bundle(root: Path) -> dict:
     files = inventory(root)
     digest = hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest()
-    version = json.loads((root / "components.lock.json").read_text())["product"]["version"]
+    version = json.loads((root / "components.lock.json").read_text(encoding="utf-8"))["product"]["version"]
     value = {"schema_version": 1, "platform": platform_tag(), "release_id": f"{version}-{digest[:16]}",
              "components_lock_sha256": sha256(root / "components.lock.json"), "files": files}
     write_json(root / BUNDLE, value)
@@ -160,13 +164,13 @@ def seal_bundle(root: Path) -> dict:
 
 def verify_bundle(root: Path) -> dict:
     product_name(root)
-    value = json.loads((root / BUNDLE).read_text())
+    value = json.loads((root / BUNDLE).read_text(encoding="utf-8"))
     if value.get("schema_version") != 1 or value.get("platform") != platform_tag():
         raise PackagingError("unsupported bundle schema or platform")
     if value.get("files") != inventory(root):
         raise PackagingError("bundle file inventory/hash/mode mismatch")
     digest = hashlib.sha256(json.dumps(value["files"], sort_keys=True).encode()).hexdigest()
-    version = json.loads((root / "components.lock.json").read_text())["product"]["version"]
+    version = json.loads((root / "components.lock.json").read_text(encoding="utf-8"))["product"]["version"]
     if value.get("release_id") != f"{version}-{digest[:16]}":
         raise PackagingError("bundle release_id mismatch")
     if value.get("components_lock_sha256") != sha256(root / "components.lock.json"):
@@ -179,8 +183,16 @@ def get_uv(root: Path, scratch: Path) -> Path:
     if current and legacy and Path(current).resolve() != Path(legacy).resolve():
         raise PackagingError("conflicting LORELAB_INSTALL_UV and LOREHUB_INSTALL_UV")
     supplied = current or legacy
-    uv = Path(supplied) if supplied else Path(run(
-        ["/bin/sh", root / "packaging/uv.sh", scratch / "uv"], capture=True).stdout.strip())
+    bootstrap = (["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+                  root / "packaging/uv.ps1", scratch / "uv"] if windows() else
+                 ["/bin/sh", root / "packaging/uv.sh", scratch / "uv"])
+    if supplied:
+        uv = Path(supplied)
+    else:
+        lines = run(bootstrap, capture=True).stdout.strip().splitlines()
+        if len(lines) > 1:
+            print("\n".join(lines[:-1]), file=sys.stderr)
+        uv = Path(lines[-1]) if lines else Path()
     if not uv.is_absolute() or not uv.is_file():
         raise PackagingError("uv bootstrap did not return an absolute executable")
     return uv
@@ -191,49 +203,57 @@ def uv_environment(directory: Path) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()
            if not k.startswith(("UV_", "PIP_", "PYTHON")) and k not in {"VIRTUAL_ENV", "CONDA_PREFIX"}}
     env.update(UV_PYTHON_INSTALL_DIR=str(directory / "python"), UV_CACHE_DIR=str(directory / "cache"),
-               UV_PYTHON_INSTALL_BIN="false", UV_LINK_MODE="copy")
+               UV_PYTHON_INSTALL_BIN="false", UV_LINK_MODE="copy", PYTHONUTF8="1", PYTHONIOENCODING="utf-8")
     return env
 
 
 def create_venv(uv: Path, venv: Path, env: dict) -> Path:
     run([uv, "--no-config", "python", "install", "--no-bin", PYTHON_VERSION], env=env)
     run([uv, "--no-config", "venv", "--managed-python", "--python", PYTHON_VERSION, venv], env=env)
-    return venv / "bin/python"
+    return venv_bin(venv)
 
 
-def build_payload(root: Path, scratch: Path, uv: Path) -> None:
-    if platform_tag() != "darwin-arm64":
-        raise PackagingError("release builds currently support native macOS arm64 only")
-    go = shutil.which("go")
-    if not go:
-        raise PackagingError("source build requires Go; use the prebuilt release bundle without Go")
-    lock = json.loads((root / "components.lock.json").read_text())
+def build_payload(root: Path, scratch: Path, uv: Path, toolchain: Path | None = None) -> None:
+    from go_toolchain import get_go
+
+    target = platform_tag()
+    if target not in {"darwin-arm64", "darwin-amd64", "windows-amd64", "windows-arm64"}:
+        raise PackagingError("supported source targets: macOS arm64/x64 and Windows x64/arm64")
+    toolchain = toolchain or scratch
+    go = get_go(toolchain, target)
+    lock = json.loads((root / "components.lock.json").read_text(encoding="utf-8"))
     cubox = root / "modules/cubox-cli"
-    module = next(line.split()[1] for line in (cubox / "go.mod").read_text().splitlines()
+    module = next(line.split()[1] for line in (cubox / "go.mod").read_text(encoding="utf-8").splitlines()
                   if line.startswith("module "))
-    binary = root / "packaging/prebuilt/cubox-cli"
+    binary = root / "packaging/prebuilt" / executable("cubox-cli")
     binary.parent.mkdir(parents=True)
     scratch = scratch.resolve()
-    env = uv_environment(scratch)
+    env = uv_environment(toolchain)
     (scratch / "tmp").mkdir(parents=True)
-    env["TMPDIR"] = str(scratch / "tmp")
+    env.update(TMPDIR=str(scratch / "tmp"), TMP=str(scratch / "tmp"), TEMP=str(scratch / "tmp"))
     # 本地 C 扩展不能把发布者目录写入调试信息或 __FILE__；不复用外部 wheel 构建缓存。
-    env["CFLAGS"] = "-g0 " + shlex.quote(f"-ffile-prefix-map={scratch}=/lorelab-build")
+    if not windows():
+        env["CFLAGS"] = "-g0 " + shlex.quote(f"-ffile-prefix-map={scratch}=/lorelab-build")
     env["CPPFLAGS"] = ""
     env["LDFLAGS"] = ""
-    env.update(CGO_ENABLED="0", GOOS="darwin", GOARCH="arm64", GOWORK="off", GOFLAGS="")
+    goos, arch = target.split("-")
+    env.update(CGO_ENABLED="0", GOOS=goos, GOARCH=arch, GOWORK="off", GOFLAGS="", GOTOOLCHAIN="local",
+               GOCACHE=str(toolchain / "go-build"), GOMODCACHE=str(toolchain / "go-mod"))
     run([go, "build", "-mod=readonly", "-trimpath", "-buildvcs=false", "-ldflags",
          f"-s -w -X {module}/cmd.Version={lock['components']['cubox']['version']}", "-o", binary, "."],
         cwd=cubox, env=env)
+    if windows():
+        run([go, "build", "-trimpath", "-buildvcs=false", "-ldflags", "-s -w", "-o",
+             binary.parent / "launcher.exe", root / "packaging/launcher.go"], env=env)
     python = create_venv(uv, scratch / "venv", env)
     run([uv, "--no-config", "pip", "install", "--python", python, "--require-hashes",
          "-r", root / "packaging/build-requirements.lock"], env=env)
     wheels = root / "packaging/wheels"
     wheels.mkdir()
-    # 源码依赖只在发布者机器构建一次；发行包安装仅使用已校验的 wheel。
-    run([python, "-I", "-m", "pip", "--isolated", "--cache-dir", scratch / "pip-cache",
+    # 源码在用户本机构建；依赖下载与 wheel 缓存归 prefix，不跨平台复用二进制。
+    run([python, "-I", "-m", "pip", "--isolated", "--cache-dir", toolchain / "pip-cache",
          "wheel", "--no-deps", "--no-build-isolation",
          "--require-hashes", "--wheel-dir", wheels, "-r", root / "packaging/requirements.lock"], env=env)
-    run([python, "-I", "-m", "pip", "--isolated", "--cache-dir", scratch / "pip-cache",
+    run([python, "-I", "-m", "pip", "--isolated", "--cache-dir", toolchain / "pip-cache",
          "wheel", "--no-index", "--no-deps", "--no-build-isolation",
          "--wheel-dir", wheels, root, root / "modules/soota"], env=env)

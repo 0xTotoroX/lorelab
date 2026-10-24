@@ -1,0 +1,33 @@
+name: Source installation
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  native-install:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            arguments: --system-path
+          - os: windows-latest
+            arguments: --system-path --windows-code-page 936
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Fresh install, repository update and data preservation
+        run: python tests/integration_source_install.py --workdir acceptance ${{ matrix.arguments }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installation-${{ matrix.os }}
+          path: |
+            acceptance/*.json
+            acceptance/*.stdout
+            acceptance/*.stderr

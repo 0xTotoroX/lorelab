@@ -117,7 +117,7 @@ def automatic_update(settings: SootaSettings, *, force: bool = False) -> dict[st
         with lock.lock(exclusive=True):
             if not force and settings.updates.interval_seconds and state_path.is_file():
                 try:
-                    saved = json.loads(state_path.read_text())
+                    saved = json.loads(state_path.read_text(encoding="utf-8"))
                     if time.time() - saved["checked_at"] < settings.updates.interval_seconds:
                         return {**saved, "cached": True}
                 except (ValueError, KeyError, TypeError):

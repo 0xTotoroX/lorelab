@@ -818,7 +818,7 @@ def ingest_free(
     CostLedger(settings.ledger_path).append(item.source.id, records)
     previous_manifest = output_root / item.source.platform / item.source.id / "manifest.json"
     if previous_manifest.is_file() and not force:
-        previous = ContentBundleManifest.model_validate_json(previous_manifest.read_text())
+        previous = ContentBundleManifest.model_validate_json(previous_manifest.read_text(encoding="utf-8"))
         old_filter = previous.metadata.get("provenance", {}).get("promotion_filter")
         if old_filter != filter_report:
             raise InputError("推广过滤结果变化；请使用新输出目录，或 --force 重建内容包，避免保留不匹配的旧总结。")
@@ -881,13 +881,13 @@ def render(
     if not manifest_path.is_file():
         raise InputError("找不到 manifest.json。", hint="先 ingest 再 render。")
     folder = manifest_path.parent
-    if json.loads(manifest_path.read_text()).get("schema_version") == 2:
+    if json.loads(manifest_path.read_text(encoding="utf-8")).get("schema_version") == 2:
         from pydantic import ValidationError
 
         from soota.artifacts.analysis import AnalysisSubmission, render_analysis
 
         try:
-            submission = AnalysisSubmission.model_validate_json(analysis.read_text())
+            submission = AnalysisSubmission.model_validate_json(analysis.read_text(encoding="utf-8"))
         except ValidationError as exc:
             raise InputError("v2 内容包需要带 context_fingerprint 的分析提交。") from exc
         updated = render_analysis(folder, submission, force=force)

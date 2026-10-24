@@ -1,197 +1,90 @@
-# 安装与构建
+# 从仓库安装、更新与恢复
 
-## 安装发行包
+LoreLab 由本地 Agent 从用户选择的 Git 仓库安装。四个 CLI 与四套 Skill 都来自本仓库和 `components.lock.json`，不要求维护者发布安装包。Agent 的完整步骤见[安装指引](agent-install.md)。
 
-当前构建目标为 **macOS Apple Silicon（arm64）**。发行 tar.gz 包含产品、三个组件的独立源码、预构建 Cubox、完整 Skills，以及固定版本的 Python 依赖 wheel。终端用户不需要 Go、npm 或预装 Python；首次安装需要联网获取 uv（若未安装）和 Python 3.12.12。
+## 入口与平台
 
-解压可信来源的发行包，并在解压目录执行：
+| 平台 | 源码目录中的入口 | 运行布局 |
+| --- | --- | --- |
+| macOS arm64 / x64 | `sh install.sh` | shell 入口、venv/bin、符号链接 |
+| Windows x64 / arm64 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` | 原生 exe、venv/Scripts、目录 junction |
 
-```sh
-sh install.sh
-"$HOME/.local/share/lorelab/bin/lorelab" setup
-"$HOME/.local/share/lorelab/bin/lorelab" doctor
-```
+安装器按本机 OS / CPU 构建，不能把 Mac 的二进制或 venv 搬到 Windows。Windows 入口无需 WSL、管理员 symlink 权限或开发者模式；本地文件系统须支持目录 junction。macOS 使用现有原子 current 切换；Windows 在安装锁内更名 junction，切换失败恢复旧入口，切换瞬间其他调用可能需要重新执行。
 
-若发布者提供 `.sha256`，可先在压缩包所在目录运行 `shasum -a 256 -c <文件名>.sha256`。包内清单用于检测损坏、遗漏及源码与二进制错配，不代替对发行来源的信任或签名。
-
-默认向 `~/.local/bin` 注册四个命令，向 `~/.agents/skills` 注册四套 Skill；可显式指定目录：
+源码首次安装与升级已在 macOS arm64 实跑。Windows 分支与原生命令交叉编译已检查，尚未在真实 Windows 或 Intel Mac 完成安装验收；仓库提供 Windows / macOS 的 CI 验证入口。账户登录另行验证。Downie 仍仅适用于 macOS；Windows 外部 yt-dlp 下载和 FFmpeg 转换当前因无法保证硬文件字节上限而停止，详见 [Soota 平台边界](../modules/soota/docs/providers.md#windows-运行)。
 
 ```sh
-sh install.sh --prefix "$HOME/.local/share/lorelab" \
-  --skills-dir "$HOME/.agents/skills"
+sh install.sh --prefix /path/to/lorelab --skills-dir /path/to/agent-skills
 ```
 
-安装仅提供 `lorelab`、`cubox-cli`、`soota`、`mubu-cli` 四个 CLI，四套 Skill 注册为 `lorelab`、`cubox`、`soota`、`mubu-integration`。同名非 LoreLab 目录、文件或其他符号链接会使安装停止，原内容保持不变。可以另选空目录，或用 `--no-skills` / `--no-bin` 跳过新增外部注册；随包 Skills 和 prefix 内的命令始终存在。这两个参数不撤销已有注册。
+Windows 使用相同的 `--prefix`、`--skills-dir`、`--bin-dir`、`--no-skills`、`--no-bin`、`--force` 参数。默认 prefix 是用户目录下 `.local/share/lorelab`，命令注册至 `.local/bin`，Skill 注册至 `.agents/skills`。指定目录不覆盖外部同名内容。`--no-skills` / `--no-bin` 跳过新增外部注册，不撤销已有注册。
 
-安装器不修改 shell profile、不执行 `npm install`，也不替换已有外部 CLI。`setup` 单独处理命令路径：默认向当前 zsh 的 `~/.zshrc` 或 bash 登录终端的 `~/.bash_profile` 追加带标记的配置，保留其余字节；未知 shell 不自动改文件。可用 `--shell-profile FILE` 指定文件或 `--shell-profile none` 跳过。可以一直使用完整命令路径，或仅为当前终端设置：
+## 工具链与重复执行
 
-```sh
-export PATH="$HOME/.local/share/lorelab/bin:$PATH"
-```
+入口复用已有 uv / Go；缺失时从固定官方地址下载到 prefix/toolchain 并校验 SHA256。固定 Python 为 3.12.12，uv 引导版本为 0.9.26，Go 引导版本为 1.27.3；已装 Go 满足组件 go.mod 最低版本时复用。Git 用于获取仓库，需要由本地 Agent 按系统已有安装方式准备。引导不更改系统 Python、Go 或 shell 配置。
 
-已有 Python 3.12+ 时也可直接调用 Python 安装入口，它仍会用 uv 创建私有 Python 环境：
+Python 依赖使用跨平台、带哈希的版本锁，在本机构建 wheel；产品和 Soota 始终从本地源码构建，Cubox 按本机目标执行 Go build。crcmod 等依赖允许源码构建及其纯 Python 回退。下载、pip wheel、Go module/build 缓存归 toolchain，多 release 共用；每个 release 使用独立 venv。
 
-```sh
-python3 packaging/install.py --prefix "/path/with spaces/LoreLab" \
-  --skills-dir "/path/to/agent skills"
-```
+相同源码内容会先校验已装源码和四个 CLI，再复用 current、补齐记录中的缺失注册，不下载或重新构建。新内容在独立 release 构建，通过依赖检查、帮助/版本调用和组件指纹核对后激活。失败保留旧 current、配置、任务和 release。
 
-## 安装布局和事务
+安装记录保存已登记命令/Skill 目录和 Git 来源。不要单独删除 toolchain/python，新版 venv 依赖它；不要搬动已安装 prefix 或 release，其中含绝对路径。
 
-```text
-PREFIX/
-  .install.lock
-  current -> releases/ID
-  install.json      # 注册目录和可选更新源，不含账号凭据
-  env.sh            # setup 生成的命令路径
-  toolchain/        # 固定 Python、uv 和下载缓存，多 release 复用
-  bin/{lorelab,cubox-cli,soota,mubu-cli} -> ../current/bin/NAME
-  releases/ID/
-    source/          # 产品、组件、Skills、固定依赖与 bundle 清单
-    venv/            # 该 release 的 Python 包
-    bin/             # 产品入口与三个独立 CLI
-    runtime.json
-    skills/
-      lorelab -> ../source/skills/lorelab
-      cubox -> ../source/modules/cubox-cli/skills/cubox
-      soota -> ../source/modules/soota/skills/soota
-      mubu-integration -> ../source/modules/mubu-cli
-```
+## 首次设置
 
-幕布 Skill 指向整个组件根目录，保留它引用的 `docs/`、`scripts/` 和其他资源。其余 Skills 也保留完整目录，组件完整源码同时留在 `source/modules/`。
-
-安装顺序为：校验 bundle 文件清单及哈希 → 调用 `lorelab.components.verify(root)` → 检查目标冲突 → 比较内容身份 → 建立新 release → 安装已打包的 wheel → `uv pip check` → 四个 CLI 的离线 help/version 检查及再次组件校验 → 原子替换 `current`。相同包先校验已装源码和入口，再复用当前 release、补齐已记录的缺失注册，不下载或重装；损坏时停止，可显式 `--force` 在新 release 修复。
-
-固定 Python 3.12.12 与下载缓存保存在 prefix 的 `toolchain/`，引导阶段和正式安装使用同一目录，各 release 仍有自己的 venv。旧版本的私有 Python 不搬动、不删除。终端安装不会重新解析依赖版本或编译 Cubox。并行安装和 setup 由 prefix 文件锁拒绝。
-
-安装过程失败时不切换 `current`，清除本次未完成 release；旧 release 保留。已有命令和注册 Skills 都间接指向 `current`，升级后一起切换。原子切换失败会移除本次新建的链接。强制断电或 `SIGKILL` 可能留下未启用 release，`current` 仍指向切换前或已完整检查的新版本。
-
-环境含绝对路径，不支持把安装后的 prefix 或 release 直接搬到其他目录。需要换位置时重新安装。
-
-## 首次设置与账号
+按安装输出的完整路径调用：
 
 ```sh
 lorelab setup
 lorelab setup --non-interactive --vault /path/to/KnowledgeVault --subdir 知识
-lorelab setup --check-accounts --non-interactive
+lorelab doctor
+lorelab skills list
 ```
 
-`setup` 原位沿用兼容配置路径，仅合并显式字段、保留未知字段。没有提供新的知识参数时不改配置字节或修改时间；已有删除授权和缺失字段的旧默认条件不变。新知识配置默认保留收藏。更换 `--mubu-doc` 时清除旧文档的父节点绑定，可同时指定 `--mubu-parent`；空字符串表示文档根节点。setup 不新建笔记、不读写任务、不执行云端写入。
+setup 原位沿用知识配置，仅合并显式字段，保留未知字段、原删除授权和旧任务门槛。没有变化就不改配置字节或修改时间。更换幕布文档会清除旧父节点绑定；`--mubu-parent` 可显式指定新节点，空字符串为根节点。新配置默认保留收藏。
 
-账号检查仅在 `--check-accounts` 时执行：Cubox 读取文件夹；已配置幕布目标时调用 `auth-status`，只报告成功与否，不输出 token 或服务正文。安装成功与账号可用分别报告；登录使用组件自己的流程。路径设置成功不代表 Agent 已重新加载 Skills。
+macOS setup 向 zsh `.zshrc` 或 bash `.bash_profile` 追加带标记 PATH；Windows 更新当前用户的 PATH，并生成 `env.ps1` 供当前 PowerShell 加载，不改机器级 PATH。已有其他配置保留；`--shell-profile none` 跳过路径设置。Windows 设置成功后通知桌面进程，现有终端或 Agent 仍可使用完整路径，或加载 `env.ps1`。
 
-## 更新
+账号检查需显式 `--check-accounts`，只读 Cubox 文件夹及已配置幕布的认证状态，不登录、不打印凭据、不执行云端写入。安装成功与账号成功分别报告。
 
-```sh
-lorelab update --from /path/to/lorelab-release.tar.gz --check
-lorelab update --from /path/to/lorelab-release.tar.gz
-lorelab update --from /path/to/extracted-bundle
-```
-
-更新调用现有安装事务，自动沿用 `install.json` 中的命令与 Skill 注册目录。更新失败不切换 current；原配置、任务和旧 release 保留。`--check` 校验候选包并比较内容身份，不安装或切换；远程包仍可能需要下载。显式 `--force` 用于相同包的修复安装。
-
-需要自动选择包时，由发布者提供更新清单，并设置一次：
+## 从仓库更新
 
 ```sh
-lorelab setup --update-feed https://example.org/lorelab/latest.json --non-interactive
+lorelab update --check
 lorelab update
+lorelab update --from /path/to/selected-checkout
+lorelab update --repo REPOSITORY --ref REF
 ```
 
-地址是占位示例，产品不预置尚未发布的下载地址。清单格式：
+普通 update 使用首次源码安装记录的仓库与分支；独立 Git 缓存位于 prefix/toolchain/repositories。获取候选提交后导出临时源码快照，不对用户工作区执行 pull/reset/clean。`--check` 获取和核对源码，不构建、不切换。指定本地 checkout 时使用其当前受追踪文件内容；未纳入 Git 的新源码文件须先 git add。
 
-```json
-{
-  "schema_version": 1,
-  "product": "lorelab",
-  "platform": "darwin-arm64",
-  "url": "https://example.org/lorelab/release.tar.gz",
-  "sha256": "<发布者提供的64位SHA256>",
-  "bundle_id": "<包内packaging/bundle.json的release_id>"
-}
-```
+`--repo` 接受实际 HTTPS / SSH 或本地 Git 仓库，凭据交给 Git 凭据管理器。`--ref` 可为分支、标签、提交；未传时沿用记录。未配置来源则明确报错，不猜发布 URL。无远端的开发仓库会记录实际本地路径，其他电脑需取得自己的可访问仓库地址。
 
-`bundle_id` 可选，提供时须匹配。清单也可来自显式本地文件，包路径可相对该文件；远程清单只能指向 HTTPS 包。直接下载包使用 `update --from HTTPS_URL --sha256 HASH`。下载按 SHA256 缓存，每次复用前重新校验；断流或校验失败不留下可用缓存，已核对的同一包不重复下载。哈希检查不替代对发布来源的信任。
+新安装器随仓库更新，使用受信候选源码的安装器完成本次升级。相同内容复用，`--force` 在新 release 修复；旧版本和用户数据保留。普通 Skill 注册随 current 切换；插件 Skill 由宿主更新，须通过 `doctor --plugin-root` 核对同版，见[插件说明](plugins.md)。
 
-四套 Skill 的外部链接随 CLI 的 current 一起切换。插件宿主管理的 Skill 另由插件包分发，使用同次构建的插件和 CLI，见[插件说明](plugins.md)。
+## 旧安装与恢复
 
-## 产品运行时接口
+旧版只认识 tar.gz 更新时，从新 checkout 再执行安装脚本并指定**原 prefix**。它会读取旧注册记录，在原位置创建新 release；无需搬迁配置和任务。`lorelab update --from 旧安装包.tar.gz` 与旧 `setup --update-feed` 接口保留兼容，已配置的旧 feed 仍可显式使用 `--feed`；新安装默认采用仓库来源。
 
-`release/bin/lorelab` 使用该 release 的 `venv/bin/python -I -B -m lorelab.cli`。安装器同时设置同值的 `LORELAB_ROOT` / `LOREHUB_ROOT` 和 `LORELAB_RUNTIME_FILE` / `LOREHUB_RUNTIME_FILE`，分别指向 `release/source` 与 `release/runtime.json`。保留历史环境变量名称用于读取既有运行时绑定，不提供旧命令或 Python 包。LoreLab 工作流兼容读取 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 和 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK` 绑定；Soota 的旧知识命令在同环境中转发到 LoreLab；新旧变量或清单路径不一致时拒绝混用。入口屏蔽外部 `PYTHONPATH/PYTHONHOME`，设置 `SOOTA_AUTO_UPDATE=false`；Cubox 更新提示在产品调用环境中关闭。
+旧发行包工具 `packaging/build_release.py` 继续保留供已有流程使用，不是普通用户安装前提。历史 schema 1 bundle 仍校验平台、文件哈希和模式；新插件不携带此类包。
 
-`runtime.json` 的命令元素全部使用安装后的绝对路径，结构如下（`/prefix/releases/ID` 是占位路径）：
+失败先检查错误、工具链和网络，不删配置或重建任务。回退选择 prefix/releases 中核对完整的旧版本：macOS 通过临时链接和 os.replace 切回 current；Windows 持安装锁把 current junction 更名备用，创建目标 junction，失败恢复原 junction。旧 release 内绝对路径不变。已经写入的知识和云端内容不随软件回退。
 
-```json
-{
-  "schema_version": 1,
-  "product": "lorelab",
-  "release_id": "ID",
-  "source_root": "/prefix/releases/ID/source",
-  "components_lock": "/prefix/releases/ID/source/components.lock.json",
-  "components_lock_sha256": "<sha256>",
-  "tools": {
-    "cubox": ["/prefix/releases/ID/bin/cubox-cli"],
-    "soota": ["/prefix/releases/ID/venv/bin/soota"],
-    "mubu": [
-      "/prefix/releases/ID/venv/bin/python",
-      "/prefix/releases/ID/source/modules/mubu-cli/scripts/mubu_api.py"
-    ]
-  }
-}
-```
+### 从 LoreHub 升级
 
-独立命令 `mubu-cli` 保留组件原生参数，Agent 调用时按组件约定显式传入 `--agent`。缺少受管可执行文件时直接失败，不会去 PATH 查找同名 CLI。Skills 注册本身不会改写组件文档的命令示例。
+历史 prefix 名称和数据路径保留；`lorehub` 命令与 Skill 已移除。旧知识任务继续用 `lorelab knowledge/study` 和原 JOB 路径；旧 `soota knowledge/study` 仅转发到已安装 LoreLab。新旧运行时变量一致注入，配置优先级见[知识流程](knowledge.md#配置独立组件与兼容入口)。升级不放宽历史清理授权，也不恢复旧名称命令。
 
-## 从 LoreHub 升级
+## 维护者验证
 
-旧 `lorehub` 命令、产品 Python 导入兼容入口和同名 Skill 已移除。知识与学习任务分别使用 `lorelab knowledge`、`lorelab study`，采集任务使用 `soota ingest/jobs`。
-
-可以把新包安装到原 LoreHub prefix：安装器识别旧 `current`，创建并检查新 release 后再切换。升级清理 `PREFIX/bin/lorehub` 以及 `--skills-dir` 指定目录中的旧 Skill 链接，仅删除能确认属于本 prefix 的链接，外部同名内容仍受保护。未指定 `--skills-dir` 时不检查外部 Skill 注册目录。已有 release 不搬动、不删除，留作历史备份；当前安装不再注册旧入口。
-
-既有 prefix 名称不影响产品名称。安装目录包含绝对路径，不要为了改名直接移动它；需要更换位置时重新安装。组件命令 `soota`、`cubox-cli`、`mubu-cli` 仍独立存在。
-
-知识配置由 LoreLab 按[配置优先级](knowledge.md#配置独立组件与兼容入口)读取，可原位沿用旧 LoreHub 配置；升级不会静默复制配置、改写旧任务或放宽删除。旧 JOB 绝对路径可交给 `lorelab knowledge/study` 继续；旧 `soota knowledge/study` 仅作兼容转发，需要已安装 LoreLab。历史 prefix、配置路径、环境变量和共享锁目录保留原名，用于数据兼容；新任务状态与锁的约定见 [LoreLab 契约](knowledge.md#python-接口)。
-
-## 从本地源码构建
-
-构建者需要 Python 3.12+、Go（以组件 `go.mod` 为准）、macOS 命令行构建工具，以及下载 Python/Go 依赖的网络。uv 可复用已有安装；缺失时以固定版本 0.9.26 引导，校验固定安装脚本 SHA256，并使用 `UV_UNMANAGED_INSTALL` 禁止修改 profile。Python 版本固定为 3.12.12。
-
-对应官方参数见 [uv 安装选项](https://docs.astral.sh/uv/reference/installer/) 和 [Python 存放目录](https://docs.astral.sh/uv/reference/environment/#uv_python_install_dir)。
+修改组件及 Skill 后核对并刷新组件锁；新增源码先纳入 Git。安装器校验源码指纹，不会自动刷新锁来掩盖差异。
 
 ```sh
-python3 packaging/build_release.py --output-dir /path/to/release-output
+uv run --frozen pytest -q tests
+uv run python -m lorelab.cli components verify
+python3 packaging/build_plugin.py --output-dir dist
 ```
 
-`--root DIR` 可显式指定完整源码树。Git checkout 仅选取索引中的文件内容，因此新增发行源码需先 `git add`；工作区中已跟踪文件的修改会被读取。构建不修改组件锁，也不自动拉取远端源码。缺少产品 CLI、`components.py`、任一 Skill 或依赖锁时停止。
+运行依赖锁采用 `uv pip compile --universal --generate-hashes --python-version 3.12`，输入为产品 pyproject、Soota pyproject 与幕布 requirements.in，并 `--no-emit-package soota`，产品和 Soota 另从源码构建。具体安装、重复执行、升级和数据保留须通过独立用户目录验证；单元测试不代表账号或真实云端交付。
 
-源码选择限定为产品根文件（包括 `NOTICE.md` 和根 `uv.lock`）、`src/`、`skills/`、`packaging/`、`docs/`、`tests/`、许可证和三个明确的 `modules/` 目录。排除 `.private`、`private`、`dist`、`.git`、缓存、虚拟环境、私密环境文件、日志和运行数据；拒绝源码符号链接。复制后和构建后均调用组件校验，防止遗漏组件源码或悄悄改变来源。
+独立用户目录验收入口为 `python tests/integration_source_install.py --workdir acceptance --system-path`；Windows 可再加 `--windows-code-page 936`。它保留系统工具和 Git，排除预装 uv / Go，以包含中文、空格和特殊字符的路径实跑安装、重复执行、本地 context、Git 升级与失败恢复，并比较配置和任务文件。输出留在指定的新目录，不操作真实账号。`.github/workflows/source-install.yml` 在 macOS 和 Windows 运行此流程；未实际运行的 CI 不作为通过证据。
 
-Cubox 从 `modules/cubox-cli` 执行 `go build -mod=readonly -trimpath -buildvcs=false`，使用当前 `go.mod` 中的 module 名和 `cmd.Version` 注入锁定组件版本。不会调用原作者 npm 下载器。
-
-Python 的构建依赖和运行依赖均使用带哈希的锁。发布者先构建依赖 wheel 和产品/Soota wheel，全部打入 tar.gz，再由 `packaging/bundle.json` 绑定每个文件的 SHA256、模式、平台、组件锁和内容 release ID。压缩包固定归档时间与归属信息，不包含构建者的账号、缓存、venv 或本机运行时路径。不同工具链重建不承诺字节相同；同一份包安装使用相同的 wheel。
-
-源码 checkout 也支持 `sh install.sh --prefix ...`，此路径会现场执行上述构建，需要 Go 和构建工具。发行包有预构建 payload 却缺少 bundle 清单时直接拒绝，不降级成源码构建。
-
-维护者更新依赖锁时执行（正常构建和安装不执行这些命令）：
-
-```sh
-uv --no-config pip compile pyproject.toml modules/soota/pyproject.toml \
-  modules/mubu-cli/requirements.in --generate-hashes --python-version 3.12 \
-  --no-header --no-annotate -o packaging/requirements.lock
-uv --no-config pip compile packaging/build-requirements.in \
-  --generate-hashes --python-version 3.12 --no-header --no-annotate \
-  -o packaging/build-requirements.lock
-```
-
-## 验证、恢复与限制
-
-```sh
-python3 -B -m unittest discover -s tests -p 'test_install*.py' -v
-"$HOME/.local/share/lorelab/bin/lorelab" doctor
-"$HOME/.local/share/lorelab/bin/cubox-cli" version
-"$HOME/.local/share/lorelab/bin/soota" --help
-"$HOME/.local/share/lorelab/bin/mubu-cli" --agent --help
-```
-
-这些检查验证安装和本地入口，不登录账号、不写入云端，也不代表站点、媒体下载、可选 ASR、ffmpeg 或其他平台工具已完成配置。当前不提供其他 CPU/系统的发行包，也不是完全离线安装包：Python 和缺失的 uv 仍需下载。
-
-不同内容的安装包会生成新 release，相同包默认复用已装版本。需要回退时，在确认旧 release 仍完整后，创建指向旧 `releases/ID` 的临时符号链接，再用 `os.replace` 原子替换 `PREFIX/current`；不要搬动旧 release。删除 prefix 前先移除指向该 prefix 的显式 Skill 和命令链接，勿删除同名用户目录；如使用 setup 配置 PATH，再移除对应的标记块。卸载不会清理组件在其他位置保存的用户配置或资料。
+实现依据：[uv 私有安装](https://docs.astral.sh/uv/reference/installer/)、[Python venv 平台布局](https://docs.python.org/3.12/library/venv.html)、[Windows 文件锁](https://docs.python.org/3.12/library/msvcrt.html)、[Go 官方安装](https://go.dev/doc/install)。

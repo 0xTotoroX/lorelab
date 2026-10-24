@@ -59,7 +59,7 @@ def runtime_manifest() -> dict:
     source = root()
     lock = source / "components.lock.json"
     try:
-        value = json.loads(path.read_text())
+        value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise ToolError("无法读取受管运行时清单；请检查安装。") from exc
     expected = hashlib.sha256(lock.read_bytes()).hexdigest()
@@ -107,7 +107,7 @@ def tool_environment() -> dict[str, str]:
 def run_json(tool: str, args: list[str], receipt: Path | None = None,
              acceptable_codes: tuple[int, ...] = (0,)) -> dict | list | None:
     try:
-        result = subprocess.run(tool_command(tool) + args, capture_output=True, text=True,
+        result = subprocess.run(tool_command(tool) + args, capture_output=True, text=True, encoding="utf-8",
                                 env=tool_environment(), timeout=600, check=False)
     except subprocess.TimeoutExpired as exc:
         raise ToolError(f"{tool} 超时；若是云端写入，先只读对账，不可直接重发。") from exc

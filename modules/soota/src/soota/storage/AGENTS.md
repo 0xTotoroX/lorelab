@@ -6,6 +6,7 @@
 
 - `__init__.py`：包入口。
 - `atomic.py`：同目录临时文件、fsync 和原子替换。
+- `locking.py`：Unix flock／Windows LockFileEx，共享／排他以及阻塞／立即失败的跨进程内核锁。
 - `cache.py`：采集缓存读取、过期判断与保存。
 - `jobs.py`：任务记录与跨进程任务执行锁；统一任务的线程合并由 `tasks/state.py` 负责。
 - `ledger.py`：请求费用流水记录。

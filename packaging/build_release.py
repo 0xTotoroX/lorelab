@@ -2,7 +2,7 @@
 """创建包含本地组件源码、Cubox 和依赖 wheel 的发行包。
 
 [INPUT]: 完整产品源码、固定依赖锁、Go、uv。
-[OUTPUT]: macOS arm64 tar.gz 和 SHA256 文件。
+[OUTPUT]: 当前平台的兼容 tar.gz 和 SHA256 文件；普通安装直接从源码进行。
 [POS]: packaging 的发布者入口；不写入源码树或云端。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """

@@ -51,7 +51,11 @@ def write_bundle_to(
     context_path = folder / "context.md"
     transcript_path = folder / "transcript.md"
     manifest_path = folder / "manifest.json"
-    previous = ContentBundleManifest.model_validate_json(manifest_path.read_text()) if manifest_path.is_file() else None
+    previous = (
+        ContentBundleManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+        if manifest_path.is_file()
+        else None
+    )
     if previous and previous.source.cache_identity != item.source.cache_identity:
         raise InputError("已有内容包属于不同来源，未覆盖文件。")
     if (

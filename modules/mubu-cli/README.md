@@ -13,6 +13,8 @@
 
 Manage your Mubu (幕布) outlines from the command line — **and as an AI Agent Skill** — with lossless Markdown import/export round-trip.
 
+The Python CLI and legacy `scripts/mubu_api.py` entry work without Unix-only imports on Windows. Use `python` (or `py -3`) where `python3` is unavailable. Text files and CLI output use UTF-8; token/trash updates use a real OS lock and atomic replacement of existing files. Windows file access follows the user directory's ACLs; Unix mode `0600` is not a Windows ACL. Platform branch tests are included; macOS test results alone do not establish real Windows or account acceptance.
+
 ---
 
 ## ✨ Try it in 3 commands (magic moment)

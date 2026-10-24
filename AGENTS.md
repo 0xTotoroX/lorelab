@@ -7,7 +7,7 @@ Python 3.12+ 产品层 + Go Cubox CLI + Python Soota / 幕布 CLI。
 - `modules/`：自有组件源码，各模块保留独立入口、Skill、测试和许可证。组件原有 AGENTS.md 继续适用。
 - `src/lorelab/`：产品 CLI、组件定位、安装检查；`knowledge/` 是文章、学习与交付流程的唯一实现。
 - `skills/lorelab/`：文章、学习、交付、清理与产品维护。采集规则在 Soota Skill 维护，Cubox/幕布的服务操作约定留在各自 Skill。
-- `packaging/`：成套构建、幂等安装、注册事务与插件打包；只从本仓库构建组件，禁止自动切换到原作者发行包。
+- `packaging/`：本地 Agent 源码安装、跨平台工具链、注册事务与纯 Skill 插件打包；只从本仓库构建组件，禁止自动切换到原作者发行包。
 - `tests/`：产品安装、版本绑定、旧入口移除及数据兼容测试；知识状态恢复及写入边界测试位于 `tests/knowledge/`。
 - `docs/`：已实现使用说明、架构及组件维护方法。
 
@@ -22,3 +22,5 @@ Python 3.12+ 产品层 + Go Cubox CLI + Python Soota / 幕布 CLI。
 流程契约主源是 `docs/knowledge.md`，操作与提示词主源是 `skills/lorelab/references/{process,prompts}.md`。Soota 只持有采集、内容包和单项产物契约；独立导出不携带 LoreLab 工作流，普通采集不依赖 LoreLab。分发仅含 `lorelab`、`soota`、`cubox-cli`、`mubu-cli` 四个 CLI 和 `lorelab`、`soota`、`cubox`、`mubu-integration` 四套 Skill。`lorehub` 命令、Python 兼容包及 Skill 已移除。既有知识任务通过 `lorelab knowledge/study` 按原路径继续；旧 `soota knowledge/study` 仅兼容转发，需要 LoreLab，旧配置不静默复制或放宽删除；历史 prefix、配置、环境变量与共享写锁名称保留用于数据兼容，不要求恢复旧入口。内容包来源只读，不调用 Cubox 或删除来源。
 
 测试与构建命令以 README 和 packaging 说明为准。变更结构时更新对应模块地图。实现完成后本地提交，不自动推送或发布。
+
+安装以用户提供的仓库为入口，macOS / Windows 在本机从锁定源码构建，不要求维护者提供安装包。插件仅含四套独立 Skill、引用文档与安装指引；不要重新内置 CLI、依赖或运行包。源码更新使用独立 Git 快照，保留开发 checkout、旧 release、配置和任务。平台验收必须区分实际机器、交叉编译与模拟测试。

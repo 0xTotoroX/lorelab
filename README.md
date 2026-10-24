@@ -2,7 +2,7 @@
 
 **采集内容，整理知识，按需学习。**
 
-LoreLab 把 Soota、Cubox CLI、幕布 CLI 和配套 Agent Skills 放进同一个安装包。收集网页、视频、音频、本地文件或 Cubox 收藏，按需要整理成 Obsidian / Markdown 文章，再从选定文章制作幕布学习大纲。每一步都可以单独使用，不必走完整条流程。
+LoreLab 在一个仓库中维护 Soota、Cubox CLI、幕布 CLI 和四套独立 Agent Skills，由本地 Agent 安装和更新。收集网页、视频、音频、本地文件或 Cubox 收藏，按需要整理成 Obsidian / Markdown 文章，再从选定文章制作幕布学习大纲。每一步都可以单独使用，不必走完整条流程。
 
 [安装](#安装) · [开始使用](#开始使用) · [组件维护](#组件维护) · [文档](#文档)
 
@@ -44,34 +44,41 @@ Soota 负责生成 context 和采集任务恢复；LoreLab 负责跨来源的文
 
 ## 安装
 
-当前构建目标为 **macOS Apple Silicon（arm64）**。解压完整安装包后，双击 `Install.command`，或在解压目录执行：
+把本仓库地址交给能执行本机命令的 Agent：
+
+> 请按仓库的 docs/agent-install.md 安装 LoreLab，检查四个 CLI 和四套 Skill。保留我已有的配置和任务。
+
+Agent 克隆仓库、读取安装指引后执行本机入口。用户不需要下载 LoreLab 安装包，也不需要手动安装四个项目。
+
+| 本机环境 | 在仓库目录执行 |
+| --- | --- |
+| macOS（Apple Silicon / Intel） | `sh install.sh` |
+| Windows 原生 PowerShell | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` |
+
+安装器复用已有 uv / Go，缺少时从固定官方来源获取到用户目录；Python、依赖、Go 模块和构建缓存共用。四个 CLI 从本仓库绑定的源码构建，安装相同内容时校验后复用当前版本。Windows 使用原生 `.exe` 入口和目录 junction，不要求 WSL 或开发者模式。
+
+Windows 尚未完成实机安装验收；外部 yt-dlp 下载与 FFmpeg 转换目前也有[平台限制](modules/soota/docs/providers.md#windows-运行)。macOS arm64 已完成本机源码安装与升级验证。
+
+安装输出会给出完整路径。接着由 Agent 执行 `lorelab setup`、`lorelab doctor`、`lorelab skills list`。默认 prefix 为用户目录下的 `.local/share/lorelab`，CLI 注册到 `.local/bin`，Skill 注册到 `.agents/skills`；可用 `--prefix`、`--bin-dir`、`--skills-dir` 调整。setup 保留已有配置与任务，按需设置知识库及命令路径。账号登录、浏览器桥接和可选媒体工具按实际任务配置。
+
+升级同样交给 Agent：
 
 ```sh
-sh install.sh
-"$HOME/.local/share/lorelab/bin/lorelab" setup
-lorelab doctor
-lorelab skills list
+lorelab update --check
+lorelab update
+# 明确采用另一份本地源码时：
+lorelab update --from /path/to/lorelab-checkout
 ```
 
-默认安装到 `~/.local/share/lorelab`，四个命令注册到 `~/.local/bin`，四套 Skill 注册到 `~/.agents/skills`。`setup` 引导选择知识库，并向 zsh/bash 配置追加命令路径；已有配置只合并明确设置的字段，不改任务或清理授权。新终端生效，当前终端按 setup 输出加载路径。可用 `--prefix`、`--bin-dir`、`--skills-dir` 指定目录；`--no-bin`、`--no-skills` 跳过新增注册。
+首次从 Git 仓库安装会记录来源和分支。更新获取独立源码快照并在新 release 验证，成功后切换四个 CLI / Skill；不会对原工作区执行 pull、reset 或覆盖未提交修改。无来源记录时需显式指定 `--from`，或 `--repo` 和 `--ref`。已有配置、任务和旧 release 保留；外部同名命令或 Skill 不覆盖。
 
-遇到外部同名命令或 Skill 时停止，保留原内容。安装包包含 Cubox 二进制、Python 依赖 wheel、组件源码与完整 Skills；首次联网准备 uv/Python，后续复用固定版本和缓存。同一个包重复安装会校验并复用当前版本。账号登录、浏览器桥接及可选媒体工具按任务配置。
+平台验证范围、代理和缓存、旧安装迁移见[安装、更新与恢复](docs/installation.md)。
 
-升级使用可信的完整安装包，也可通过 `setup --update-feed` 配置发布者提供的更新清单：
+### 四套 Skill 插件
 
-```sh
-lorelab update --from /path/to/lorelab-release.tar.gz --check
-lorelab update --from /path/to/lorelab-release.tar.gz
-lorelab update  # 已配置更新清单时使用
-```
+一个 **LoreLab 插件**提供 `lorelab`、`soota`、`cubox`、`mubu-integration` 四套独立 Skill、引用文档和源码安装指引。**插件不含 CLI、依赖或安装包**；需要时由本地 Agent 从用户指定的仓库安装。
 
-四个 CLI 和四套 Skill 一起切换，已有配置、任务和旧 release 保留。没有配置更新源时会明确提示，不自动改用上游项目的发行包。详细参数、缓存与回退见[安装、更新与恢复](docs/installation.md)。
-
-### 插件与安卓
-
-同一份发行包可生成一个 **LoreLab 插件**，其中仍是 `lorelab`、`soota`、`cubox`、`mubu-integration` 四套独立 Skill，并附带同版 CLI 安装包。插件模式通过 `--no-skills` 避免新增一份全局 Skill 注册，`lorelab doctor --plugin-root DIR` 检查插件与 CLI 是否匹配。
-
-插件需要本地执行环境。当前没有 Android/Termux 原生安装包；安卓可通过支持远程连接的宿主访问 Mac 上的工具，仍需满足账号和配对条件。插件包校验不等于手机或插件宿主已验收。详见[插件分发与安卓使用边界](docs/plugins.md)。
+插件模式执行安装和 setup 时加 `--no-skills`，避免重复注册；通过 `lorelab doctor --plugin-root DIR` 核对 Skill 和 CLI 的源码版本。插件刷新由宿主管理，CLI 更新由 Agent 执行，详见[插件说明](docs/plugins.md)。
 
 ## 开始使用
 
@@ -129,7 +136,7 @@ lorelab study verify /path/to/study-job
 - **收藏默认保留**：适用的明确授权下，Cubox 批次才可启用 `--delete-verified`。核对完成后，先用 `lorelab knowledge cleanup JOB` 预览，再加 `--execute` 执行；资料不全和 GitHub 项目保留。内容包批次始终不删除原包或媒体。
 - **旧任务保留原门槛**：`soota knowledge/study` 仅作兼容转发，需要已安装 LoreLab；新任务使用 `lorelab knowledge/study`。已有任务与配置可按原路径继续使用，升级不扩大删除授权。旧 `lorehub` 命令已移除，迁移方法见[升级说明](docs/installation.md#从-lorehub-升级)。
 
-公开源码与安装包不包含账号凭据、收藏正文、私人知识库路径或执行台账。`doctor` 检查安装与组件绑定，不代表真实账号或云端交付已验收。
+公开源码与插件不包含账号凭据、收藏正文、私人知识库路径或执行台账。`doctor` 检查安装与组件绑定，不代表真实账号或云端交付已验收。
 
 ## 组件维护
 
@@ -150,15 +157,16 @@ lorelab components export soota /path/to/new-soota-checkout
 ```sh
 uv run --python 3.12 pytest
 uv run python -m lorelab.cli components verify
-python3 packaging/build_release.py --output-dir dist
+python3 packaging/build_plugin.py --output-dir dist
 ```
 
 ## 文档
 
 | 主题 | 入口 |
 | --- | --- |
+| Agent 安装指引 | [Agent 安装](docs/agent-install.md) |
 | 安装、更新、恢复与源码构建 | [安装说明](docs/installation.md) |
-| 四套独立 Skill 的插件打包与安卓边界 | [插件说明](docs/plugins.md) |
+| 四套独立 Skill 的插件与源码安装 | [插件说明](docs/plugins.md) |
 | 版本绑定、组件维护与独立导出 | [组件维护](docs/components.md) |
 | 采集目标、任务状态与恢复 | [Soota 任务文档](modules/soota/docs/tasks.md) |
 | 知识文章、学习任务与交付核对 | [LoreLab 知识流程](docs/knowledge.md) |

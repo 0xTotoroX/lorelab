@@ -126,13 +126,25 @@ def unpack(path: Path):
 def update(args):
     prefix, before = maintenance.managed_installation()
     install = maintenance.installer()
+    repo, ref = getattr(args, "repo", None), getattr(args, "ref", None)
+    if repo and (args.source or args.feed) or ref and (args.source or args.feed):
+        raise ValueError("--repo/--ref 不能与 --from/--feed 同时使用。")
     if args.source and args.feed:
         raise ValueError("--from 与 --feed 互斥。")
+    saved = install.settings(prefix)
+    local_source = (args.source and "://" not in args.source and Path(args.source).expanduser().is_dir()
+                    and not (Path(args.source).expanduser() / "packaging/bundle.json").is_file())
+    if repo or ref or local_source or not args.source and not args.feed and saved.get("source"):
+        from .source_updates import update_source
+
+        if args.sha256:
+            raise ValueError("源码更新通过 Git 提交及组件锁校验；--sha256 仅用于旧安装包。")
+        return update_source(args, prefix, before, install)
     source, expected, feed = args.source, args.sha256, None
     if not source:
         location = args.feed or install.settings(prefix).get("update_feed")
         if not location:
-            raise ValueError("尚未配置更新源。使用 lorelab update --from 安装包，或 lorelab setup --update-feed 清单地址。")
+            raise ValueError("尚未配置更新源。使用 lorelab update --from 本地仓库，或 --repo 仓库地址 --ref 分支。")
         feed = read_feed(location)
         source, expected = feed["url"], feed.get("sha256")
         if feed.get("platform") != install.platform_tag():
@@ -156,10 +168,10 @@ def update(args):
             bundle = install.verify_bundle(root)
             if feed and feed.get("bundle_id") and feed["bundle_id"] != bundle["release_id"]:
                 raise ValueError("更新清单与包的 bundle_id 不一致。")
-            previous = json.loads((before / "runtime.json").read_text())
+            previous = json.loads((before / "runtime.json").read_text(encoding="utf-8"))
             identity = previous.get("source_fingerprint")
             if identity is None and (before / "source/packaging/bundle.json").is_file():
-                identity = json.loads((before / "source/packaging/bundle.json").read_text())["release_id"]
+                identity = json.loads((before / "source/packaging/bundle.json").read_text(encoding="utf-8"))["release_id"]
             if args.check:
                 return {"ok": True, "available": identity != bundle["release_id"],
                         "bundle_id": bundle["release_id"], "download_cached": cached, "installed": False}

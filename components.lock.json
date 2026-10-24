@@ -26,7 +26,7 @@
         "name": "soota",
         "path": "modules/soota/skills/soota"
       },
-      "tree_sha256": "6efaa5de97eb7e864965f4812fcda2a4aa8ff26aa7f48dde76cc48e6b3e939f1"
+      "tree_sha256": "83acdef0d04ce389e6c8c9b17bc9900c7291e18dced731957a65a1577d57d4ac"
     },
     "mubu": {
       "path": "modules/mubu-cli",
@@ -37,7 +37,7 @@
         "name": "mubu-integration",
         "path": "modules/mubu-cli"
       },
-      "tree_sha256": "a2241722cd2468b6068b073f5190200f2ccefaf36dd9aab3c806558bc19ea401"
+      "tree_sha256": "e7a4a325f542cd896af0d87d464b3405232ca9a2111aac56e9f5779deb8a47f2"
     }
   }
 }

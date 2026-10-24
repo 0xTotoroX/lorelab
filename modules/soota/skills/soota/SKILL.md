@@ -24,6 +24,8 @@ The existing single-video command without `--want` remains available: `ingest UR
 
 ## Acquisition and failures
 
+Windows core commands, durable task locks and UTF-8 records are supported. Downie, Keychain and MLX remain Mac-only. External yt-dlp media downloads and FFmpeg extraction/muxing currently stop before dispatch on Windows because a hard file-size cap cannot be enforced; existing media verification, bounded HTTP files and captions remain available. Report this limitation and preserve required targets and budgets; do not bypass it with an unbounded external command. See [task workflow](references/tasks.md).
+
 Video captions follow saved platform/capability cost or manual priorities. Free sources precede paid sources by default; optional Monid uses Apify for YouTube captions and TikHub relay for supported contracts. Use `providers auth/enable/disable` and `providers priority set/show`; quote full request chains, not unrelated endpoint prices. Read [provider configuration](references/providers.md) for CLI examples. Confirmed missing tracks end the caption chain: `auto` obtains audio and transcribes locally, while `captions-only` stops without ASR. Empty responses, unknown states and login failures are not proof of absent captions. `asr` explicitly requests transcription. Missing timestamps stay unknown; do not invent timed exports or apply timed filtering to untimed text.
 
 Comments and danmaku are not captions. Bilibili `ai-*` tracks are automatic subtitles, acquired with ordinary subtitle flags. Legacy `--provider soota` remains a yt-dlp alias; new results identify `yt-dlp`.
