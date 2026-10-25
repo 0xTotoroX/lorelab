@@ -44,7 +44,8 @@ def main():
             git = shutil.which("git", path=env.get("PATH"))
             if not git:
                 raise RuntimeError("Git is required before source installation")
-            system = Path(env["SystemRoot"]) / "System32"
+            # os.environ retains Windows' case-insensitive lookup; a plain dict does not.
+            system = Path(os.environ["SystemRoot"]) / "System32"
             env["PATH"] = os.pathsep.join(map(str, [system, system / "WindowsPowerShell/v1.0", Path(git).parent]))
         else:
             env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
