@@ -1,6 +1,6 @@
 """Weir's read-only HTTP acquisition and free-credit guard.
 
-[INPUT]: Local key/config, Weir usage response and persistent credit ledger.
+[INPUT]: Ordered private keys, Weir usage response and persistent shared credit ledger.
 [OUTPUT]: Raw single-post/Article/Reddit responses with confirmed credit settlement.
 [POS]: Acquires provider data; content.weir owns source-text conversion.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -19,6 +18,7 @@ import httpx
 from soota.billing import selected_provider
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, SourceError
+from soota.providers.weir_keys import WeirKey, load_keys
 from soota.storage.credit_budget import CreditBudget
 from soota.storage.task_budget import active_task_identity
 
@@ -26,13 +26,8 @@ BASE_URL = "https://api.weirapp.io"
 
 
 def load_key(settings: SootaSettings) -> str | None:
-    key = os.environ.get("WEIR_API_KEY")
-    path = settings.config_dir / "credentials" / "weir.key"
-    if key is None and path.is_file():
-        key = path.read_text(encoding="utf-8").strip()
-    if not key or any(c.isspace() for c in key):
-        return None
-    return key
+    keys = load_keys(settings)
+    return keys[0].key.get_secret_value() if keys else None
 
 
 def _integer(data: dict[str, Any], name: str) -> int:
@@ -66,15 +61,20 @@ def free_period(data: dict[str, Any], needed: int) -> str:
 
 
 class WeirClient:
-    def __init__(self, settings: SootaSettings) -> None:
+    def __init__(self, settings: SootaSettings, *, credentials: list[WeirKey] | None = None) -> None:
         selected_provider(settings, "weir")
         self.settings = settings
-        self.key = load_key(settings)
-        if self.key is None:
+        self.credentials = load_keys(settings) if credentials is None else credentials
+        self.index = 0
+        if not self.credentials:
             raise AuthBudgetError("缺少 Weir API Key；设置 WEIR_API_KEY 或使用 soota providers auth weir。")
         self.budget = CreditBudget(settings.data_dir / "billing" / "weir")
         task = active_task_identity() or uuid4().hex
         self.task = hashlib.sha256(task.encode()).hexdigest()
+
+    @property
+    def credential(self) -> WeirKey:
+        return self.credentials[self.index]
 
     def _request(self, client: httpx.Client, path: str) -> httpx.Response:
         try:
@@ -95,37 +95,48 @@ class WeirClient:
 
     def fetch(self, path: str, *, max_credits: int) -> dict[str, Any]:
         # Serializes usage -> reservation -> send -> settlement for local callers.
-        with (
-            self.budget.locked() as budget,
-            httpx.Client(
-                base_url=BASE_URL,
-                headers={"Authorization": f"Bearer {self.key}"},
-                timeout=self.settings.weir.timeout_seconds,
-                follow_redirects=False,
-            ) as client,
-        ):
-            usage = self._request(client, "/v1/usage")
-            if usage.status_code != 200:
-                raise AuthBudgetError("无法核实 Weir 免费余额，未发送数据请求。", details={"status": usage.status_code})
-            period = free_period(self._data(usage), max_credits)
-            reservation = budget.reserve(
-                period=period,
-                task=self.task,
-                credits=max_credits,
-                monthly_cap=self.settings.weir.monthly_credits,
-                task_cap=self.settings.weir.task_credits,
-            )
-            response = self._request(client, path)
-            if response.status_code >= 400:
-                budget.settle(reservation, 0)
-                error = AuthBudgetError if response.status_code in {401, 402, 403, 429} else SourceError
-                raise error(
-                    "Weir 拒绝或未能完成请求，不自动重试或切换付费来源。", details={"status": response.status_code}
-                )
-            if response.status_code != 200:
-                raise ContractError("Weir 返回未知状态；保留预留，不自动重试。")
-            charged = response.headers.get("x-credits-charged", "")
-            if not charged.isascii() or not charged.isdigit():
-                raise ContractError("Weir 缺少有效扣费回执，保留最大预留。")
-            budget.settle(reservation, int(charged))
-            return self._data(response)
+        with self.budget.locked() as budget:
+            while self.index < len(self.credentials):
+                credential = self.credential
+                with httpx.Client(
+                    base_url=BASE_URL,
+                    headers={"Authorization": f"Bearer {credential.key.get_secret_value()}"},
+                    timeout=self.settings.weir.timeout_seconds,
+                    follow_redirects=False,
+                ) as client:
+                    usage = self._request(client, "/v1/usage")
+                    if usage.status_code == 401:
+                        self.index += 1
+                        continue
+                    if usage.status_code != 200:
+                        raise AuthBudgetError(
+                            "无法核实 Weir 免费余额，未发送数据请求。", details={"status": usage.status_code}
+                        )
+                    period = free_period(self._data(usage), max_credits)
+                    reservation = budget.reserve(
+                        period=period,
+                        task=self.task,
+                        credits=max_credits,
+                        monthly_cap=self.settings.weir.monthly_credits,
+                        task_cap=self.settings.weir.task_credits,
+                        key_name=credential.name,
+                    )
+                    response = self._request(client, path)
+                    if response.status_code >= 400:
+                        budget.settle(reservation, 0)
+                        if response.status_code == 401:
+                            self.index += 1
+                            continue
+                        error = AuthBudgetError if response.status_code in {402, 403, 429} else SourceError
+                        raise error(
+                            "Weir 拒绝或未能完成请求，不自动重试或切换付费来源。",
+                            details={"status": response.status_code},
+                        )
+                    if response.status_code != 200:
+                        raise ContractError("Weir 返回未知状态；保留预留，不自动重试。")
+                    charged = response.headers.get("x-credits-charged", "")
+                    if not charged.isascii() or not charged.isdigit():
+                        raise ContractError("Weir 缺少有效扣费回执，保留最大预留。")
+                    budget.settle(reservation, int(charged))
+                    return self._data(response)
+            raise AuthBudgetError("所有已配置 Weir Key 均认证失败；请更新凭据。", details={"status": 401})

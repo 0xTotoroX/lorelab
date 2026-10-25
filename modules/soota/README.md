@@ -54,13 +54,15 @@ Weir 支持 X 帖子／Article 和 Reddit 帖子正文，默认停用、只允�
 
 ```bash
 uv run soota providers auth weir
+uv run soota providers auth weir --key-name backup-1
+uv run soota providers keys weir --json
 uv run soota providers enable weir
 uv run soota providers limits weir --monthly-credits 4000 --task-credits 100
 uv run soota ingest "X 或 Reddit 帖子 URL" --provider weir --want context --weir-max-credits 50 --json
 uv run soota providers usage weir --json
 ```
 
-数字为示例。未设置自定义上限时仍受免费余额约束；当前不支持购买额度消费。仅适用于不充值的免费 workspace，运行中不能从其他客户端充值。标准接口费率用于请求前预留，异常扣费会停止后续调用。配置、缓存、原文范围和预算边界见 [Weir 正文与免费额度](docs/weir.md)。
+数字为示例。主用认证返回 401 时按添加顺序检查备用 Key；月度按 UTC 自然月跨 Key 共用，任务累计不因轮转或恢复清零。余额不足、限流、上游错误和未知扣费不切 Key。未设置自定义上限时仍受免费余额约束；当前不支持购买额度消费。仅适用于不充值的免费 workspace，运行中不能从其他客户端充值。标准接口费率用于请求前预留，异常扣费会停止后续调用。配置、缓存、原文范围和预算边界见 [Weir 正文与免费额度](docs/weir.md)。
 
 ## 命令
 

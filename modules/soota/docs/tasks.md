@@ -245,4 +245,4 @@ soota ingest "帖子 URL" --provider weir --want context,markdown,data --weir-ma
 soota jobs resume JOB_ID --weir-max-credits 100 --json
 ```
 
-`providers limits weir --monthly-credits N --task-credits N` 配置跨任务月度上限和新任务默认上限；单任务参数覆盖默认值，续跑参数是新总上限。所有 worker 共用持久账本，跨月不清除任务累计，缓存不重复扣费。`weir_credits` 分别报告实际扣费、未决预留及累计值；不能把 credits 混入 USD 估算。默认仅免费模式，付费等级或购买余额会被拒绝；`--max-cost 0` 继续禁止新的 credits 计费请求。来源、计费估算、外部并发和失败恢复的完整边界见 [Weir](weir.md)。
+`providers limits weir --monthly-credits N --task-credits N` 配置跨任务月度上限和新任务默认上限；单任务参数覆盖默认值，续跑参数是新总上限。所有 worker 和 Key 共用持久账本；月度上限按统一 UTC 自然月累计，跨月不清除任务累计，缓存不重复扣费。`providers auth weir --key-name NAME` 添加备用，`providers keys weir` 查看优先顺序及启用状态。只有明确认证 401 才尝试下一个 Key，余额不足、限流、上游错误与未知扣费停止。`weir_credits` 分别报告实际扣费、未决预留及累计值；不能把 credits 混入 USD 估算。默认仅免费模式，付费等级或购买余额会被拒绝；`--max-cost 0` 继续禁止新的 credits 计费请求。来源、计费估算、外部并发和失败恢复的完整边界见 [Weir](weir.md)。
