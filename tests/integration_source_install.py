@@ -108,6 +108,10 @@ def main():
                        home / "roaming/go/telemetry", home / "local/go/telemetry", home / ".config/go/telemetry"]
     counters = [p for p in retained if any(p.is_relative_to(folder) for folder in telemetry_roots)]
     retained = [p for p in retained if p not in counters]
+    # Windows PowerShell rewrites this startup profiling cache when a new shell runs.
+    # It is not a LoreLab configuration, task or source artifact.
+    powershell_cache = home / "AppData/Local/Microsoft/Windows/PowerShell/StartupProfileData-NonInteractive"
+    retained = [p for p in retained if p != powershell_cache]
     assert config in retained
 
     def snapshot(files=retained):
