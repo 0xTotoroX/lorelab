@@ -151,14 +151,30 @@ def execute(settings: SootaSettings, spec, *, job=None, analysis=None, dry_run=F
 
 
 def resume(
-    settings, job_id, *, max_items=None, max_pages=None, max_cost=None, workers=None, analysis=None, force=False
+    settings,
+    job_id,
+    *,
+    max_items=None,
+    max_pages=None,
+    max_cost=None,
+    weir_max_credits=None,
+    workers=None,
+    analysis=None,
+    force=False,
 ):
     store = JobStore(settings.jobs_dir)
     if store.get(job_id).get("kind") != "content-task":
         if analysis is not None:
             raise InputError("旧目录任务不接受分析提交。")
         return source.resume(
-            settings, job_id, max_items=max_items, max_pages=max_pages, max_cost=max_cost, workers=workers, force=force
+            settings,
+            job_id,
+            max_items=max_items,
+            max_pages=max_pages,
+            max_cost=max_cost,
+            weir_max_credits=weir_max_credits,
+            workers=workers,
+            force=force,
         )
     with store.lock(job_id):
         job = TaskJob.model_validate(store.get(job_id))
@@ -174,6 +190,7 @@ def resume(
                 "max_items": max_items,
                 "max_pages": max_pages,
                 "max_cost": max_cost,
+                "weir_max_credits": weir_max_credits,
                 "workers": workers,
             }.items()
             if value is not None
@@ -191,7 +208,7 @@ def resume(
             for info in job.enumeration.values()
             if isinstance(info, dict)
         )
-        if job.enumeration and (updates.keys() - {"workers"} or incomplete) and analysis is None:
+        if job.enumeration and (updates.keys() - {"workers", "weir_max_credits"} or incomplete) and analysis is None:
             job.expanded = False
         from soota.tasks.entry import execution_context
 

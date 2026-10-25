@@ -1,3 +1,10 @@
+"""
+[INPUT]: Provider policies, request estimates and settings.
+[OUTPUT]: Provider enablement gates and USD payment authorization.
+[POS]: Shared authorization; Weir credits use their own provider guard.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import math
@@ -120,6 +127,8 @@ def selected_provider(settings: SootaSettings, explicit: str | None) -> str:
         raise InputError("MCP 接入已停用；请使用 auto、opencli、yt-dlp 或 tikhub。")
     if chosen == "monid" and not settings.monid.enabled:
         raise InputError("Monid 尚未启用；使用 soota providers enable monid。")
+    if chosen == "weir" and not settings.weir.enabled:
+        raise InputError("Weir 尚未启用；使用 soota providers enable weir。")
     return chosen
 
 
@@ -128,6 +137,7 @@ def provider_enabled(settings: SootaSettings, name: str) -> bool:
         name not in settings.routing.disabled_providers
         and (name != "opencli-mcp" or settings.opencli_mcp.enabled)
         and (name != "monid" or settings.monid.enabled)
+        and (name != "weir" or settings.weir.enabled)
     )
 
 

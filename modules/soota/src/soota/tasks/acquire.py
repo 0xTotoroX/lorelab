@@ -1,3 +1,10 @@
+"""
+[INPUT]: Task inputs, provider policy and artifact goals.
+[OUTPUT]: Raw source text, transcript or media collection results.
+[POS]: Shared task acquisition; Weir USD-zero policy reaches body capture.
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import json
@@ -326,7 +333,9 @@ def _collect_text(
             diagnostics=result.data,
         )
     else:
-        native = capture_content(settings, seed.value, work / "content", provider=spec.provider)
+        native = capture_content(
+            settings, seed.value, work / "content", provider=spec.provider, allow_credits=spec.max_cost != 0
+        )
     item = safe_item(
         item.model_copy(
             update={

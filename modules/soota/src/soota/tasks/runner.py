@@ -1,6 +1,6 @@
 """Execute and resume unified artifact tasks.
 
-[INPUT]: TaskSpec, enumeration, bounded scheduler, native identity checks and artifact services.
+[INPUT]: TaskSpec/Weir credit caps, enumeration, scheduler, native identity checks and artifact services.
 [OUTPUT]: Source artifacts/checkpoints and one ordered CommandResult; old workflow requests are forwarded.
 [POS]: tasks orchestration; owns budget scope, job lock and interruption recovery.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -418,6 +419,14 @@ def _run_item_locked(
             nonlocal raw
             if seed.kind == "operation" and operation is None:
                 raise SourceError("原生读取失败，未生成替代数据。")
+            if raw is None and row.steps.get("content", StepState()).status in {"failed", "blocked"}:
+                raise SourceError("正文获取失败，没有真实原始数据；未用包元数据替代。")
+            if raw is None and (spec.provider == "weir" or bundle.processing.provider == "weir"):
+                if not text_goals:
+                    raise InputError("Weir 原始数据需要与 context/markdown 一起采集。")
+                raw = collect_text(settings, spec, seed, work).data
+                if raw is None:
+                    raise SourceError("Weir 未交付真实原始数据。")
             if raw is None:
                 if seed.kind == "file" and Path(seed.value).suffix.lower() == ".json":
                     raw = json.loads(Path(seed.value).read_text(encoding="utf-8"))
@@ -553,6 +562,9 @@ def execute(
                 "execution_context": execution_context(settings, spec.provider, spec.inputs, scope=spec.execution_scope)
             }
         )
+    if spec.weir_max_credits is not None:
+        settings = settings.model_copy(deep=True)
+        settings.weir.task_credits = spec.weir_max_credits
     job = job or create_job(settings, spec)
     budget = TaskBudget(task_folder(settings, job.id), spec.max_cost)
     guard = nullcontext() if _locked else JobStore(settings.jobs_dir).lock(job.id)
@@ -628,6 +640,15 @@ def result_for(settings: SootaSettings, spec: TaskSpec, job: TaskJob) -> Command
         **budget.snapshot(),
         "actual_cost_usd": None,
     }
+    from soota.storage.credit_budget import CreditBudget
+
+    credits = CreditBudget(settings.data_dir / "billing" / "weir")
+    if credits.path.exists() and (
+        spec.provider == "weir" or any(step.provider == "weir" for row in selected for step in row.steps.values())
+    ):
+        with credits.locked():
+            task_identity = hashlib.sha256(str(task_folder(settings, job.id).resolve()).encode()).hexdigest()
+            data["weir_credits"] = credits.summary(task_identity)
     data["reserved_cost_usd"] = float(data["reserved_cost_usd"])
     if len(selected) == 1:
         data = {**selected[0].data, **data}
@@ -649,6 +670,7 @@ def resume(
     max_items: int | None = None,
     max_pages: int | None = None,
     max_cost: float | None = None,
+    weir_max_credits: int | None = None,
     workers: int | None = None,
     analysis: Path | None = None,
     force: bool = False,
@@ -665,6 +687,7 @@ def resume(
             max_items=max_items,
             max_pages=max_pages,
             max_cost=max_cost,
+            **({"weir_max_credits": weir_max_credits} if weir_max_credits is not None else {}),
             workers=workers,
             analysis=analysis,
             force=force,
@@ -675,6 +698,8 @@ def resume(
 
         if analysis is not None:
             raise InputError("旧目录任务不接受分析提交。")
+        if weir_max_credits is not None:
+            raise InputError("--weir-max-credits 仅适用于统一内容任务。")
         if workers is not None:
             raise InputError("--workers 仅适用于统一内容任务；目录枚举仍按顺序执行。")
         return resume_catalog(settings, job_id, max_items=max_items, max_pages=max_pages, max_cost=max_cost)
@@ -688,6 +713,7 @@ def resume(
                 "max_items": max_items,
                 "max_pages": max_pages,
                 "max_cost": max_cost,
+                "weir_max_credits": weir_max_credits,
                 "workers": workers,
             }.items()
             if value is not None
@@ -697,7 +723,11 @@ def resume(
             for info in job.enumeration.values()
             if isinstance(info, dict)
         )
-        if job.enumeration and (updates.keys() - {"workers"} or incomplete_enumeration) and analysis is None:
+        if (
+            job.enumeration
+            and (updates.keys() - {"workers", "weir_max_credits"} or incomplete_enumeration)
+            and analysis is None
+        ):
             job.expanded = False
         from soota.tasks.entry import execution_context
 

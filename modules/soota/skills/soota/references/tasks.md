@@ -83,3 +83,8 @@ Locate the LoreLab Skill with `lorelab skills list`; its `references/content.md`
 Historical semantic/export ingest calls, semantic/delivery job resumes and `soota render` only forward through hidden compatibility bridges, dynamically calling LoreLab in the same Python environment instead of choosing another executable from PATH. Missing LoreLab must produce an installation-required error before changing the task, budget or artifacts. Preserve original task/item IDs, source evidence, paths and cumulative reservations; do not edit a saved request to bypass this boundary. See [migration](../../../docs/knowledge.md).
 
 Report actual source-bundle paths and acquisition completion. A preserved historical analysis field, handoff file or capability listing is not proof of completed semantic writing or knowledge delivery.
+
+
+## Weir free-credit tasks
+
+Use `ingest URL --provider weir --want context --weir-max-credits N` for X status/Article carrier links and Reddit posts. Full-body acquisition can include `markdown,data`; data-only/native operations, search, comments and threads are not bound. `providers limits weir --monthly-credits N --task-credits N` configures local monthly/default task caps. Resume `--weir-max-credits N` sets a new cumulative total, never a fresh allowance. Free-only mode refuses paid tiers or purchased balances; no concurrent top-ups. `--max-cost 0` also blocks new credit calls, while valid caches remain usable. Usage includes uncertain reservations; never delete the ledger to retry. See [Weir](../../../docs/weir.md) for fee-estimate and cross-client boundaries.

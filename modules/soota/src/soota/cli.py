@@ -215,7 +215,7 @@ def ingest(
     vault: Annotated[Path | None, typer.Option("--vault", hidden=True, help="显式 Obsidian Vault 目录")] = None,
     subdir: Annotated[str, typer.Option("--subdir", hidden=True, help="Vault 内目录，不猜测分类")] = "Soota",
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/monid/http/local/downie")
+        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/monid/weir/http/local/downie")
     ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
@@ -225,6 +225,9 @@ def ingest(
     output: Annotated[Path | None, typer.Option("--output")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
     max_cost: Annotated[float | None, typer.Option("--max-cost")] = None,
+    weir_max_credits: Annotated[
+        int | None, typer.Option("--weir-max-credits", min=0, help="本任务 Weir credits 总上限")
+    ] = None,
     max_items: Annotated[int | None, typer.Option("--max-items")] = None,
     dry_run: Annotated[bool, typer.Option("--dry-run")] = False,
     force: Annotated[bool, typer.Option("--force")] = False,
@@ -273,6 +276,7 @@ def ingest(
         audio_provider=audio_provider,
         output=output,
         max_cost=max_cost,
+        weir_max_credits=weir_max_credits,
         dry_run=dry_run,
         force=force,
         prefer_youtube=prefer_youtube,
@@ -307,6 +311,9 @@ def jobs_resume(
     max_items: Annotated[int | None, typer.Option("--max-items", help="新的累计条数上限")] = None,
     max_pages: Annotated[int | None, typer.Option("--max-pages", help="新的累计页数上限")] = None,
     max_cost: Annotated[float | None, typer.Option("--max-cost", help="新的总费用上限，已有预留不会清零")] = None,
+    weir_max_credits: Annotated[
+        int | None, typer.Option("--weir-max-credits", min=0, help="新的 Weir credits 总上限，不清零历史用量")
+    ] = None,
     workers: Annotated[
         int | None, typer.Option("--workers", min=1, max=8, help="覆盖并保存条目并发数；默认沿用任务设置")
     ] = None,
@@ -321,6 +328,7 @@ def jobs_resume(
         max_items=max_items,
         max_pages=max_pages,
         max_cost=max_cost,
+        weir_max_credits=weir_max_credits,
         workers=workers,
         analysis=analysis,
         force=force,

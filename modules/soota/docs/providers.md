@@ -22,8 +22,8 @@ flowchart TD
     B --> H[有界条目调度：1–8 workers]
     H --> C[内容获取]
     H -.逐项进度合并与同目录串行.-> S[任务状态与内容包锁]
-    C -.计费请求前持久预留.-> Q[全批共享预算]
-    C --> D[内容处理]
+    C -.计费请求前持久预留.-> Q[全批 USD 预算与 Weir 月度/任务 credits]
+    C --> D[内容处理：含 Weir 正文绑定与目标 ID 校验]
     D --> E[校验与保存 context、媒体及所选产物]
     E -.请求分析、笔记、文章或大纲.-> F[外部 Agent 写作]
     F --> L[LoreLab content：校验提交、渲染与恢复]
@@ -36,7 +36,7 @@ flowchart TD
 | 黑盒 | 职责 | 代码入口 |
 | --- | --- | --- |
 | 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py` |
-| 采集任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py` |
+| 采集任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py`、`storage/credit_budget.py` |
 | 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |
 | 内容处理 | 字幕格式统一、本地转写、正文结构转换及媒体处理；默认不做语义改写 | `transcripts/`、`content/`、`media/` |
 | 校验与保存产物 | 校验文件与媒体，登记 v2 产物、来源及校验值，保护既有源文和文章 | `media/probe.py`、`artifacts/bundle.py` |
@@ -56,6 +56,10 @@ LoreLab 接收 Soota 内容包并通过 Cubox、幕布各自的 CLI 组织知识
 格式能力、解析限制和新增格式的位置以 [字幕格式与 context](subtitle-formats.md#统一转换层) 为准；获取工具顺序与格式获取偏好都属于内容获取黑盒。
 
 字幕路径按平台及能力的费用或手动规则排序，免费来源默认优先，可选 Monid 与 TikHub 均受费用策略约束；媒体、正文和原生数据分别使用对应能力，不能将同一个排序套用于所有步骤。MCP 默认停用。显式来源严格保留，获取失败不会自动重新从其他 Provider 获取。业务入口见 [功能入口与费用策略](features.md)，组合任务和能力发现见 [统一内容任务](tasks.md)。
+
+## Weir 正文来源
+
+`providers/weir.py` 获取原始单项数据并执行免费余额检查；`content/weir.py` 核对帖子/Article 身份、确定性绑定全文并写入有效缓存；`storage/credit_budget.py` 负责跨任务月度与任务累计 credits 的锁内预留和核账。它们复用统一任务/原文包，不包含语义生成。配置、能力和边界见 [Weir](weir.md)。
 
 ## 当前接入范围
 
@@ -229,6 +233,7 @@ uv run soota runtime rollback --json
 | `content/` | 本机能力发现、显式原生读取及受控结果转换 |
 | `media/` | 本地或远程媒体获取、合并、抽音轨及实际文件验证 |
 | `artifacts/` | v1/v2 原文内容包、来源证据与产物哈希；保留旧分析字段的数据兼容 |
+| `storage/credit_budget.py` | Weir 跨任务月度／任务 credits 预留、核账和未决请求保留 |
 | `storage/task_budget.py` | 全批计费请求的原子预留和恢复预算 |
 | `providers/router.py` | 能力选择、元数据兜底和请求预算 |
 | `mcp_cli.py` | 按需发现并调用 MCP 只读站点命令 |

@@ -73,6 +73,7 @@ class TaskSpec(BaseModel):
     workers: int = Field(default=1, ge=1, le=8, strict=True)
     max_bytes: int = Field(default=2 * 1024**3, ge=1)
     max_cost: FiniteFloat | None = Field(default=None, ge=0)
+    weir_max_credits: int | None = Field(default=None, ge=0, strict=True)
     force: bool = False
     prefer_youtube: bool | None = None
     exclude_promotions: bool | None = None
@@ -113,6 +114,7 @@ class TaskSpec(BaseModel):
             "yt-dlp",
             "tikhub",
             "monid",
+            "weir",
             "local",
             "http",
             "downie",

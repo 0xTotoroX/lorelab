@@ -234,3 +234,15 @@ Soota 的 `--output` / `SOOTA_OUTPUT_DIR` 只设置采集包位置；整包导�
 任务执行位于 `tasks/`，正文结果绑定与发现位于 `content/`，字幕转换位于 `transcripts/`，共享媒体处理位于 `media/`，原文内容包和文件校验位于 `artifacts/`；语义提交、渲染与整包导出位于 LoreLab content，知识文章、学习与交付位于 LoreLab knowledge/study，见[职责图](providers.md#处理流程与职责)。费用预留复用 TikHub 发送前入口，统一任务账本位于 `storage/task_budget.py`。
 
 自动测试使用合成内容、模拟网络响应和本地媒体样本，检查费用、恢复、文件与证据契约。它们不证明某个真实网站已登录、某份视频已完整下载或付费接口当前可用；应按实际来源单独记录运行验收。
+
+
+## Weir credits 任务限额
+
+可选 `--provider weir` 从 X 帖子／Article、Reddit 帖子读取正文：
+
+```sh
+soota ingest "帖子 URL" --provider weir --want context,markdown,data --weir-max-credits 50 --json
+soota jobs resume JOB_ID --weir-max-credits 100 --json
+```
+
+`providers limits weir --monthly-credits N --task-credits N` 配置跨任务月度上限和新任务默认上限；单任务参数覆盖默认值，续跑参数是新总上限。所有 worker 共用持久账本，跨月不清除任务累计，缓存不重复扣费。`weir_credits` 分别报告实际扣费、未决预留及累计值；不能把 credits 混入 USD 估算。默认仅免费模式，付费等级或购买余额会被拒绝；`--max-cost 0` 继续禁止新的 credits 计费请求。来源、计费估算、外部并发和失败恢复的完整边界见 [Weir](weir.md)。

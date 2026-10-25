@@ -25,6 +25,8 @@ For requested saved analysis, notes, articles, outlines or export, hand the retu
 
 The existing single-video command without `--want` remains available: `ingest URL --transcript captions-only|auto|asr|none --json`. Use `inspect URL --json` for metadata only. Use `doctor --json` when required runtimes are unknown.
 
+For optional X/Reddit body acquisition, Weir supports `ingest URL --provider weir --want context` (or `context,markdown,data`). Read [Weir limits](../../docs/weir.md) before enabling it. It is disabled by default and only supports free workspaces; never turn on paid use. Configure monthly/default task credits with `providers limits weir`; `--weir-max-credits` is a task total retained on resume. Do not guess limits, erase uncertain reservations, or use a balance snapshot as proof of atomic free-only billing. No top-ups during a free-only run. It does not provide search, comment/thread enumeration or media downloads through this integration.
+
 ## Acquisition and failures
 
 Windows core commands, durable task locks and UTF-8 records are supported. Downie, Keychain and MLX remain Mac-only. External yt-dlp media downloads and FFmpeg extraction/muxing currently stop before dispatch on Windows because a hard file-size cap cannot be enforced; existing media verification, bounded HTTP files and captions remain available. Report this limitation and preserve required targets and budgets; do not bypass it with an unbounded external command. See [task workflow](references/tasks.md).
