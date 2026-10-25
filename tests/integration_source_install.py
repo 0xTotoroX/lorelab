@@ -146,7 +146,9 @@ def main():
                    platform=sys.platform, cloud_writes=0,
                    build_counter_changes=[p for p, value in snapshot(counters).items() if counters_before[p] != value])
     (base / "result.json").write_text(json.dumps(results, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps(results, ensure_ascii=False, indent=2))
+    # CI may capture stdout with a legacy Windows encoding; the UTF-8 artifact above
+    # retains readable paths, while escaped JSON is safe on every console.
+    print(json.dumps(results, indent=2))
 
 
 if __name__ == "__main__":
