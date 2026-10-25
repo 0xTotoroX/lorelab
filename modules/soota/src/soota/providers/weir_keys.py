@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 from collections.abc import Iterator
@@ -46,6 +47,10 @@ def _valid_key(key: str) -> bool:
 
 def _path(settings: SootaSettings) -> Path:
     return settings.config_dir / "credentials" / "weir-keys.json"
+
+
+def _cursor_path(settings: SootaSettings) -> Path:
+    return settings.config_dir / "credentials" / "weir-cursor.json"
 
 
 def _read(settings: SootaSettings) -> KeyFile:
@@ -92,6 +97,25 @@ def load_keys(settings: SootaSettings) -> list[WeirKey]:
     return unique
 
 
+def next_start_index(settings: SootaSettings, count: int, *, advance_from: int | None = None) -> int:
+    """Persist and return the next round-robin start under the pool lock."""
+    if count <= 1:
+        return 0
+    with _locked(settings):
+        if advance_from is None:
+            try:
+                value = json.loads(_cursor_path(settings).read_text(encoding="utf-8"))
+                start = value["next_index"] if isinstance(value, dict) else 0
+            except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+                start = 0
+            start = start if isinstance(start, int) and not isinstance(start, bool) and start >= 0 else 0
+        else:
+            start = advance_from
+        atomic_write(_cursor_path(settings), json.dumps({"next_index": (start + 1) % count}) + "\n")
+        _cursor_path(settings).chmod(0o600)
+        return start % count
+
+
 @contextmanager
 def _locked(settings: SootaSettings) -> Iterator[None]:
     root = _path(settings).parent
@@ -121,8 +145,6 @@ def save_key(settings: SootaSettings, name: str, key: str) -> None:
 
 
 def _save(settings: SootaSettings, pool: KeyFile) -> None:
-    import json
-
     payload = {
         "version": 1,
         "keys": [dict(name=k.name, key=k.key.get_secret_value(), enabled=k.enabled) for k in pool.keys],
@@ -148,5 +170,6 @@ def inventory(settings: SootaSettings, *, enable: str | None = None, disable: st
             "environment_override": "WEIR_API_KEY" in os.environ,
             "effective_order": [k.name for k in effective],
             "backups": [dict(name=k.name, enabled=k.enabled) for k in pool.keys],
+            "rotation": "round_robin",
             "failover_on": [401],
         }

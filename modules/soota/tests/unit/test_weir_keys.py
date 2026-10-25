@@ -89,6 +89,22 @@ def test_401_moves_to_backup_and_records_shared_task_credits(settings, pool, sta
     assert len(calls) == before
 
 
+def test_round_robin_advances_after_each_successful_data_request(settings, pool):
+    calls = pool(
+        lambda key, r: httpx.Response(200, json={"data": free_usage()})
+        if r.url.path == "/v1/usage"
+        else response(r)
+    )
+    assert capture(settings, URL).body == "Full source body."
+    assert capture(settings, "https://x.com/example/status/124").body == "Full source body."
+    assert [key for key, path in calls if path.startswith("/v1/x/")] == [
+        "synthetic-primary",
+        "synthetic-backup",
+    ]
+    with budget(settings).locked() as ledger:
+        assert {r.key_name for r in ledger.state.requests} == {"default", "backup"}
+
+
 @pytest.mark.parametrize("status", [402, 403, 404, 429, 500, 503])
 def test_non_auth_errors_do_not_rotate_accounts(settings, pool, status):
     calls = pool(
@@ -273,6 +289,24 @@ def test_environment_override_does_not_silently_fall_back(settings, pool, monkey
     with pytest.raises(InputError):
         capture(settings, URL)
     assert len(calls) == 1
+
+
+def test_round_robin_401_uses_next_key_and_persists_success_position(settings, pool):
+    def reply(key, request):
+        if request.url.path != "/v1/usage":
+            return response(request)
+        return (
+            httpx.Response(200, json={"data": free_usage()})
+            if key == "synthetic-backup"
+            else httpx.Response(401)
+        )
+
+    calls = pool(reply)
+    assert capture(settings, URL).body == "Full source body."
+    assert calls[0][0] == "synthetic-primary"
+    assert capture(settings, "https://x.com/example/status/124").body == "Full source body."
+    assert calls[-2][0] == "synthetic-backup"
+    assert json.loads((settings.config_dir / "credentials" / "weir-cursor.json").read_text())["next_index"] == 0
 
 
 def test_corrupt_pool_and_invalid_names_never_expose_secrets(settings, pool):

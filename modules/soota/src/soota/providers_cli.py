@@ -141,7 +141,7 @@ def keys(
         if name != "weir":
             raise InputError("备用 Key 管理当前适用于 Weir。")
         data = inventory(load_settings(), enable=enable_key, disable=disable_key)
-        return result("主用优先，仅认证 401 切备用；余额不足、限流、上游错误及未知扣费均停止。", data)
+        return result("按配置顺序持久轮询；认证 401 跳到下一个，余额不足、限流、上游错误及未知扣费均停止。", data)
 
     run(json_output, inspect)
 

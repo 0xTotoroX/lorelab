@@ -59,7 +59,7 @@ LoreLab 接收 Soota 内容包并通过 Cubox、幕布各自的 CLI 组织知识
 
 ## Weir 正文来源
 
-`providers/weir_keys.py` 管理私有主用／命名备用凭据及脱敏清单；`providers/weir.py` 获取原始单项数据、检查免费余额，仅在认证 401 时切换备用；`content/weir.py` 核对帖子/Article 身份、确定性绑定全文并写入有效缓存；`storage/credit_budget.py` 负责跨任务／Key 的 UTC 自然月与任务累计 credits 锁内预留、Key 名称归属和核账。它们复用统一任务/原文包，不包含语义生成。配置、能力和边界见 [Weir](weir.md)。
+`providers/weir_keys.py` 管理私有主用／命名备用凭据及脱敏清单；`providers/weir.py` 获取原始单项数据、检查免费余额，按配置顺序持久轮询并在认证 401 时跳到下一个；`content/weir.py` 核对帖子/Article 身份、确定性绑定全文并写入有效缓存；`storage/credit_budget.py` 负责跨任务／Key 的 UTC 自然月与任务累计 credits 锁内预留、Key 名称归属和核账。它们复用统一任务/原文包，不包含语义生成。配置、能力和边界见 [Weir](weir.md)。
 
 ## 当前接入范围
 

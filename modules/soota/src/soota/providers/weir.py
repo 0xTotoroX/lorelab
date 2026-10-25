@@ -18,7 +18,7 @@ import httpx
 from soota.billing import selected_provider
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, SourceError
-from soota.providers.weir_keys import WeirKey, load_keys
+from soota.providers.weir_keys import WeirKey, load_keys, next_start_index
 from soota.storage.credit_budget import CreditBudget
 from soota.storage.task_budget import active_task_identity
 
@@ -65,9 +65,9 @@ class WeirClient:
         selected_provider(settings, "weir")
         self.settings = settings
         self.credentials = load_keys(settings) if credentials is None else credentials
-        self.index = 0
         if not self.credentials:
             raise AuthBudgetError("缺少 Weir API Key；设置 WEIR_API_KEY 或使用 soota providers auth weir。")
+        self.index = next_start_index(settings, len(self.credentials))
         self.budget = CreditBudget(settings.data_dir / "billing" / "weir")
         task = active_task_identity() or uuid4().hex
         self.task = hashlib.sha256(task.encode()).hexdigest()
@@ -138,5 +138,11 @@ class WeirClient:
                     if not charged.isascii() or not charged.isdigit():
                         raise ContractError("Weir 缺少有效扣费回执，保留最大预留。")
                     budget.settle(reservation, int(charged))
+                    self.complete()
                     return self._data(response)
             raise AuthBudgetError("所有已配置 Weir Key 均认证失败；请更新凭据。", details={"status": 401})
+
+    def complete(self) -> None:
+        """Persist the next successful position for other local processes."""
+        if len(self.credentials) > 1:
+            next_start_index(self.settings, len(self.credentials), advance_from=self.index)
