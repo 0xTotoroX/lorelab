@@ -31,7 +31,7 @@ jobs:
       - name: Install media test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends ffmpeg
+          sudo apt-get install --yes --no-install-recommends ffmpeg yt-dlp
       - name: Verify source, Skill and synchronization
         run: |
           .venv/bin/python -m lorelab.cli components verify

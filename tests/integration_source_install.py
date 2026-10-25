@@ -47,6 +47,8 @@ def main():
             # os.environ retains Windows' case-insensitive lookup; a plain dict does not.
             system = Path(os.environ["SystemRoot"]) / "System32"
             env["PATH"] = os.pathsep.join(map(str, [system, system / "WindowsPowerShell/v1.0", Path(git).parent]))
+            # Do not inherit PowerShell 7's module search path into Windows PowerShell 5.1.
+            env["PSMODULEPATH"] = str(system / "WindowsPowerShell/v1.0/Modules")
         else:
             env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
     results = {}
@@ -74,6 +76,7 @@ def main():
     if windows and args.windows_code_page:
         wrapper = base / "legacy-code-page.ps1"
         wrapper.write_text(
+            "$ErrorActionPreference = 'Stop'\n"
             "$originalCodePage = [Console]::OutputEncoding.CodePage\n"
             "try {\n"
             f"  & chcp.com {args.windows_code_page} | Out-Null\n"
