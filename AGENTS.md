@@ -15,7 +15,7 @@ Python 3.12+ 产品层 + Go Cubox CLI + Python Soota / 幕布 CLI。
 
 本仓库是产品开发主源。`components.lock.json` 记录导入来源提交及当前源码指纹，修改组件或 Skill 时同步刷新并验收。原作者仓库仅为人工选择的补丁来源。独立源码导出与组件命令必须持续可用。
 
-Soota 源码、测试、文档与 Skill 只修改 `modules/soota/`。独立 Soota 仓库是单向生成的发行出口；`components sync soota` 从已提交、指纹一致的主源生成后继提交，保留原历史，拒绝独立修改、倒退与强推。`release prepare/publish` 统一准备两包版本和配对标签，GitHub 工作流分发源码与纯 Skill 插件；具体契约见 `docs/releases.md`。首次历史接入只保留原提交图，不以旧根目录覆盖产品源码。
+Cubox、Soota、幕布的源码、测试、文档与 Skill 只修改对应 `modules/cubox-cli/`、`modules/soota/`、`modules/mubu-cli/`。三个独立仓库都是单向生成的发行出口；`components sync {cubox,soota,mubu}` 从已提交、指纹一致的主源生成后继提交，保留原历史，拒绝独立修改、倒退与强推。`release prepare/publish` 统一准备两包版本和配对标签，GitHub 工作流分发源码与纯 Skill 插件；具体契约见 `docs/releases.md`。首次历史接入只保留原提交图，不以旧根目录覆盖产品源码。
 
 所有个人账号、路径、原始收藏、执行记录与发布草稿保存到用户配置/状态目录，不进入本仓库或发行包。公开文档不写个人计划。流程默认保留收藏；仅按当前用户明确授权执行已核对项目的清理，GitHub 项目保护与资料不全保留由流程校验。
 

@@ -6,7 +6,7 @@
 - `cli.py`：安装检查、组件与 Skill 管理；content/knowledge/study 以及 init/batch 别名进入产品工作流。
 - `runtime.py`：受管组件版本绑定和命令转交；知识配置委派产品 knowledge 模块。
 - `components.py`：组件及 Skill 指纹、来源记录与独立源码导出。
-- `component_sync.py`：已提交 Soota 的单向导出、历史衔接、分歧检查与普通快进推送。
+- `component_sync.py`：已提交 Cubox、Soota、幕布的单向导出、历史衔接、分歧检查与普通快进推送。
 - `release_versions.py`：两包版本、Python/uv 元数据和组件锁的一次性准备及回滚。
 - `releases.py`：两仓库标签预检、配对发布与中断后核对恢复；不覆盖既有版本。
 - `maintenance.py`：源码/旧包 setup/update 参数及受管 prefix 定位，复用 packaging 安装器。

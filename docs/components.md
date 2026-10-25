@@ -1,6 +1,6 @@
 # 组件维护与独立导出
 
-LoreLab 的产品源码是维护主源。组件在 `modules/` 保留构建文件、独立入口、Skill、引用文档、测试与许可证；原作者仓库只用于人工选择补丁。`verify/refresh/export` 保持本地操作；Soota 的 `sync` 入口和 GitHub 工作流负责单向同步独立仓库，`release` 统一准备版本与发布，见[同步与发布](releases.md)。不自动合并外部修改或安装原作者发行包。
+LoreLab 的产品源码是维护主源。组件在 `modules/` 保留构建文件、独立入口、Skill、引用文档、测试与许可证；原作者仓库只用于人工选择补丁。`verify/refresh/export` 保持本地操作；三个组件的 `sync` 入口和 GitHub 工作流负责单向同步各自独立仓库；`release` 仅统一准备 LoreLab 与 Soota 的版本与发布，见[同步与发布](releases.md)。不自动合并外部修改或安装原作者发行包。
 
 ## 指纹和来源
 

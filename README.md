@@ -169,10 +169,12 @@ lorelab components verify
 lorelab components export soota /path/to/new-soota-checkout
 ```
 
-开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁并提交。Soota 的自动同步与正式发布使用同一份已提交源码：
+开发时修改 `modules/` 内对应组件及 Skill，完成检查后刷新组件锁并提交。三个组件自动同步使用已提交的主源；正式配对发布仍限于 LoreLab 与 Soota：
 
 ```sh
 lorelab components refresh --source /path/to/lorelab
+lorelab components sync cubox --source /path/to/lorelab
+lorelab components sync mubu --source /path/to/lorelab
 lorelab components sync soota --source /path/to/lorelab
 lorelab components sync soota --source /path/to/lorelab --execute
 # 发布准备示例，两个版本号可不同：
@@ -197,7 +199,7 @@ python3 packaging/build_plugin.py --output-dir dist
 | 安装、更新、恢复与源码构建 | [安装说明](docs/installation.md) |
 | 四套独立 Skill 的插件与源码安装 | [插件说明](docs/plugins.md) |
 | 版本绑定、组件维护与独立导出 | [组件维护](docs/components.md) |
-| Soota 单主源、自动同步与统一发布 | [同步与发布](docs/releases.md) |
+| 组件单主源、自动同步与两包发布 | [同步与发布](docs/releases.md) |
 | 采集目标、任务状态与恢复 | [Soota 任务文档](modules/soota/docs/tasks.md) |
 | 单来源分析、笔记、文章、渲染与导出 | [LoreLab 内容处理](docs/content.md) |
 | 知识文章、学习任务与交付核对 | [LoreLab 知识流程](docs/knowledge.md) |

@@ -56,7 +56,7 @@ LoreLab content 负责单来源分析、笔记、文章、大纲与整包导出�
 
 安装或维护授权不额外授权语义改写、知识库写入、云端发布或删除来源。
 
-组件源码和对应 Skill 在 `modules/` 内维护；语义校验、渲染与导出源码在 `src/lorelab/content/`，知识与学习工作流在 `src/lorelab/knowledge/`；流程和提示词在本 Skill 中维护。Soota 的唯一修改入口是 `modules/soota/`，独立仓库由单向同步生成；开发、同步或发布时读[同步与发布](../../docs/releases.md)。审阅验证后刷新组件锁并提交，`components sync soota --source CHECKOUT` 默认预览，`--execute` 才推送；`release prepare/publish` 联动两包版本和标签。独立修改、过期源或标签冲突先停止核对，不强推、不改回执跳过校验。`components export` 仍只导出完整源码及 Skill，不自行推送。同步/发布授权与用户内容交付授权分别核对；版本就绪不代表云端工作流已启用。
+组件源码和对应 Skill 在 `modules/` 内维护；语义校验、渲染与导出源码在 `src/lorelab/content/`，知识与学习工作流在 `src/lorelab/knowledge/`；流程和提示词在本 Skill 中维护。三个组件的唯一修改入口是对应 `modules/cubox-cli/`、`modules/soota/`、`modules/mubu-cli/`，独立仓库由单向同步生成；开发、同步或发布时读[同步与发布](../../docs/releases.md)。审阅验证后刷新组件锁并提交，`components sync NAME --source CHECKOUT`（NAME 为 cubox、soota 或 mubu） 默认预览，`--execute` 才推送；`release prepare/publish` 仍只联动 LoreLab 与 Soota 两包版本和标签。独立修改、过期源或标签冲突先停止核对，不强推、不改回执跳过校验。`components export` 仍只导出完整源码及 Skill，不自行推送。同步/发布授权与用户内容交付授权分别核对；版本就绪不代表云端工作流已启用。
 
 维护开发仓库时，`components verify/refresh/export` 显式带 `--source CHECKOUT`；省略时使用当前绑定源码，不能把已安装的快照当作开发主源。
 

@@ -14,7 +14,7 @@
         "name": "cubox",
         "path": "modules/cubox-cli/skills/cubox"
       },
-      "tree_sha256": "2f8e35eb229f0c38117c8983c1d69a727ff11c8a2269d7fcf1266393d1cacd3f",
+      "tree_sha256": "ba79b25102daf0bf1456ea04e70827fd32282502b7854e272d7ecb14f46ed35a",
       "import_version": "1.0.10+fork.d9e6edb"
     },
     "soota": {
@@ -30,14 +30,14 @@
     },
     "mubu": {
       "path": "modules/mubu-cli",
-      "repository": "https://github.com/0xTotoroX/mubu-cli.git",
+      "repository": "git@github.com:0xTotoroX/mubu-cli.git",
       "revision": "bfa8bb6bc62d6b0ec9083e24694583539d0eaa74",
       "version": "1.4.0+bfa8bb6",
       "skill": {
         "name": "mubu-integration",
         "path": "modules/mubu-cli"
       },
-      "tree_sha256": "4622d468a132a7f4b0b59a265a9796663818a052a5fb0d73ce812315f5621b48"
+      "tree_sha256": "5c912e0fce95dbdd688074c4159ff0e7bfe3f23d07c0b6a8a2b488c31167ff22"
     }
   }
 }

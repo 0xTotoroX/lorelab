@@ -1,6 +1,6 @@
 """[INPUT]: 已提交的产品源码、组件锁和明确的独立 Git 仓库。
 [OUTPUT]: 保留原历史的组件同步预览、提交与远端回读。
-[POS]: 单向同步边界；复用组件导出，不 checkout 用户仓库或强推历史。
+[POS]: Cubox、Soota、幕布共用的单向同步边界；复用组件导出，不 checkout 用户仓库或强推历史。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 
@@ -88,14 +88,14 @@ def tree_entries(root: Path, revision: str) -> dict[str, tuple[str, str]]:
     return entries
 
 
-def _check_previous(root: Path, bare: Path, tip: str, entry: dict, source: str) -> dict | None:
+def _check_previous(root: Path, bare: Path, tip: str, name: str, source: str) -> dict | None:
     entries = tree_entries(bare, tip)
     if components.PROVENANCE_FILE not in entries:
         return None
     previous = json.loads(git(bare, "show", f"{tip}:{components.PROVENANCE_FILE}"))
     sync = previous.get("sync", {})
     prior_source = sync.get("source_commit", "")
-    if (previous.get("component") != "soota" or sync.get("schema_version") != 1
+    if (previous.get("component") != name or sync.get("schema_version") != 1
             or not re.fullmatch(r"[0-9a-f]{40,64}", prior_source)):
         raise ValueError("standalone provenance is not managed by LoreLab sync")
     message = git(bare, "log", "-1", "--format=%B", tip)
@@ -105,11 +105,11 @@ def _check_previous(root: Path, bare: Path, tip: str, entry: dict, source: str) 
     if set(entries) != set(files) | {components.PROVENANCE_FILE}:
         raise ValueError("standalone source file set differs from its sync receipt")
     modes = sync.get("modes", {})
-    for name, expected in files.items():
-        blob = subprocess.run(["git", "-C", str(bare), "cat-file", "blob", entries[name][1]],
+    for path, expected in files.items():
+        blob = subprocess.run(["git", "-C", str(bare), "cat-file", "blob", entries[path][1]],
                               capture_output=True, check=True).stdout
-        if hashlib.sha256(blob).hexdigest() != expected or modes.get(name) != entries[name][0]:
-            raise ValueError(f"standalone source or Skill changed outside LoreLab: {name}")
+        if hashlib.sha256(blob).hexdigest() != expected or modes.get(path) != entries[path][0]:
+            raise ValueError(f"standalone source or Skill changed outside LoreLab: {path}")
     if components._tree_sha256(files) != previous.get("tree_sha256"):
         raise ValueError("standalone sync receipt fingerprint is invalid")
     # 拒绝较旧的 CI 任务覆盖较新的主源；需要完整 LoreLab 历史。
@@ -142,9 +142,10 @@ class SyncPlan:
     fingerprint: str
     version: str
     fixed_tag: bool = False
+    name: str = "soota"
 
     def report(self, *, executed: bool = False, tag: str | None = None) -> dict:
-        return {"ok": True, "component": "soota", "repository": self.target,
+        return {"ok": True, "component": self.name, "repository": self.target,
                 "branch": self.branch, "previous_commit": self.old, "commit": self.commit,
                 "source_commit": self.source, "tree_sha256": self.fingerprint, "version": self.version,
                 "changed": not self.fixed_tag and self.old != self.commit, "executed": executed, "tag": tag,
@@ -178,14 +179,16 @@ class SyncPlan:
 
 
 @contextlib.contextmanager
-def plan(root: Path, *, target: str | None = None, branch: str | None = None, tag: str | None = None):
+def plan(root: Path, *, name: str = "soota", target: str | None = None, branch: str | None = None, tag: str | None = None):
     root = root.resolve()
     source = clean_source(root)
     lock = components._load(root)
-    entry = lock["components"]["soota"]
+    if name not in lock["components"]:
+        raise ValueError(f"unknown component: {name}")
+    entry = lock["components"][name]
     target = repository(target or entry["repository"])
     branch = branch or entry.get("sync", {}).get("branch", "main")
-    with tempfile.TemporaryDirectory(prefix="lorelab-soota-sync-") as temporary:
+    with tempfile.TemporaryDirectory(prefix=f"lorelab-{name}-sync-") as temporary:
         base = Path(temporary)
         bare = base / "mirror.git"
         bare.mkdir()
@@ -197,7 +200,7 @@ def plan(root: Path, *, target: str | None = None, branch: str | None = None, ta
         if tag and remote_refs(bare, target, ref(bare, "tags", tag)):
             git(bare, "fetch", "--no-tags", "--", target, ref(bare, "tags", tag))
             tag_tip = git(bare, "rev-parse", "FETCH_HEAD^{commit}")
-        previous = _check_previous(root, bare, tag_tip or tip, entry, source)
+        previous = _check_previous(root, bare, tag_tip or tip, name, source)
         if tag_tip and previous is None:
             raise ValueError(f"{tag} already names a different standalone version without a managed receipt")
         parent = tip
@@ -212,19 +215,19 @@ def plan(root: Path, *, target: str | None = None, branch: str | None = None, ta
                 git(bare, "merge-base", "--is-ancestor", tip, baseline)
                 parent = baseline
         exported = base / "source"
-        components.export_component(root, "soota", exported)
+        components.export_component(root, name, exported)
         provenance_path = exported / components.PROVENANCE_FILE
         provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
         # 每一份有效源文件必须来自此提交；不能把 ignored/untracked 文件夹带进发行仓库。
         committed = tree_entries(root, f"{source}:{entry['path']}")
         modes = {}
-        for name in provenance["files"]:
-            if name not in committed:
-                raise ValueError(f"component export contains an uncommitted file: {name}")
-            mode, oid = committed[name]
-            if git(root, "hash-object", "--no-filters", str(exported / name)) != oid:
-                raise ValueError(f"component working bytes differ from the committed source: {name}")
-            modes[name] = mode
+        for path in provenance["files"]:
+            if path not in committed:
+                raise ValueError(f"component export contains an uncommitted file: {path}")
+            mode, oid = committed[path]
+            if git(root, "hash-object", "--no-filters", str(exported / path)) != oid:
+                raise ValueError(f"component working bytes differ from the committed source: {path}")
+            modes[path] = mode
         same = (previous and previous["tree_sha256"] == provenance["tree_sha256"]
                 and previous["sync"]["modes"] == modes and previous["version"] == entry["version"])
         if same:
@@ -240,16 +243,17 @@ def plan(root: Path, *, target: str | None = None, branch: str | None = None, ta
             identity = {"GIT_AUTHOR_NAME": "LoreLab Sync", "GIT_AUTHOR_EMAIL": "sync@lorelab.invalid",
                         "GIT_COMMITTER_NAME": "LoreLab Sync", "GIT_COMMITTER_EMAIL": "sync@lorelab.invalid",
                         "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
-            message = (f"chore(sync): Soota from LoreLab {source[:12]}\n\n"
+            label = {"soota": "Soota", "cubox": "Cubox CLI", "mubu": "Mubu CLI"}.get(name, name)
+            message = (f"chore(sync): {label} from LoreLab {source[:12]}\n\n"
                        f"LoreLab-Source: {source}\nLoreLab-Tree: {provenance['tree_sha256']}\n")
             commit = git(bare, "commit-tree", tree, "-p", parent, data=message.encode(), env=identity)
         if clean_source(root) != source:
             raise ValueError("source changed while preparing synchronization")
         yield SyncPlan(bare, target, branch, tip, commit, source, provenance["tree_sha256"], entry["version"],
-                       fixed_tag=tag_tip is not None)
+                       fixed_tag=tag_tip is not None, name=name)
 
 
-def synchronize(root: Path, *, target: str | None = None, branch: str | None = None,
+def synchronize(root: Path, *, name: str = "soota", target: str | None = None, branch: str | None = None,
                 execute: bool = False) -> dict:
-    with plan(root, target=target, branch=branch) as prepared:
+    with plan(root, name=name, target=target, branch=branch) as prepared:
         return prepared.push() if execute else prepared.report()

@@ -1,25 +1,28 @@
-# Soota 单主源同步与统一发布
+# 组件单主源同步与统一发布
 
-Soota 源码和完整 Skill 只在 LoreLab 的 `modules/soota/` 修改。独立 Soota 仓库保留历史并接受单向生成的提交；独立安装和 LoreLab 成套安装使用相同组件。Cubox、幕布的独立导出保留，本流程不自动推送它们的仓库。
+Cubox、Soota、幕布的源码和完整 Skill 只在 LoreLab 的对应 `modules/` 目录修改。三个独立仓库保留各自历史并接受单向生成的提交；独立安装和 LoreLab 成套安装使用相同组件。源码同步覆盖三个组件，配对版本发布仍只覆盖 LoreLab 与 Soota，不自动发布 Cubox 或幕布的标签、Release 或 npm 包。
 
 ## 日常修改与自动同步
 
-1. 修改 `modules/soota/` 内的源码、测试、文档和 Skill，运行受影响检查。
+1. 修改 `modules/cubox-cli/`、`modules/soota/` 或 `modules/mubu-cli/` 内的源码、测试、文档和 Skill，运行受影响检查。
 2. 运行 `lorelab components refresh --source /path/to/lorelab`，审查 diff 后提交。显式指定开发主源，避免把已安装的受管快照当作编辑入口；刷新指纹不代表发布新版本。
-3. 启用 GitHub 工作流后，推送 `main` 中相关改动会运行组件、Skill、同步边界与 Soota 测试，通过后执行 `components sync soota`。主源必须是干净、已提交且指纹一致的 LoreLab checkout。
+3. 启用 GitHub 工作流后，推送 `main` 中相关改动会运行组件、Skill、同步边界与对应组件测试，通过后执行 `components sync NAME`。主源必须是干净、已提交且指纹一致的 LoreLab checkout。
 
 手动执行同一个入口可预览或恢复；预览获取远端状态并创建临时 Git 对象，不写入目标仓库或用户工作区：
 
 ```sh
+lorelab components sync cubox --source /path/to/lorelab
+lorelab components sync mubu --source /path/to/lorelab
 lorelab components sync soota --source /path/to/lorelab
-lorelab components sync soota --source /path/to/lorelab --execute
+# NAME 为 cubox、mubu 或 soota；已授权写入时：
+lorelab components sync NAME --source /path/to/lorelab --execute
 ```
 
-默认目标与导入基线来自 `components.lock.json.components.soota`。`--repository` / `--branch` 可指向隔离验收仓库；默认分支为 `main`，也可在组件条目的 `sync.branch` 设置。需要调整首次基线时显式审阅并记录 `sync.initial_revision`，不改写历史导入 `revision`。
+默认目标与导入基线来自 `components.lock.json.components[NAME]`。`--repository` / `--branch` 可指向隔离验收仓库；默认分支为 `main`，也可在组件条目的 `sync.branch` 设置。需要调整首次基线时显式审阅并记录 `sync.initial_revision`，不改写历史导入 `revision`。
 
-源文件必须实际属于当前提交。导出复用组件文件闭包，附带 `lorehub-provenance.json`：原导入提交、当前组件指纹、主源提交、各文件 hash/mode 和 Skill 路径。提交以原 Soota 历史为父，使用普通快进推送；不 force push、不创建第二套采集实现、不改独立 checkout。未改组件的产品提交不产生额外同步提交。
+源文件必须实际属于当前提交。导出复用组件文件闭包，附带 `lorehub-provenance.json`：原导入提交、当前组件指纹、主源提交、各文件 hash/mode 和 Skill 路径。提交以对应组件的原历史为父，使用普通快进推送；不 force push、不创建第二套采集实现、不改独立 checkout。未改组件的产品提交不产生额外同步提交。
 
-后续同步核对前次回执、文件、权限和主源祖先关系。独立仓库出现直接修改、并发分歧或较旧流水线试图覆盖新来源时停止，保留现状。先审阅并把有效修复带回主源，再处理发行分支；不要通过重新设置首次基线或删除回执跳过检查。
+后续同步核对组件名称、前次回执、文件、权限和主源祖先关系，防止把一种组件写入另一种组件的受管仓库。独立仓库出现直接修改、并发分歧或较旧流水线试图覆盖新来源时停止，保留现状。先审阅并把有效修复带回主源，再处理发行分支；不要通过重新设置首次基线或删除回执跳过检查。
 
 ## 一次准备两包版本
 
@@ -54,10 +57,10 @@ GitHub 的 **Publish LoreLab and Soota** 工作流在选定提交上运行验证
 ## 首次接线
 
 - 为 LoreLab 配置真实可访问的 Git 远端，不从产品名猜测发布地址。
-- 首次 Soota 目标可以等于导入基线，或是该基线的祖先。后者要求原历史已完整接入 LoreLab 提交图，才能保留原仓库尚未推送的提交。先审查历史内容，在干净源码上 fetch 原仓库后用 `git merge --strategy=ours --allow-unrelated-histories --no-ff` 保留其历史；核对合并前后产品 tree 完全相同。仅在首次迁移且基线已核实时这样处理，不能拿它吞掉后续独立修改。
-- 工作流 `checkout` 使用完整历史。主源中现存的 `sync-soota.yml` 与 `release.yml` 共用 `soota-distribution` 并发组，不中断执行中的发布。
-- 源码同步优先设置 `SOOTA_SYNC_SSH_KEY`：生成专用 SSH 密钥，把公钥作为允许写入的 Deploy key 加到独立 Soota 仓库，私钥作为 Actions Secret 加到 LoreLab 仓库。这把密钥只授权目标仓库；工作流核验 GitHub 主机公钥，结束后删除临时私钥文件。GitHub 更换主机公钥时，须经官方渠道核实后更新固定值。
-- 同步仍兼容 `SOOTA_SYNC_TOKEN`（Soota 仓库的 Contents 写权限），SSH Secret 存在时优先使用 SSH。统一发布工作流仍使用 `SOOTA_SYNC_TOKEN`，且需两个仓库的 Contents 写权限；仅配置部署密钥不会启用统一发布。若组件新增 `.github/workflows`，令牌按 GitHub 要求增加对应工作流写权限。私钥和令牌只放 GitHub Secrets，不写源码、地址、日志或 Skill，也不复制本机登录令牌。原生 `GITHUB_TOKEN` 不承担跨仓库写入。
+- 首次组件目标可以等于导入基线，或是该基线的祖先。后者要求原历史已完整接入 LoreLab 提交图，才能保留原仓库尚未推送的提交。先审查历史内容，在干净源码上 fetch 原仓库后用 `git merge --strategy=ours --allow-unrelated-histories --no-ff` 保留其历史；核对合并前后产品 tree 完全相同。仅在首次迁移且基线已核实时这样处理，不能拿它吞掉后续独立修改。
+- 工作流 `checkout` 使用完整历史。主源中现存的 `sync-soota.yml` 与 `release.yml` 共用 `soota-distribution` 并发组，不中断执行中的发布。 `sync-components.yml` 分别运行 Cubox 与幕布任务，各有独立的并发组和密钥；一个任务失败不取消另一组件，已成功的提交不回滚。两组件相关路径或组件锁变化时会检查两者，组件未变则复用已有提交。
+- 源码同步为三个仓库分别设置 `CUBOX_SYNC_SSH_KEY`、`SOOTA_SYNC_SSH_KEY`、`MUBU_SYNC_SSH_KEY`：分别生成专用 SSH 密钥，把公钥作为允许写入的 Deploy key 加到对应独立仓库，私钥作为 Actions Secret 加到 LoreLab 仓库。不要在多个仓库复用同一部署密钥；SSH 同步要求组件锁中的目标使用 SSH Git 地址。这把密钥只授权目标仓库；工作流核验 GitHub 主机公钥，结束后删除临时私钥文件。GitHub 更换主机公钥时，须经官方渠道核实后更新固定值。
+- Soota 同步仍兼容 `SOOTA_SYNC_TOKEN`（Soota 仓库的 Contents 写权限），SSH Secret 存在时优先使用 SSH。统一发布工作流仍使用 `SOOTA_SYNC_TOKEN`，且需两个仓库的 Contents 写权限；仅配置部署密钥不会启用统一发布。若组件新增 `.github/workflows`，令牌按 GitHub 要求增加对应工作流写权限。私钥和令牌只放 GitHub Secrets，不写源码、地址、日志或 Skill，也不复制本机登录令牌。原生 `GITHUB_TOKEN` 不承担跨仓库写入。
 - 如分支保护要求 PR 或禁止该身份直接写入，先配置允许的自动化身份/发行分支，不禁用保护来绕过拒绝。未提供认证时工作流明确失败，不报告已经同步。
 
 主分支推送只同步源码，不创建 Release。正式发布由带审阅说明的 workflow dispatch 触发。首次远端创建、权限配置及在线工作流必须另有实际验收证据，本地测试不能代替它们。

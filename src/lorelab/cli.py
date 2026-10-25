@@ -23,7 +23,7 @@ def parser() -> argparse.ArgumentParser:
     tool = sub.add_parser("tool", help="调用当前产品绑定的独立 CLI")
     tool.add_argument("name", choices=["cubox", "soota", "mubu"])
     tool.add_argument("args", nargs=argparse.REMAINDER)
-    component = sub.add_parser("components", help="校验、导出组件和同步独立 Soota 仓库")
+    component = sub.add_parser("components", help="校验、导出组件和同步独立仓库")
     component_sub = component.add_subparsers(dest="action", required=True)
     for action in ("verify", "refresh"):
         command = component_sub.add_parser(action)
@@ -32,8 +32,8 @@ def parser() -> argparse.ArgumentParser:
     export.add_argument("name", choices=["cubox", "soota", "mubu"])
     export.add_argument("destination", type=Path)
     export.add_argument("--source", type=Path, help="指定开发主源，保留默认受管导出行为")
-    sync = component_sub.add_parser("sync", help="预览 Soota 单向同步；--execute 才写入目标仓库")
-    sync.add_argument("name", choices=["soota"])
+    sync = component_sub.add_parser("sync", help="预览组件单向同步；--execute 才写入目标仓库")
+    sync.add_argument("name", choices=["cubox", "soota", "mubu"])
     sync.add_argument("--source", type=Path, required=True, help="唯一开发源 LoreLab checkout")
     sync.add_argument("--repository", help="默认使用组件锁中的独立仓库")
     sync.add_argument("--branch")
@@ -119,7 +119,7 @@ def dispatch(args: argparse.Namespace) -> object:
         if args.action == "sync":
             from .component_sync import synchronize
 
-            return synchronize(args.source, target=args.repository, branch=args.branch, execute=args.execute)
+            return synchronize(args.source, name=args.name, target=args.repository, branch=args.branch, execute=args.execute)
         if args.action == "export":
             return components.export_component(args.source or runtime.root(), args.name, args.destination)
         return getattr(components, args.action)(args.source or runtime.root())

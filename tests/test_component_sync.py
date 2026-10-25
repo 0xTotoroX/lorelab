@@ -204,3 +204,81 @@ def test_no_source_history_is_injected_into_independent_repo(repos):
     result = subprocess.run(["git", "-C", str(target), "cat-file", "-e", source_head],
                             capture_output=True, check=False)
     assert result.returncode != 0
+
+
+@pytest.fixture(params=["cubox", "mubu"])
+def named_repos(tmp_path, request):
+    source, target, original, baseline = fixture_repositories(tmp_path)
+    name = request.param
+    relative = f"modules/{name}-cli"
+    component = source / relative
+    (source / "modules/soota").rename(component)
+    skill = "skills/cubox/SKILL.md" if name == "cubox" else "SKILL.md"
+    (component / skill).parent.mkdir(parents=True, exist_ok=True)
+    (component / "skills/soota/SKILL.md").rename(component / skill)
+    skill_name = "cubox" if name == "cubox" else "mubu-integration"
+    (component / skill).write_text(f"---\nname: {skill_name}\ndescription: Synthetic skill\n---\nRead context.\n")
+    lock_path = source / "components.lock.json"
+    lock = json.loads(lock_path.read_text())
+    entry = lock["components"].pop("soota")
+    entry.update(path=relative, skill={"name": skill_name, "path": str(Path(relative) / Path(skill).parent)})
+    lock["components"][name] = entry
+    lock_path.write_text(json.dumps(lock))
+    assert refresh(source)["ok"]
+    commit(source)
+    return source, target, original, baseline, name, component, skill
+
+
+def test_named_component_cli_delivers_source_and_skill_with_history(named_repos, capsys):
+    from lorelab.cli import main
+
+    source, target, original, baseline, name, component, skill = named_repos
+    assert main(["components", "sync", name, "--source", str(source)]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    assert preview["component"] == name and not preview["executed"]
+    assert git(target, "rev-parse", "main") == baseline
+    assert main(["components", "sync", name, "--source", str(source), "--execute"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["executed"] and result["commit"] == preview["commit"]
+    assert git(target, "rev-parse", "main^") == baseline
+    receipt = json.loads(git(target, "show", "main:" + PROVENANCE_FILE))
+    assert receipt["component"] == name
+    assert receipt["skill"]["path"] == str(Path(skill).parent)
+    assert git(target, "show", "main:" + skill) == (component / skill).read_text().rstrip()
+    assert not git(original, "status", "--porcelain")
+    (component / "工具.txt").unlink()
+    (component / skill).write_text((component / skill).read_text() + "Updated reference.\n")
+    assert refresh(source)["ok"]
+    commit(source)
+    changed = synchronize(source, name=name, execute=True)
+    assert changed["changed"]
+    assert git(target, "rev-parse", "main^") == result["commit"]
+    assert "工具.txt" not in git(target, "ls-tree", "-r", "--name-only", "main").splitlines()
+    assert not synchronize(source, name=name, execute=True)["changed"]
+
+
+def test_named_component_rejects_independent_changes(named_repos):
+    source, target, original, _, name, _, _ = named_repos
+    synchronize(source, name=name, execute=True)
+    git(original, "fetch", str(target), "main")
+    git(original, "merge", "--ff-only", "FETCH_HEAD")
+    (original / "independent.txt").write_text("Preserve independent work")
+    external = commit(original)
+    git(original, "push", str(target), "main")
+    with pytest.raises(ValueError, match="outside LoreLab"):
+        synchronize(source, name=name, execute=True)
+    assert git(target, "rev-parse", "main") == external
+
+
+def test_receipt_for_another_component_cannot_be_overwritten(named_repos):
+    source, target, _, _, name, _, _ = named_repos
+    current = synchronize(source, name=name, execute=True)
+    lock_path = source / "components.lock.json"
+    lock = json.loads(lock_path.read_text())
+    # Even identical files and a valid lock do not authorize a differently named component.
+    lock["components"]["soota"] = dict(lock["components"][name])
+    lock_path.write_text(json.dumps(lock))
+    commit(source)
+    with pytest.raises(ValueError, match="not managed"):
+        synchronize(source, target=str(target), execute=True)
+    assert git(target, "rev-parse", "main") == current["commit"]
