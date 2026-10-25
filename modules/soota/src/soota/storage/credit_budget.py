@@ -86,9 +86,13 @@ class CreditBudget:
         except ValueError as exc:
             raise StorageError("旧 Weir 账本周期无效；未清零或发送请求。") from exc
 
-    def totals(self, month: str, task: str) -> tuple[int, int]:
+    def totals(self, month: str, task: str, key_name: str) -> tuple[int, int]:
         return (
-            sum(r.counted for r in self.state.requests if self._in_month(r, month)),
+            sum(
+                r.counted
+                for r in self.state.requests
+                if self._in_month(r, month) and (r.key_name or "legacy") == key_name
+            ),
             sum(r.counted for r in self.state.requests if r.task == task),
         )
 
@@ -105,7 +109,7 @@ class CreditBudget:
         if self.state.blocked:
             raise AuthBudgetError("上次 credits 扣费超过已知上限；需核对账单与接口契约后才能继续。")
         month = datetime.now(UTC).strftime("%Y-%m")
-        monthly, total = self.totals(month, task)
+        monthly, total = self.totals(month, task, key_name or "legacy")
         if monthly_cap is not None and monthly + credits > monthly_cap:
             raise AuthBudgetError("下一次 Weir 请求将超过每月 credits 上限，未发送。")
         if task_cap is not None and total + credits > task_cap:
@@ -134,6 +138,14 @@ class CreditBudget:
             "counted_credits": sum(r.counted for r in entries),
             "current_month": month,
             "monthly_counted_credits": sum(r.counted for r in entries if self._in_month(r, month)),
+            "monthly_key_counted_credits": {
+                name: sum(
+                    r.counted
+                    for r in entries
+                    if self._in_month(r, month) and (r.key_name or "legacy") == name
+                )
+                for name in sorted({r.key_name or "legacy" for r in entries})
+            },
             "keys": [
                 {
                     "name": name,

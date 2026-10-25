@@ -154,7 +154,7 @@ def test_uncertain_or_excessive_charge_stops_without_backup(settings, pool, fail
         assert ledger.state.blocked == (failure == "overcharge")
 
 
-def test_different_server_periods_and_key_changes_cannot_reset_monthly_cap(settings, pool):
+def test_each_key_has_its_own_calendar_monthly_cap(settings, pool):
     primary_valid = True
 
     def reply(key, request):
@@ -170,18 +170,23 @@ def test_different_server_periods_and_key_changes_cannot_reset_monthly_cap(setti
     calls = pool(reply)
     settings.weir.monthly_credits = 2
     capture(settings, URL)
-    primary_valid = False
-    with pytest.raises(AuthBudgetError, match="每月"):
-        capture(settings, "https://x.com/example/status/124")
-    assert len([p for _, p in calls if p.startswith("/v1/x")]) == 1
+    capture(settings, "https://x.com/example/status/124")
+    assert len([p for _, p in calls if p.startswith("/v1/x")]) == 2
+    with budget(settings).locked() as ledger:
+        assert ledger.summary()["monthly_key_counted_credits"] == {"default": 2, "backup": 2}
 
 
 def test_legacy_ledger_counts_before_rotation_without_rewriting(settings, pool):
-    calls = pool(
-        lambda key, r: (
-            httpx.Response(401) if key == "synthetic-primary" else httpx.Response(200, json={"data": free_usage()})
+    def reply(key, request):
+        if key == "synthetic-primary":
+            return httpx.Response(401)
+        return (
+            httpx.Response(200, json={"data": free_usage()})
+            if request.url.path == "/v1/usage"
+            else response(request)
         )
-    )
+
+    calls = pool(reply)
     ledger = budget(settings)
     ledger.root.mkdir(parents=True)
     legacy = json.dumps(
@@ -193,10 +198,15 @@ def test_legacy_ledger_counts_before_rotation_without_rewriting(settings, pool):
     )
     ledger.path.write_text(legacy)
     settings.weir.monthly_credits = 2
-    with pytest.raises(AuthBudgetError, match="每月"):
-        capture(settings, URL)
-    assert not any(p.startswith("/v1/x") for _, p in calls)
-    assert ledger.path.read_text() == legacy
+    capture(settings, URL)
+    updated = json.loads(ledger.path.read_text())
+    assert updated["requests"][0] == {
+        **json.loads(legacy)["requests"][0],
+        "key_name": None,
+        "month": None,
+    }
+    with budget(settings).locked() as ledger:
+        assert ledger.summary()["monthly_key_counted_credits"]["legacy"] == 2
 
 
 def test_task_limit_and_concurrent_monthly_limit_survive_failover(settings, pool):
@@ -329,6 +339,23 @@ def test_exhausted_pool_stops_after_one_auth_check_per_key(settings, pool):
     assert calls == [("synthetic-primary", "/v1/usage"), ("synthetic-backup", "/v1/usage")]
     with budget(settings).locked() as ledger:
         assert ledger.summary()["counted_credits"] == 0
+
+
+def test_monthly_limit_applies_only_to_selected_key(settings, pool):
+    def reply(key, request):
+        if request.url.path == "/v1/usage":
+            return httpx.Response(200, json={"data": free_usage()})
+        return httpx.Response(401) if key == "synthetic-primary" else response(request)
+
+    calls = pool(reply)
+    settings.weir.monthly_credits = 2
+    capture(settings, URL)
+    with pytest.raises(AuthBudgetError, match="每月"):
+        capture(settings, "https://x.com/example/status/124")
+    data_calls = [key for key, path in calls if path.startswith("/v1/x/") and "not-sent" not in path]
+    assert data_calls == ["synthetic-primary", "synthetic-backup", "synthetic-primary"]
+    with budget(settings).locked() as ledger:
+        assert ledger.summary()["monthly_key_counted_credits"] == {"backup": 2, "default": 0}
 
 
 def test_backup_must_also_pass_free_only_guard(settings, pool):
