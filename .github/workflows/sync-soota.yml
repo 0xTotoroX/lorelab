@@ -35,15 +35,29 @@ jobs:
           .venv/bin/python -m pytest -q modules/soota/tests
       - name: Authenticate independent repository
         env:
+          SOOTA_SYNC_SSH_KEY: ${{ secrets.SOOTA_SYNC_SSH_KEY }}
           SOOTA_SYNC_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
         run: |
-          test -n "$SOOTA_SYNC_TOKEN" || { echo 'Configure SOOTA_SYNC_TOKEN with contents write access to the standalone Soota repository.' >&2; exit 1; }
-          git config --global url.https://github.com/.insteadOf 'git@github.com:'
-          git config --global credential.helper '!f() { printf "%s\n" username=x-access-token "password=$SOOTA_SYNC_TOKEN"; }; f'
+          if [ -n "$SOOTA_SYNC_SSH_KEY" ]; then
+            umask 077
+            printf '%s\n' "$SOOTA_SYNC_SSH_KEY" > "$RUNNER_TEMP/soota-sync.key"
+            # GitHub's published Ed25519 host key, verified through api.github.com/meta.
+            printf '%s\n' 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$RUNNER_TEMP/soota-sync.known_hosts"
+            git config --global core.sshCommand "ssh -i '$RUNNER_TEMP/soota-sync.key' -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o HostKeyAlgorithms=ssh-ed25519 -o UserKnownHostsFile='$RUNNER_TEMP/soota-sync.known_hosts'"
+          elif [ -n "$SOOTA_SYNC_TOKEN" ]; then
+            git config --global url.https://github.com/.insteadOf 'git@github.com:'
+            git config --global credential.helper '!f() { printf "%s\n" username=x-access-token "password=$SOOTA_SYNC_TOKEN"; }; f'
+          else
+            echo 'Configure SOOTA_SYNC_SSH_KEY with a write deploy key for Soota, or SOOTA_SYNC_TOKEN with contents write access.' >&2
+            exit 1
+          fi
       - name: Sync committed source and complete Skill
         env:
           SOOTA_SYNC_TOKEN: ${{ secrets.SOOTA_SYNC_TOKEN }}
         run: .venv/bin/python -m lorelab.cli components sync soota --source . --execute > "$RUNNER_TEMP/sync-receipt.json"
+      - name: Remove temporary deployment credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/soota-sync.key" "$RUNNER_TEMP/soota-sync.known_hosts"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

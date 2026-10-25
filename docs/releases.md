@@ -56,7 +56,8 @@ GitHub 的 **Publish LoreLab and Soota** 工作流在选定提交上运行验证
 - 为 LoreLab 配置真实可访问的 Git 远端，不从产品名猜测发布地址。
 - 首次 Soota 目标可以等于导入基线，或是该基线的祖先。后者要求原历史已完整接入 LoreLab 提交图，才能保留原仓库尚未推送的提交。先审查历史内容，在干净源码上 fetch 原仓库后用 `git merge --strategy=ours --allow-unrelated-histories --no-ff` 保留其历史；核对合并前后产品 tree 完全相同。仅在首次迁移且基线已核实时这样处理，不能拿它吞掉后续独立修改。
 - 工作流 `checkout` 使用完整历史。主源中现存的 `sync-soota.yml` 与 `release.yml` 共用 `soota-distribution` 并发组，不中断执行中的发布。
-- 设置 `SOOTA_SYNC_TOKEN`：同步需要独立 Soota 仓库的 Contents 写权限，统一发布还需 LoreLab 仓库的 Contents 写权限。若组件新增 `.github/workflows`，按 GitHub 要求增加对应工作流写权限。密钥只放 GitHub Secrets，不写源码、地址、日志或 Skill。原生 `GITHUB_TOKEN` 不承担跨仓库写入。
+- 源码同步优先设置 `SOOTA_SYNC_SSH_KEY`：生成专用 SSH 密钥，把公钥作为允许写入的 Deploy key 加到独立 Soota 仓库，私钥作为 Actions Secret 加到 LoreLab 仓库。这把密钥只授权目标仓库；工作流核验 GitHub 主机公钥，结束后删除临时私钥文件。GitHub 更换主机公钥时，须经官方渠道核实后更新固定值。
+- 同步仍兼容 `SOOTA_SYNC_TOKEN`（Soota 仓库的 Contents 写权限），SSH Secret 存在时优先使用 SSH。统一发布工作流仍使用 `SOOTA_SYNC_TOKEN`，且需两个仓库的 Contents 写权限；仅配置部署密钥不会启用统一发布。若组件新增 `.github/workflows`，令牌按 GitHub 要求增加对应工作流写权限。私钥和令牌只放 GitHub Secrets，不写源码、地址、日志或 Skill，也不复制本机登录令牌。原生 `GITHUB_TOKEN` 不承担跨仓库写入。
 - 如分支保护要求 PR 或禁止该身份直接写入，先配置允许的自动化身份/发行分支，不禁用保护来绕过拒绝。未提供认证时工作流明确失败，不报告已经同步。
 
 主分支推送只同步源码，不创建 Release。正式发布由带审阅说明的 workflow dispatch 触发。首次远端创建、权限配置及在线工作流必须另有实际验收证据，本地测试不能代替它们。
