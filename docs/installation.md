@@ -7,9 +7,10 @@ LoreLab 由本地 Agent 从用户选择的 Git 仓库安装。四个 CLI 与四�
 | 平台 | 源码目录中的入口 | 运行布局 |
 | --- | --- | --- |
 | macOS arm64 / x64 | `sh install.sh` | shell 入口、venv/bin、符号链接 |
+| Linux arm64 / x64 | `sh install.sh` | shell 入口、venv/bin、符号链接 |
 | Windows x64 / arm64 | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` | 原生 exe、venv/Scripts、目录 junction |
 
-安装器按本机 OS / CPU 构建，不能把 Mac 的二进制或 venv 搬到 Windows。Windows 入口无需 WSL、管理员 symlink 权限或开发者模式；本地文件系统须支持目录 junction。macOS 使用现有原子 current 切换；Windows 在安装锁内更名 junction，切换失败恢复旧入口，切换瞬间其他调用可能需要重新执行。
+安装器按本机 OS / CPU 构建，不能把 Mac 的二进制或 venv 搬到 Windows。Windows 入口无需 WSL、管理员 symlink 权限或开发者模式；本地文件系统须支持目录 junction。macOS / Linux 使用现有原子 current 切换；Windows 在安装锁内更名 junction，切换失败恢复旧入口，切换瞬间其他调用可能需要重新执行。
 
 源码首次安装与升级已在 macOS arm64 实跑。Windows 分支与原生命令交叉编译已检查，尚未在真实 Windows 或 Intel Mac 完成安装验收；仓库提供 Windows / macOS 的 CI 验证入口。账户登录另行验证。Downie 仍仅适用于 macOS；Windows 外部 yt-dlp 下载和 FFmpeg 转换当前因无法保证硬文件字节上限而停止，详见 [Soota 平台边界](../modules/soota/docs/providers.md#windows-运行)。
 
@@ -18,6 +19,8 @@ sh install.sh --prefix /path/to/lorelab --skills-dir /path/to/agent-skills
 ```
 
 Windows 使用相同的 `--prefix`、`--skills-dir`、`--bin-dir`、`--no-skills`、`--no-bin`、`--force` 参数。默认 prefix 是用户目录下 `.local/share/lorelab`，命令注册至 `.local/bin`，Skill 注册至 `.agents/skills`。指定目录不覆盖外部同名内容。`--no-skills` / `--no-bin` 跳过新增外部注册，不撤销已有注册。
+
+Linux 使用相同的隔离安装与固定工具链；需要 Git、curl 和可构建源码依赖的编译环境。Downie、macOS Keychain 与 MLX 不适用于 Linux；账号和媒体能力逐项验收。Linux arm64 尚未实机验证，不把平台选择测试或 x64 结果当作 arm64 验收。
 
 ## 工具链与重复执行
 
@@ -87,6 +90,6 @@ python3 packaging/build_plugin.py --output-dir dist
 
 运行依赖锁采用 `uv pip compile --universal --generate-hashes --python-version 3.12`，输入为产品 pyproject、Soota pyproject 与幕布 requirements.in，并 `--no-emit-package soota`，产品和 Soota 另从源码构建。具体安装、重复执行、升级和数据保留须通过独立用户目录验证；单元测试不代表账号或真实云端交付。
 
-独立用户目录验收入口为 `python tests/integration_source_install.py --workdir acceptance --system-path`；Windows 可再加 `--windows-code-page 936`。它保留系统工具和 Git，排除预装 uv / Go，以包含中文、空格和特殊字符的路径实跑安装、重复执行、本地 context、Git 升级与失败恢复，并比较配置和任务文件。输出留在指定的新目录，不操作真实账号。`.github/workflows/source-install.yml` 在 macOS 和 Windows 运行此流程；未实际运行的 CI 不作为通过证据。
+独立用户目录验收入口为 `python tests/integration_source_install.py --workdir acceptance --system-path`；Windows 可再加 `--windows-code-page 936`。它保留系统工具和 Git，排除预装 uv / Go，以包含中文、空格和特殊字符的路径实跑安装、重复执行、本地 context、Git 升级与失败恢复，并比较配置和任务文件。输出留在指定的新目录，不操作真实账号。`.github/workflows/source-install.yml` 在 macOS、Linux 和 Windows 运行此流程；未实际运行的 CI 不作为通过证据。
 
 实现依据：[uv 私有安装](https://docs.astral.sh/uv/reference/installer/)、[Python venv 平台布局](https://docs.python.org/3.12/library/venv.html)、[Windows 文件锁](https://docs.python.org/3.12/library/msvcrt.html)、[Go 官方安装](https://go.dev/doc/install)。

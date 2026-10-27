@@ -18,7 +18,7 @@
 launcher 同时注入一致的 `LORELAB_ROOT/LOREHUB_ROOT`、`LORELAB_RUNTIME_FILE/LOREHUB_RUNTIME_FILE`。LoreLab 工作流兼容读取 `SOOTA_KNOWLEDGE_RUNTIME_FILE` 与 `SOOTA_KNOWLEDGE_COMPONENTS_LOCK`；清单含 `source_root`、`components_lock`、锁指纹及固定工具路径。产品运行时拒绝不一致或跨组拼接的新旧变量，配置方法只委派 `lorelab.knowledge.runtime`。
 
 构建产物 `prebuilt/`、`wheels/`、`bundle.json` 只在临时源码副本内生成，不提交。
-安装记录位于 prefix/install.json，保存外部命令与 Skill 注册目录及可选更新清单；激活时一起提交，失败恢复。相同内容先校验再复用 current，不创建新 release；固定 Python 与下载缓存在 prefix/toolchain，多 release 共享，各 release 仍有独立 venv。旧私有 Python 不迁移。根 install.sh / install.ps1 分别为 macOS / Windows 源码安装入口，Install.command 为 Mac 便捷入口，setup 单独管理 PATH 和知识目的地。
+安装记录位于 prefix/install.json，保存外部命令与 Skill 注册目录及可选更新清单；激活时一起提交，失败恢复。相同内容先校验再复用 current，不创建新 release；固定 Python 与下载缓存在 prefix/toolchain，多 release 共享，各 release 仍有独立 venv。旧私有 Python 不迁移。根 install.sh / install.ps1 分别为 macOS、Linux / Windows 源码安装入口，Install.command 为 Mac 便捷入口，setup 单独管理 PATH 和知识目的地。
 使用与恢复步骤见 [installation.md](../docs/installation.md)。组件指纹算法只属于 `src/lorelab/components.py`。
 
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md

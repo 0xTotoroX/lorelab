@@ -183,3 +183,28 @@ def test_setup_normalizes_windows_subdirectory_without_changing_existing_config(
 def test_repository_rejects_option_or_embedded_credentials(value):
     with pytest.raises(RuntimeError):
         repository.validate_repository(value)
+
+
+@pytest.mark.parametrize("machine", ["x86_64", "aarch64"])
+def test_linux_shell_reuses_existing_python_without_bootstrap(tmp_path, machine):
+    commands = tmp_path / "commands"
+    put(commands, "uname", f'#!/bin/sh\ncase "$1" in -s) echo Linux;; -m) echo {machine};; esac\n', True)
+    prefix = tmp_path / "installed with spaces"
+    put(prefix, "current/venv/bin/python", '#!/bin/sh\nprintf "%s\\n" "$@"\n', True)
+    entry = Path(__file__).resolve().parents[1] / "install.sh"
+    env = dict(os.environ, PATH=str(commands) + os.pathsep + os.environ["PATH"])
+    result = subprocess.run(["/bin/sh", entry, "--prefix", prefix, "--no-skills"],
+                            env=env, text=True, capture_output=True, check=True)
+    assert result.stdout.splitlines() == ["-I", "-B", str(entry.parent / "packaging/install.py"),
+                                         "--prefix", str(prefix), "--no-skills"]
+    assert not (prefix / "toolchain").exists()
+
+
+@pytest.mark.parametrize("machine, expected", [("x86_64", "linux-amd64"), ("aarch64", "linux-arm64")])
+def test_linux_native_target_and_toolchain_lock(monkeypatch, machine, expected):
+    import go_toolchain
+    monkeypatch.setattr(common.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(common.platform, "machine", lambda: machine)
+    assert common.platform_tag() == expected
+    extension, checksum = go_toolchain.ARCHIVES[expected]
+    assert extension == "tar.gz" and len(bytes.fromhex(checksum)) == 32
