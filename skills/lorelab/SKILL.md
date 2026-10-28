@@ -19,7 +19,7 @@ LoreLab content 负责单来源分析、笔记、文章、大纲与整包导出�
 | 比较采集方案、保存或复用来源/预算预设 | Soota `plan create/select/run`；按其 Skill 展示方案并询问是否沿用，实际内容包再接续 LoreLab |
 | 单来源分析、笔记、阅读文章或整包导出 | [内容处理](references/content.md)，正式命令 `lorelab content ingest/resume/render/export` |
 | 知识分类、查重与既有笔记合并 | [分类与交付](references/content.md#分类查重与交付)，由 Agent 审阅并按授权实施，CLI 不自动合并 |
-| 建立有编码的知识图书馆、查看分类树、查找既有文章 | [图书馆契约](../../docs/library.md)，`lorelab knowledge library init/tree/catalog`；按共享分类表审阅，保留旧文与人工修改 |
+| 按内容和反馈自适应分类、归类排序、查看与检索 | [图书馆契约](../../docs/library.md)，`lorelab knowledge library init/tree/catalog/evolve`；短名、一层优先，Agent 主动观察与复查，CLI 保留稳定身份、版本和回退 |
 | 整理多源文章、知识归档或恢复交付 | [文章与交付流程](references/process.md)、相关[写作提示](references/prompts.md)；正式命令 `lorelab knowledge` |
 | 已有文章的学习或复习大纲 | [按需学习任务](references/process.md#按需学习任务)，正式命令 `lorelab study` |
 | 粘贴文本作为来源、接入已有内容包 | [来源准备](references/knowledge.md)，保留来源身份，不能把粘贴正文当成 URL 清单 |

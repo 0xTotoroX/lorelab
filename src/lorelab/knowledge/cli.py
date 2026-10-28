@@ -34,12 +34,25 @@ def register(sub):
     init_arguments(commands.add_parser("init"))
     library = commands.add_parser("library", help="共享分类体系、目录树与只读文章检索")
     library_commands = library.add_subparsers(dest="library_action", required=True)
+    evolve = library_commands.add_parser("evolve", help="按内容和反馈迭代分类，保护原文并保留回退记录")
+    evolution = evolve.add_subparsers(dest="evolve_action", required=True)
+    observe = evolution.add_parser("prepare")
+    observe.add_argument("--vault", type=Path)
+    observe.add_argument("--subdir")
+    observe.add_argument("--feedback", default="")
+    observe.add_argument("--context", type=Path, help="本批新材料或草稿，只作为分类证据")
+    observe.add_argument("--state-root", type=Path)
+    for name in ["preview", "apply", "rollback", "status"]:
+        action = evolution.add_parser(name)
+        action.add_argument("job")
+        if name in {"preview", "apply"}:
+            action.add_argument("--file", type=Path, required=name == "preview")
     for name in ["init", "tree", "catalog"]:
         action = library_commands.add_parser(name)
         action.add_argument("--vault", type=Path)
         action.add_argument("--subdir")
         if name == "init":
-            action.add_argument("--taxonomy", type=Path, help="自定义分类 JSON；默认采用世界知识分类模板")
+            action.add_argument("--taxonomy", type=Path, help="可选已有分类 JSON；默认从空的自适应分类开始")
         if name == "catalog":
             action.add_argument("--query", default="", help="对标题与正文进行字面检索，不作语义判定")
             action.add_argument("--category", help="按类别编码及其下级过滤")
@@ -116,6 +129,16 @@ def dispatch(args):
             from . import library
             from .workflow_state import inside, require
 
+            if args.library_action == "evolve":
+                from . import library_evolution
+
+                if args.evolve_action != "prepare":
+                    function = getattr(library_evolution, args.evolve_action)
+                    return function(args.job, args.file) if args.evolve_action in {"preview", "apply"} else function(args.job)
+                config = runtime.read_config()
+                vault, subdir = args.vault or config.get("vault"), args.subdir or config.get("subdir")
+                require(vault and subdir, "缺少 vault/subdir。")
+                return library_evolution.prepare(Path(vault), subdir, args.feedback, args.context, args.state_root)
             config = runtime.read_config()
             vault = args.vault or config.get("vault")
             subdir = args.subdir or config.get("subdir")

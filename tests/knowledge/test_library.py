@@ -15,7 +15,7 @@ from .support import FakeCLI, card, review_for, write
 def prepare_library(tmp_path, monkeypatch):
     vault = tmp_path / "vault"
     root = vault / "Knowledge"
-    library.init(root)
+    library.init(root, Path(library.__file__).with_name("world_taxonomy.json"))
     fake = FakeCLI([card("a")])
     monkeypatch.setattr(w, "run_json", fake)
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
@@ -34,24 +34,24 @@ def prepare_library(tmp_path, monkeypatch):
 
 def test_init_repeat_preserves_tree_and_human_taxonomy(tmp_path):
     root = tmp_path / "Knowledge"
-    result = library.init(root)
+    result = library.init(root, Path(library.__file__).with_name("world_taxonomy.json"))
     path = root / library.TAXONOMY_FILE
     original, mtime = path.read_bytes(), path.stat().st_mtime_ns
     assert result["created"] and "06.04 人工智能与智能体" in result["tree"]
-    assert library.init(root)["created"] is False
+    assert library.init(root, Path(library.__file__).with_name("world_taxonomy.json"))["created"] is False
     assert path.read_bytes() == original and path.stat().st_mtime_ns == mtime
     assert list(root.iterdir()) == [path]  # 没有为了大纲预建空文件夹。
     value = json.loads(original)
     value["title"] = "Human library"
     write(path, value)
     with pytest.raises(WorkflowError, match="不覆盖"):
-        library.init(root)
+        library.init(root, Path(library.__file__).with_name("world_taxonomy.json"))
     assert library.load(root)["title"] == "Human library"
 
 
 @pytest.mark.parametrize("change", ["duplicate", "parent", "traversal", "nonstring", "unicode"])
 def test_invalid_taxonomy_rejected(tmp_path, change):
-    library.init(tmp_path)
+    library.init(tmp_path, Path(library.__file__).with_name("world_taxonomy.json"))
     value = library.load(tmp_path)
     if change == "duplicate":
         value["categories"].append(value["categories"][0])
@@ -69,7 +69,7 @@ def test_invalid_taxonomy_rejected(tmp_path, change):
 
 def test_catalog_finds_existing_notes_without_modification_or_symlink_traversal(tmp_path):
     root = tmp_path / "Knowledge"
-    library.init(root)
+    library.init(root, Path(library.__file__).with_name("world_taxonomy.json"))
     old = root / "Old"
     old.mkdir()
     first = old / "Original.md"
@@ -180,7 +180,7 @@ def test_library_cli_uses_config_without_altering_it(tmp_path, monkeypatch):
     result = cli.dispatch(cli.parser().parse_args(["knowledge", "library", "init"]))
     assert result["ok"]
     result = cli.dispatch(cli.parser().parse_args(["knowledge", "library", "tree"]))
-    assert result["paths"]["06.04"].endswith("06.04 人工智能与智能体")
+    assert result["paths"] == {} and result["taxonomy"]["schema_version"] == 2
     result = cli.dispatch(cli.parser().parse_args(["knowledge", "library", "catalog", "--query", "AI"]))
     assert result["count"] == 0
     assert cli.runtime.read_config() == config

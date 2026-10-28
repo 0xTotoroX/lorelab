@@ -20,7 +20,7 @@ lorelab knowledge verify /path/to/job
 
 ## 可选知识图书馆
 
-目的地存在 `分类体系.json` 时，prepare 额外冻结分类表和书目，回执包含 `library`；notes 必须提供 `category`，可选 `related_categories`。提交与发布校验分类路径和跨目录同名文章，未启用分类的旧批次保持原契约。初始化、编码与检索见 [知识图书馆](library.md)。
+目的地存在 `分类体系.json` 时，prepare 额外冻结分类表和书目，回执包含 `library`；notes 必须提供 `category`，可选 `related_categories`。提交与发布校验分类路径和跨目录同名文章，未启用分类的旧批次保持原契约。schema v2 支持稳定身份、动态顺序和旧文归属，允许任务准备后新增类别；旧类别路径改变或退役时仍停止。反馈驱动的调整、恢复与检索见 [自适应分类](library.md)。
 
 ## Python 接口
 

@@ -1,6 +1,6 @@
 """[INPUT]: 冻结 approved、分类、大纲、目标文件及 Mubu 全树回执。
 [OUTPUT]: 独立文章交付、按需单次导入意图和基于节点 ID 的全树对账。
-[POS]: 唯一写入者；遇未知结果只能读取，不重发导入。
+[POS]: 先锁文章目的地，再按需锁幕布文档；遇未知结果只能读取，不重发导入。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
 """
 
@@ -34,15 +34,16 @@ from .workflow_state import (
 
 @contextmanager
 def writer(spec: dict):
-    # 保留旧锁命名空间，新旧入口及已在运行的 LoreHub 共同串行化同一目的地。
+    # 保留旧锁命名空间；所有入口先锁目的地，组合交付再锁幕布，退出时逆序释放。
     root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "lorehub/locks"
-    key = (
-        ("mubu-" + digest(spec["mubu_doc"].encode()))
-        if wants_outline(spec)
-        else ("article-" + digest(spec["destination"].encode()))
-    )
-    with lock(root / (key + ".lock")):
-        yield
+    article_key = "article-" + digest(spec["destination"].encode())
+    with lock(root / (article_key + ".lock")):
+        if wants_outline(spec):
+            document_key = "mubu-" + digest(spec["mubu_doc"].encode())
+            with lock(root / (document_key + ".lock")):
+                yield
+        else:
+            yield
 
 
 def document(run, job: Path, spec: dict, name: str) -> dict:

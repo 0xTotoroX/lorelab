@@ -10,6 +10,7 @@ import os
 import re
 from pathlib import Path
 
+from . import library_taxonomy as adaptive
 from .markdown import title
 from .workflow_state import destination, digest, encoded, inside, path_key, read_json, require, sync_dir
 
@@ -17,6 +18,8 @@ TAXONOMY_FILE = "分类体系.json"
 
 
 def validate(value: dict) -> dict:
+    if isinstance(value, dict) and value.get("schema_version") == 2:
+        return adaptive.validate(value)
     require(isinstance(value, dict) and value.get("schema_version") == 1, "分类体系 schema_version 必须为 1。")
     require(isinstance(value.get("id"), str) and value["id"].strip(), "分类体系缺少 id。")
     require(type(value.get("version")) is int and value["version"] > 0, "分类体系 version 必须为正整数。")
@@ -50,6 +53,8 @@ def load(root: Path) -> dict | None:
 
 
 def paths(taxonomy: dict) -> dict[str, str]:
+    if taxonomy.get("schema_version") == 2:
+        return {entry["code"]: entry["path"] for entry in taxonomy["categories"]}
     entries = {x["code"]: x for x in taxonomy["categories"]}
     result = {}
     for code in sorted(entries):
@@ -60,6 +65,8 @@ def paths(taxonomy: dict) -> dict[str, str]:
 
 
 def tree(taxonomy: dict) -> str:
+    if taxonomy.get("schema_version") == 2:
+        return adaptive.tree(taxonomy)
     entries = {x["code"]: x for x in taxonomy["categories"]}
     children: dict[str, list[str]] = {}
     for code in sorted(entries):
@@ -82,7 +89,8 @@ def catalog(root: Path, taxonomy: dict | None = None, query: str = "", category:
     taxonomy = taxonomy if taxonomy is not None else load(root)
     directories = paths(taxonomy) if taxonomy else {}
     require(category is None or category in directories, "未知类别编码。")
-    ignored = {"agents.md", "claude.md", *(path_key(x) for x in (taxonomy or {}).get("exclude_files", []))}
+    ignored = {"agents.md", "claude.md", "知识索引.md", "图书馆目录.md",
+               *(path_key(x) for x in (taxonomy or {}).get("exclude_files", []))}
     records, skipped = [], []
     if root.exists():
         for folder, dirs, files in os.walk(root, followlinks=False):
@@ -105,7 +113,12 @@ def catalog(root: Path, taxonomy: dict | None = None, query: str = "", category:
                 body = raw.decode("utf-8-sig")
                 match = next((c for c, d in sorted(directories.items(), key=lambda item: -len(item[1]))
                               if relative.startswith(d + "/")), None)
-                if category and (match is None or not (match == category or match.startswith(category + "."))):
+                if taxonomy and taxonomy.get("schema_version") == 2:
+                    match = taxonomy["assignments"].get(relative, match)
+                selected = (adaptive.contains(taxonomy, category, match)
+                            if taxonomy and taxonomy.get("schema_version") == 2
+                            else match is not None and (match == category or match.startswith(str(category) + ".")))
+                if category and not selected:
                     continue
                 if query and path_key(query) not in path_key(name + "\n" + body):
                     continue
@@ -122,13 +135,15 @@ def catalog(root: Path, taxonomy: dict | None = None, query: str = "", category:
 
 
 def init(root: Path, source: Path | None = None) -> dict:
-    taxonomy = validate(read_json(source or Path(__file__).with_name("world_taxonomy.json")))
+    taxonomy = validate(read_json(source)) if source else adaptive.empty()
     root.mkdir(parents=True, exist_ok=True)
     target = inside(root, TAXONOMY_FILE)
     try:
         fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
     except FileExistsError:
-        require(load(root) == taxonomy, "已有分类体系不同；请先审阅，init 不覆盖人工修改。")
+        existing = load(root)
+        require(source is None or existing == taxonomy, "已有分类体系不同；请先审阅，init 不覆盖人工修改。")
+        taxonomy = existing
         created = False
     else:
         with os.fdopen(fd, "wb") as stream:
@@ -145,7 +160,19 @@ def check_notes(spec: dict, notes: list[dict]):
     if taxonomy is None:
         return  # 旧批次保持原有路径、冻结内容和清理条件。
     root = destination(spec)
-    require(load(root) == taxonomy, "分类体系已改变；旧任务保留，请按新分类重新准备任务。")
+    current = load(root)
+    if taxonomy.get("schema_version") == 2:
+        require(current is not None and current.get("schema_version") == 2 and current["id"] == taxonomy["id"],
+                "分类体系身份已改变。")
+        frozen_paths = paths(taxonomy)
+        current_paths = paths(current)
+        for note in notes:
+            code = note.get("category")
+            require(isinstance(code, str) and code in current_paths, "类别已退役或不存在，请重新审阅归类。")
+            require(code not in frozen_paths or frozen_paths[code] == current_paths[code], "类别存放路径已改变。")
+        taxonomy = current
+    else:
+        require(current == taxonomy, "分类体系已改变；旧任务保留，请按新分类重新准备任务。")
     directories = paths(taxonomy)
     existing = catalog(root, taxonomy)["articles"]
     hashes = [note["body_sha256"] for note in notes]
@@ -156,7 +183,10 @@ def check_notes(spec: dict, notes: list[dict]):
         relative = note["relative_path"]
         excluded = {"agents.md", "claude.md", *(path_key(x) for x in taxonomy.get("exclude_files", []))}
         require(path_key(Path(relative).name) not in excluded, "文章不能使用规则或导航文件名。")
-        require(Path(relative).parent.as_posix() == directories[code], "笔记路径与 category 不符。")
+        assignments = taxonomy.get("assignments", {})
+        assigned = assignments.get(relative)
+        require(assigned == code or (relative not in assignments and Path(relative).parent.as_posix() == directories[code]),
+                "笔记路径或现有归属与 category 不符。")
         require(Path(relative).stem == note["title"], "图书馆文章文件名须与 title 一致。")
         require(title(note["markdown"], Path(relative)) == note["title"], "正文标题与 title 不一致。")
         related = note.get("related_categories", [])

@@ -1,72 +1,79 @@
-# 知识图书馆与分类编码
+# 自适应分类
 
-知识图书馆把已提炼文章按主题归档。LoreLab 提供共享分类表、目录树、只读书目和归档校验；Agent 阅读来源与旧文，决定分类和合并。CLI 不调用模型，不用关键词替代语义判断。
+分类从实际文章和使用反馈中形成。默认从空分类开始，名称短、边界清楚、一层优先；只有内容混杂或查找确有困难时才拆分。分类不是学科全表，也不靠增加类别数量证明改进。
 
-## 初始化与检索
+当前 Agent 负责读文章、理解反馈和决定归属；LoreLab 自动分配稳定编码与显示序号，检查影响，应用调整并保存回退证据。整个流程不另调语言模型，不默认运行后台任务。自动化发生在 Agent 的实际整理任务中，不是一个无人运行也会自行学习的进程。
+
+## 开始使用
 
 ```sh
 lorelab knowledge library init --vault /path/to/vault --subdir 知识
-lorelab knowledge library tree --vault /path/to/vault --subdir 知识
-lorelab knowledge library catalog --vault /path/to/vault --subdir 知识
-lorelab knowledge library catalog --vault /path/to/vault --subdir 知识 --query 记忆
-lorelab knowledge library catalog --vault /path/to/vault --subdir 知识 --category 06
+lorelab knowledge library tree
+lorelab knowledge library catalog --query 记忆
 ```
 
-已有 `knowledge init` 配置时可省略 vault/subdir。这三个命令不改目的地配置或删除授权。`init` 只新建 `分类体系.json`，不预建空目录、不移动旧文。重复运行保持相同文件的字节和修改时间；已有不同配置时停止。`--taxonomy FILE` 可选择首次初始化模板；现有分类调整由 Agent 审阅后编辑共享文件并递增 `version`。
+已有 knowledge 目的地配置时可省略 vault/subdir。init 新建空的 schema v2 `分类体系.json`，已有分类原样保留；不会覆盖人工修改，不创建空类别目录，不搬旧文。`--taxonomy FILE` 只供明确采用已有方案时使用。旧 schema v1 固定分类仍可读取，不自动迁移旧任务。
 
-默认模板有 12 个大类、62 个细分类，是可编辑的通用起点，不是 DDC 或中图法的正式分类号。层级设计参考 [DDC 介绍](https://www.loc.gov/aba/dewey/faq.html) 与 [LCC 学科大纲](https://www.loc.gov/aba/cataloging/classification/lcco/)，不复制完整分类表。
+分类身份、显示名称、排序和文件路径独立：
 
-`tree` 返回分类表、编码对应的相对路径和文本树。`catalog` 返回文章标题、路径、类别、SHA-256、未编目文章、重复标题和跳过的软链接。`--query` 是文件名及正文的字面检索，`--category` 包含下级；不是语义搜索。旧目录的文章仍参与检索查重，不自动改动。隐藏目录、规则文件和配置排除的导航文件不作文章；不跟随软链接读取外部内容。
+- `K0001` 等稳定编码由程序分配，不随改名或排序改变，退役编码不重用。
+- `分类编号.json` 保存已分配范围，回滚分类也保留它，避免旧任务误认新类别；迁移知识库时一并保留，不手动回退或删除。
+- `01`、`02` 等显示序号按当前排列自动生成，不写进文件名。
+- 类别使用短名，例如“工具”“学习”“饮食”；具体边界用 scope 说明。
+- 新类别的目录使用语义名称。既有目录路径保持稳定；旧文通过文章归属映射重新编目，文件及链接不搬动。
 
-## 分类表
+这个分离参考 [SKOS 对概念、标签、编码、关系和有序集合的区分](https://www.w3.org/TR/skos-reference/)，不要求引入 RDF 数据库，也不宣称实现完整 SKOS 标准。
 
-目的地的 `分类体系.json` 是共享分类正文。所有 Agent 读同一份；内置模板只用于首次初始化，升级不覆盖个人分类。
+## 反馈闭环
+
+遇到新主题、未归类文章、找不到资料、类别混杂或用户纠正时，Agent 主动执行：
+
+```sh
+lorelab knowledge library evolve prepare --feedback '分类简短，按实际需要组织'
+# JOB 为实际返回路径；Agent 实读 observed.json、相关正文并填写 review-template.json
+lorelab knowledge library evolve preview JOB --file /path/to/review.json
+lorelab knowledge library evolve apply JOB --file /path/to/review.json
+lorelab knowledge library evolve status JOB
+# 需要撤回且没有后续冲突时：
+lorelab knowledge library evolve rollback JOB
+```
+
+新来源尚未归档时，prepare 可加 `--context /path/to/source-or-draft.txt`，将本批材料冻结为分类依据。反馈和任务证据默认留在知识库外的 LoreLab 状态目录；`--state-root` 可明确指定其他私有位置。
+
+每轮先观察真实文章清单、文件 hash、当前分类及用户反馈。Agent 提交类别、排序和归属调整，说明实际理由；程序不根据关键词假装完成语义分类。没有新需求或问题时不改分类，不为执行闭环而强行改名、拆分或重排。
+
+审阅 schema：
 
 ```json
 {
-  "schema_version": 1,
-  "id": "my-library",
-  "version": 1,
-  "title": "知识图书馆",
-  "exclude_files": ["知识索引.md", "图书馆目录.md"],
+  "rationale": "现有文章集中于工具操作，先建立一层短分类。",
   "categories": [
-    {"code": "06", "name": "计算机与人工智能", "scope": "计算、AI 与数字工具"},
-    {"code": "06.04", "name": "人工智能与智能体"}
-  ]
+    {"key": "new:tools", "name": "工具", "parent": null,
+     "scope": "软件和设备的使用方法", "evidence": ["旧目录/文章.md"]}
+  ],
+  "assignments": [
+    {"path": "旧目录/文章.md", "category": "new:tools", "reason": "正文主要是操作方法"}
+  ],
+  "unassigned": []
 }
 ```
 
-编码是字符串，每级两位数字，最多三级；父类别必须存在，编码不得重复，名称须能作跨平台目录名。编码表示类别，不是文章顺序号，已用编码不改作另一主题。目录按完整类别链生成，通常两级，按实际内容再细分。一篇文章只选一个主类别，跨学科关联通过正文链接、标签和 `related_categories` 表达，不复制正文。
+categories 是本轮完整类别表，数组顺序表达排序。已有类别用当前 K 编码作为 key，新类别用 `new:短名`，parent 引用同表 key 或 null。每类 evidence 须引用本次观察中的文章路径，或实际提供过的 `@feedback`、`@context`。条目少不强制合并，条目多也不强制拆分，应以检索用途和内容边界判断。
 
-按文章解决的问题分类：AI 辅助诊断的临床证据归医学，模型结构与训练归 AI。来源不全或尚未阅读时，“已归类”不表示“已完整提炼”。
+assignments 和 unassigned 是增量调整，不重复填写未变归属。unassigned 项只含 path/reason，在共享表中保存为空归属，优先于旧目录推断，后续审阅继续保留。退役类别仍有文章时，必须明确给出新归属或暂不归类理由，不能悄悄丢失分类。合并与拆分类别不合并、拆分或删除文章正文；正文编辑仍走原有授权及校验流程。
 
-## 文章流程接入
+## 应用、恢复与评价
 
-`knowledge prepare` 自动发现分类表，冻结到 `spec.json`，并保存 `library-catalog.json` 书目快照。回执 `library` 提供分类、路径与快照位置。Agent 实读规则、书目和相关正文，再填写原有 sources/notes 模板；未配置分类表时兼容原流程。
+preview 显示分类数、归类覆盖、变更量和目录树，不修改共享文件。apply 更新共享分类及 `图书馆目录.md` 的文章导航，逐项核对并回读；不移动正文、不创建软链接、不删来源。原文集合、内容、分类或导航被其他人修改时停止，保护现场。
 
-启用分类的批次中，notes 必须增加 `category`，可选 `related_categories`。以下仅是新增字段示例，不是完整 review：
+每轮保留应用前后内容和冻结方案。重复 apply 不重写相同文件，不重复分配编码；中途失败后用同一 JOB 的 apply（省略 --file）恢复。不同审阅不能替换已冻结方案。rollback 按原字节恢复本轮分类及导航文件（包括换行与 BOM），保留编号分配记录；若后续修改已发生则停止，不覆盖它们。status 是本地检查，不联网、不自动重试。
 
-```json
-{
-  "title": "多工具之间怎样增量同步记忆",
-  "category": "06.04",
-  "related_categories": ["00.01"],
-  "relative_path": "06 计算机与人工智能/06.04 人工智能与智能体/多工具之间怎样增量同步记忆.md"
-}
-```
+无实际分类变化时不增加分类版本。覆盖数只能证明有多少文章已归类，不能证明分类质量；应用后由 Agent 用真实查找问题检查是否容易找、是否边界混淆，并把后续纠正带入下一轮。没有实际使用记录时不得编造“高频主题”或“检索效率提升”。
 
-路径的父目录须与类别一致，文件名和正文标题须与 title 一致。Agent 提供正文并计算 body_sha256；CLI 不偷偷改写正文或属性。关联类别留在冻结审阅中，读者需要看到的关联仍写进文章。
+## 与文章归档衔接
 
-提交和发布前重新读取现有文章：同标题或相同内容已在其他路径时停止；相同路径继续执行原有 hash 和独占创建检查。语义相似但标题不同的内容仍需 Agent 判断，不能宣称自动语义去重。受管写入者沿用目的地锁，人工及其他工具仍须遵守单一写入者约定。
+knowledge prepare 继续冻结分类及书目。schema v2 的分类任务允许后续新增类别或调整显示顺序；提交时读取当前有效分类，检查所用类别未退役、既有存放路径未改变。新文章写到类别目录，已有文章按归属映射保留原路径。旧 v1 任务保持原有严格冻结语义。
 
-准备后分类表发生变化时停止该任务，保留冻结证据，按新分类重新准备；没有绑定分类的历史任务按原契约恢复。分类校验不扩大删除范围，Cubox 清理仍需原有授权、完整性和交付回读门槛。初始化与导航生成不触发采集、删除、幕布或后台任务。
+notes 必须提供稳定的 `category`，可选 `related_categories`，其他来源、正文及证据字段沿用知识流程。同标题跨目录、同批相同正文和人工修改保护继续有效；同主题不同标题仍由 Agent 实读判断。整理完成后检查有无新分类反馈；没有问题就结束，不另加周期任务。
 
-## 使用顺序
-
-1. 读目标规则和分类表，检索相关旧文并实读。
-2. 按问题选类别，多条来源可合成一篇，独立问题可拆文。
-3. 使用 prepare → submit → publish → verify，首次归档才创建类别目录。
-4. 已有同主题文章先审阅合并，保留人工内容，不换名绕过冲突。
-5. 符合明确授权和完整性条件后才执行 Cubox cleanup，原始抓取文件不随卡片删除。
-
-个人类别改共享配置，通用校验与工作流能力按实际需求迭代 LoreLab。升级不重导来源、不重建旧软链接、不重置人工分类。
+分类调整不更改 Cubox 删除授权、来源完整性门槛或幕布流程。个人偏好维护在目标知识目录；通用功能缺口才按实际需要迭代 LoreLab 代码、测试及 Skill。

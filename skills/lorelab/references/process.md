@@ -21,7 +21,7 @@ lorelab knowledge prepare --ids-file FILE --vault PATH --subdir SUBDIR --no-dele
 
 ### 补齐证据与写成文章
 
-目的地有 `分类体系.json` 时，先用 `knowledge library tree` 读类别边界、`knowledge library catalog --query 关键词` 查相关旧文，并实读候选正文。prepare 回执 `library` 给出冻结分类、目录路径和书目快照。notes 增加主要 `category`，跨领域可用 `related_categories`，一篇正文只有一个落点；标题不同的语义重复仍由 Agent 判断。不要自动覆盖用户分类；用户要求建立图书馆时才运行 `library init`。字段与版本变更处理见 [图书馆契约](../../../docs/library.md)。
+目的地有 `分类体系.json` 时，先用 `knowledge library tree/catalog` 查类别及相关旧文，实读后再归类。类别从实际内容长出，名称短、边界清楚、一层优先；不预设世界学科全表。出现新主题、未归类文章、检索困难或用户纠正时，主动用 `library evolve prepare` 冻结观察与反馈，填写审阅并 preview → apply → status；必要时带 --context 提供本批新材料。已有授权内执行元数据调整，不逐项要求用户重批。无问题就不改分类，不编造使用频率；变更后用实际查找问题复查。稳定 category 编码由程序分配，显示序号与原文路径独立，旧文原位归类；重复文章与人工修改保护继续有效。notes 使用当前 category，可选 related_categories。恢复与字段见 [自适应分类](../../../docs/library.md)。
 
 先逐项区分可用正文、仅摘要、链接占位、获取失败和原始来源自身的缺口。需要补采且在当前请求范围内时，按[采集任务](../../../modules/soota/skills/soota/references/tasks.md)使用 `soota ingest`，复用标准任务、预算和缓存。
 

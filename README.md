@@ -139,7 +139,7 @@ lorelab knowledge verify /path/to/job
 
 ### 按主题建立知识图书馆
 
-用 `lorelab knowledge library init` 创建共享分类表，`library tree` 查看编码目录，`library catalog --query 关键词` 查找旧文。文章任务自动绑定分类，归档前校验目录和同名重复，保护人工修改。完整命令与边界见 [知识图书馆](docs/library.md)。
+用 `lorelab knowledge library init` 从空分类开始，`tree/catalog` 查看和检索。Agent 根据实际内容与反馈，用 `library evolve` 主动调整短类别、归属和排序；CLI 自动编码、校验影响、更新导航并保留回退，旧文和链接保持原位。已有人工修改受保护，无需另接模型。流程与边界见 [自适应分类](docs/library.md)。
 
 ### 从已有文章制作学习大纲
 
