@@ -18,19 +18,22 @@ from soota.providers.opencli_runtime import RuntimeUnavailable
 from soota.providers.priority import ordered_names
 from soota.providers.tikhub.capability import capabilities_for as tikhub_capabilities
 from soota.providers.tikhub.client import TikHubProvider
+from soota.providers.treg.provider import TregProvider
 from soota.providers.ytdlp import YtDlpProvider
 from soota.providers.ytdlp import capabilities_for as ytdlp_capabilities
 from soota.storage.cache import CacheStore
 
-ProviderName = Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid"]
+ProviderName = Literal["auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid", "treg"]
 
 
 def validate_policy(provider: str, fallback: str | None, max_cost: float | None) -> None:
-    if provider not in {"auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid"} or fallback not in {
+    if provider not in {"auto", "opencli-mcp", "opencli", "yt-dlp", "tikhub", "monid", "treg"} or fallback not in {
         None,
         "tikhub",
     }:
-        raise InputError("--provider 支持 auto/opencli-mcp/opencli/yt-dlp/tikhub/monid；--fallback 只支持 tikhub。")
+        raise InputError(
+            "--provider 支持 auto/opencli-mcp/opencli/yt-dlp/tikhub/monid/treg；--fallback 只支持 tikhub。"
+        )
     if fallback and provider == "tikhub":
         raise InputError("TikHub 已是指定来源，无需再指定同名 fallback。")
     if max_cost is not None and (not math.isfinite(max_cost) or max_cost < 0):
@@ -41,7 +44,7 @@ def validate_policy(provider: str, fallback: str | None, max_cost: float | None)
 
 def catalog_provider(
     source: SourceRef, provider: str, *, mcp_available: bool = False, settings: SootaSettings | None = None
-) -> Literal["opencli-mcp", "opencli", "tikhub", "monid"]:
+) -> Literal["opencli-mcp", "opencli", "tikhub", "monid", "treg"]:
     if settings is not None and provider == "auto":
         names = [
             n
@@ -50,6 +53,7 @@ def catalog_provider(
                 ("opencli", opencli_capabilities(source).catalog),
                 ("tikhub", tikhub_capabilities(source).catalog),
                 ("monid", tikhub_capabilities(source).catalog),
+                ("treg", tikhub_capabilities(source).catalog),
             )
             if cap
         ]
@@ -57,10 +61,10 @@ def catalog_provider(
         if not ranked:
             raise SourceError("没有可用目录来源。")
         provider = ranked[0]
-    if provider == "monid":
-        if not tikhub_capabilities(source).catalog:
-            raise SourceError("Monid 尚未接入此目录契约。")
-        return "monid"
+    if provider in {"monid", "treg"}:
+        if not tikhub_capabilities(source).catalog or provider == "treg" and source.platform != "youtube":
+            raise SourceError(f"{provider} 尚未接入此目录契约。")
+        return "treg" if provider == "treg" else "monid"
     if provider in {"yt-dlp", "soota"}:
         raise SourceError("yt-dlp Provider 尚未接入目录能力。")
     if (provider == "opencli-mcp" or provider == "auto" and mcp_available) and mcp_capabilities(source).catalog:
@@ -128,11 +132,13 @@ def inspect_item(
     }
     names = [n for n, (cap, _) in candidates.items() if cap]
     if tikhub_capabilities(source).inspect:
-        names += ["tikhub", "monid"]
+        names += ["tikhub", "monid", "treg"]
     ranking = ordered_names(settings, source, "inspect", names, max_cost=max_cost) if provider == "auto" else [provider]
     for name in ranking:
-        if name == "monid":
-            monid = MonidProvider(settings, remaining_budget(max_cost, records), purpose="inspect")
+        if name in {"monid", "treg"}:
+            monid = (TregProvider if name == "treg" else MonidProvider)(
+                settings, remaining_budget(max_cost, records), purpose="inspect"
+            )
             item = monid.inspect(source)
             return item, [*records, *monid.records], warnings
         if name == "tikhub":

@@ -214,6 +214,7 @@ def test_confirmed_counterpart_absence_does_not_query_ytdlp(settings, monkeypatc
     assert item.provenance["youtube_check"]["status"] == "youtube_captions_missing"
 
 
+@pytest.mark.usefixtures("cached_tikhub_prices")
 def test_audio_budget_deducts_paid_metadata_already_requested(settings, monkeypatch):
     from soota.providers.opencli_runtime import RuntimeUnavailable
     from soota.providers.tikhub.client import YOUTUBE_INFO, YOUTUBE_STREAMS, TikHubProvider, load_price_snapshot
@@ -269,6 +270,7 @@ def test_none_mode_is_not_reported_as_confirmed_absence(settings, monkeypatch):
     assert result.ok and result.data["transcript_status"] == "not_requested"
 
 
+@pytest.mark.usefixtures("cached_tikhub_prices")
 def test_pending_downie_resume_does_not_repay_caption_query(settings, monkeypatch):
     from soota.providers.downie import DownloadPending
     from tests.unit.test_resolver import _youtube_requester

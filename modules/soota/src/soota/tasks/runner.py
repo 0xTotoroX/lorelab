@@ -2,7 +2,7 @@
 
 [INPUT]: TaskSpec/Weir credit caps, enumeration, scheduler, native identity checks and artifact services.
 [OUTPUT]: Source artifacts/checkpoints and one ordered CommandResult; old workflow requests are forwarded.
-[POS]: tasks orchestration; owns budget scope, job lock and interruption recovery.
+[POS]: tasks orchestration; owns budget/quote scopes, job lock and interruption recovery.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 
@@ -33,6 +33,7 @@ from soota.content.native import MEDIA_SUFFIXES
 from soota.errors import AuthBudgetError, InputError, SootaError, SourceError, StorageError
 from soota.media import MediaAsset, MediaService
 from soota.models import CommandResult, MediaItem, ProcessingManifest, TranscriptMode, TranscriptSource
+from soota.providers.quotes import online_prices
 from soota.secrets import redact_any
 from soota.storage.atomic import atomic_write
 from soota.storage.jobs import JobStore
@@ -532,6 +533,7 @@ def _execute_item(settings: SootaSettings, spec: TaskSpec, job: TaskJob, row: Ta
         save_job(settings, job, item=row)
 
 
+@online_prices
 def execute(
     settings: SootaSettings,
     spec: TaskSpec,

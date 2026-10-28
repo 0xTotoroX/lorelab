@@ -22,7 +22,8 @@ flowchart TD
     B --> H[有界条目调度：1–8 workers]
     H --> C[内容获取]
     H -.逐项进度合并与同目录串行.-> S[任务状态与内容包锁]
-    C -.计费请求前持久预留.-> Q[全批 USD 预算与 Weir 月度/任务 credits]
+    C -.排序和收费前检查.-> P[有时效报价：任务内共享与过期刷新]
+    C -.计费请求前持久预留.-> Q[全批 USD 预算、结算差异暂停与 Weir 月度/任务 credits]
     C --> D[内容处理：含 Weir 正文绑定与目标 ID 校验]
     D --> E[校验与保存 context、媒体及所选产物]
     E -.请求分析、笔记、文章或大纲.-> F[外部 Agent 写作]
@@ -37,6 +38,7 @@ flowchart TD
 | --- | --- | --- |
 | 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py` |
 | 采集任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py`、`storage/credit_budget.py` |
+| 报价与排序 | 按能力核对全链价格；共享时效缓存，在线执行过期刷新，离线仅估价 | `providers/quotes.py`、`providers/priority.py` |
 | 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |
 | 内容处理 | 字幕格式统一、本地转写、正文结构转换及媒体处理；默认不做语义改写 | `transcripts/`、`content/`、`media/` |
 | 校验与保存产物 | 校验文件与媒体，登记 v2 产物、来源及校验值，保护既有源文和文章 | `media/probe.py`、`artifacts/bundle.py` |
@@ -55,7 +57,7 @@ LoreLab 接收 Soota 内容包并通过 Cubox、幕布各自的 CLI 组织知识
 
 格式能力、解析限制和新增格式的位置以 [字幕格式与 context](subtitle-formats.md#统一转换层) 为准；获取工具顺序与格式获取偏好都属于内容获取黑盒。
 
-字幕路径按平台及能力的费用或手动规则排序，免费来源默认优先，可选 Monid 与 TikHub 均受费用策略约束；媒体、正文和原生数据分别使用对应能力，不能将同一个排序套用于所有步骤。MCP 默认停用。显式来源严格保留，获取失败不会自动重新从其他 Provider 获取。业务入口见 [功能入口与费用策略](features.md)，组合任务和能力发现见 [统一内容任务](tasks.md)。
+字幕路径按平台及能力的费用或手动规则排序，免费来源默认优先，可选 Monid、treg 与 TikHub 均受费用策略约束；媒体、正文和原生数据分别使用对应能力，不能将同一个排序套用于所有步骤。MCP 默认停用。显式来源严格保留，获取失败不会自动重新从其他 Provider 获取。业务入口见 [功能入口与费用策略](features.md)，组合任务和能力发现见 [统一内容任务](tasks.md)。
 
 ## Weir 正文来源
 
@@ -77,7 +79,7 @@ LoreLab 接收 Soota 内容包并通过 Cubox、幕布各自的 CLI 组织知识
 
 共享 `media/` 还接收本地文件、直接媒体地址、HLS/DASH、分离音视频地址及 yt-dlp 页面提取结果，完成文件获取和验证。下载器能读取某个媒体，不等于该平台已经拥有标准字幕、正文或集合解析。
 
-`capabilities` 从当前运行时清单和受控注册表区分 `discovered`、`native`、`standard`、`blocked`；不会自动标记真实站点 `verified`。`api list/show` 使用受控 TikHub 注册表；`api call` 可按规则使用直连 TikHub 或已启用的 Monid 转发。OpenCLI 自带命令只有经过结果绑定后才进入对应的标准正文、媒体或列表流程。
+`capabilities` 从当前运行时清单和受控注册表区分 `discovered`、`native`、`standard`、`blocked`；不会自动标记真实站点 `verified`。`api list/show` 使用受控 TikHub 注册表；`api call` 可按规则使用直连 TikHub 或已启用的 Monid/treg 转发已覆盖接口。OpenCLI 自带命令只有经过结果绑定后才进入对应的标准正文、媒体或列表流程。
 
 ### yt-dlp Provider
 
@@ -91,9 +93,11 @@ B 站 `ai-*` 轨道归为自动字幕；弹幕不作为字幕。登录提示会�
 
 `SOOTA_YTDLP_BINARY` 指定程序，默认 PATH 中的 `yt-dlp`；`SOOTA_YTDLP_COOKIES_BROWSER` 使用 yt-dlp 的浏览器/profile 语法，默认 `chrome`，空字符串关闭 Cookie 读取。若提示 B 站字幕需要登录，先核对实际读取的 Chrome profile；`chrome` 自动选择的 profile 不一定是当前登录 B 站的 profile。个人选择仅从环境变量注入。Provider 适配随 Soota 更新；外部 yt-dlp 由其原安装工具维护，Downie 由应用自身更新。`updates apply` 不升级这两者。
 
-## Monid 与优先级
+## Monid、treg 与优先级
 
 `providers/priority.py` 根据平台、能力及完整调用链比较报价；`providers_cli.py` 保存启停、密钥和优先级配置。`providers/monid/client.py` 负责报价、预留、HTTP 与异步恢复；`provider.py` 返回原始获取状态和正文，复用已有 TikHub 数据契约，YouTube 字幕使用 Apify。解析仍在 `transcripts/formats/`。配置、范围和费用表见 [Monid 与来源优先级](monid.md)。
+
+treg 使用 `providers/treg/client.py` 的固定目录白名单、公开报价、费用预留及持久回执；`provider.py` 获取 YouTube Crawl4AI/ScrapeCreators 原始字幕，并转接已登记的 TikHub 获取契约。新字幕字段由统一转换层读取。`providers/quotes.py` 为 TikHub、Monid、treg 提供按凭据与地址隔离的有时效缓存，任务上下文传播给并行 worker。支持范围、配置及结果不明时的恢复限制见 [treg](treg.md)。
 
 ## 路由和费用
 

@@ -5,6 +5,8 @@ Use the Soota CLI instead of editing credentials into a project or copying provi
 ```bash
 soota providers auth monid
 soota providers enable monid
+soota providers auth treg
+soota providers enable treg
 soota providers show --json
 soota providers priority show youtube captions --json
 soota providers priority set youtube captions --mode cost
@@ -12,9 +14,9 @@ soota providers priority set bilibili captions --mode manual --order opencli,yt-
 soota providers priority show xiaohongshu api --endpoint xiaohongshu.web.fetch_note_detail --refresh --json
 ```
 
-Monid is disabled by default. Credentials come from `MONID_API_KEY` or the local config directory; the hidden prompt and `--key-file` avoid echoing the secret. `enable` does not change payment policy. Do not enable automatic payment without user authorization.
+Monid and treg are disabled by default. treg credentials use `TREG_TOKEN` or `credentials/treg.key`; details and supported routes are in [treg](../../../docs/treg.md). Credentials come from `MONID_API_KEY` or the local config directory; the hidden prompt and `--key-file` avoid echoing the secret. `enable` does not change payment policy. Do not enable automatic payment without user authorization.
 
-Rules are scoped by platform and capability: `inspect`, `captions`, `catalog`, `api`, `audio`. `*` is the platform fallback. Cost mode compares the full known request chain; manual mode uses the specified order then appends remaining available providers. Explicit `--provider` overrides saved rules. `--refresh` queries free metadata and saves prices; ordinary routing uses bundled or saved quotes. Unknown prices are never zero. Direct native API calls can obtain an uncached price before dispatch.
+Rules are scoped by platform and capability: `inspect`, `captions`, `catalog`, `api`, `audio`. `*` is the platform fallback. Cost mode compares the full known request chain; manual mode uses the specified order then appends remaining available providers. Explicit `--provider` overrides saved rules. `--refresh` queries free metadata and saves prices; offline preview uses bundled/saved estimates. Online routing and billed dispatch share TTL quotes (default 86400 seconds in `[routing] price_ttl_seconds`), refreshing missing/expired entries once per task and endpoint. Refresh failures exclude that candidate; legacy snapshots do not authorize billing. Unknown prices are never zero. Direct native API calls can obtain an uncached price before dispatch.
 
 Monid YouTube captions use the reviewed single-video Apify tool. Bilibili captions and covered TikHub native APIs use relay; coverage is not universal. Standard subtitle conversion still belongs to the shared format layer. Do not infer standard article or media contracts from an endpoint listing.
 

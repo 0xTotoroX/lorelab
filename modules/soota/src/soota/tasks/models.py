@@ -114,6 +114,7 @@ class TaskSpec(BaseModel):
             "yt-dlp",
             "tikhub",
             "monid",
+            "treg",
             "weir",
             "local",
             "http",

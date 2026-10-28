@@ -6,6 +6,8 @@ from soota.models import TranscriptMode, TranscriptSegment, TranscriptSource
 from soota.pipeline import ingest
 from tests.conftest import load_fixture
 
+pytestmark = pytest.mark.usefixtures("cached_tikhub_prices")
+
 
 @pytest.fixture(autouse=True)
 def fake_audio_decode_for_routing_contracts(monkeypatch):

@@ -18,9 +18,11 @@ from soota.providers.opencli import OpenCLIProvider
 from soota.providers.opencli_context import resolve_profile
 from soota.providers.opencli_mcp import OpenCLIMCPProvider
 from soota.providers.opencli_runtime import RuntimeUnavailable
+from soota.providers.quotes import online_prices
 from soota.providers.router import catalog_provider, validate_policy
 from soota.providers.tikhub.catalog import YOUTUBE_CHANNEL_ID, catalog_endpoint, is_channel_id
 from soota.providers.tikhub.client import TikHubProvider, load_price_snapshot
+from soota.providers.treg.provider import TregProvider
 from soota.render.catalog import write_catalog
 from soota.routing import recognize
 from soota.secrets import redact_any
@@ -107,7 +109,7 @@ def estimate_catalog(
     if source.platform == "youtube" and not is_channel_id(source.id):
         counts[YOUTUBE_CHANNEL_ID] = 1
     prices = snapshot.get("endpoints", {})
-    if selected == "monid":
+    if selected in {"monid", "treg"}:
         from soota.providers.priority import quote_rows
 
         prices = {
@@ -141,6 +143,7 @@ def estimate_catalog(
     )
 
 
+@online_prices
 def catalog(
     settings: SootaSettings,
     url: str,
@@ -205,6 +208,7 @@ def catalog(
         )
 
 
+@online_prices
 def resume_catalog(
     settings: SootaSettings,
     job_id: str,
@@ -289,14 +293,14 @@ def _provider(
         CostLedger(settings.ledger_path).append(job.source.id, [record], {"job_id": job.id, "reservation": True})
 
     provider = (
-        MonidProvider(
+        (TregProvider if job.provider == "treg" else MonidProvider)(
             settings,
             float(Decimal(str(job.max_cost)) - _reserved_cost(job)) if job.max_cost is not None else None,
             purpose="catalog",
             before_request=reserve,
             run_scope="catalog:" + job.id,
         )
-        if job.provider == "monid"
+        if job.provider in {"monid", "treg"}
         else TikHubProvider(
             runtime_python=settings.tikhub.runtime_python,
             cache=CacheStore(settings.cache_dir),

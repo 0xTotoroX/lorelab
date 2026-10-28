@@ -6,7 +6,7 @@
 
 Soota 是本地优先的内容采集与解析 CLI。`ingest --want` 将视频、音频、字幕、文章正文、图片和数据接入同一套任务与内容包；输入清单和集合复用单项流程，任务保留预算、已完成产物和恢复点。默认保存原文 context。需要保存分析、笔记或阅读文章时，由 Agent 写作并提交给 LoreLab content，Soota 不生成这些语义产物。
 
-YouTube/Bilibili 字幕按平台和能力的费用规则选择来源，支持手动优先级；Monid 为可选付费 Provider，免费来源默认优先。确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
+YouTube/Bilibili 字幕按平台和能力的费用规则选择来源，支持手动优先级；Monid 和 treg 为可选付费 Provider，免费来源默认优先。确认无字幕时按字幕模式选择本地转写。其他正文和媒体使用已绑定的原生工具或共享媒体处理器。MCP 当前默认停用。动态发现某个命令，不代表它已经接入所有标准产物或通过当前网站验收。
 
 常用组合、输入格式和恢复方法见 [统一内容任务](docs/tasks.md)，语义分析、笔记、文章、大纲、整包导出及知识学习交付由 LoreLab 负责，见[工作流迁移说明](docs/knowledge.md)，高层职责见 [处理流程](docs/providers.md#处理流程与职责)。既有 `inspect`、`catalog`、`features`、`api` 和运行时管理入口继续保留，详见 [功能与费用策略](docs/features.md)、[终端教程](docs/terminal-tutorial.md) 和 [TikHub 接口说明](docs/tikhub-api.md)。
 
@@ -36,17 +36,21 @@ export TIKHUB_API_KEY="..."   # 不要把 Key 发给聊天或写入 Git
 security add-generic-password -s soota.tikhub -a api_key -w
 ```
 
-## 可选 Monid 和优先级
+## 可选 Monid、treg 和优先级
 
 ```bash
 uv run soota providers auth monid
 uv run soota providers enable monid
+uv run soota providers auth treg
+uv run soota providers enable treg
 uv run soota providers priority show youtube captions
 uv run soota providers priority set youtube captions --mode cost
 uv run soota providers priority set bilibili captions --mode manual --order opencli,yt-dlp,tikhub,monid
 ```
 
-所有配置均可在 CLI 完成。按平台分别设置 `inspect/captions/catalog/api/audio`；显式 `--provider monid` 或 `--provider tikhub` 优先于规则。启用 Monid 不关闭付费确认。YouTube 字幕通过 Monid/Apify，B站字幕和已覆盖的原生接口通过 Monid/TikHub；按公布的整条链费用排序，价格未知时不自动派发。查看与免费刷新报价、密钥配置及恢复边界见 [Monid 与来源优先级](docs/monid.md)。
+启停、凭据和优先级可在 CLI 配置。按平台分别设置 `inspect/captions/catalog/api/audio`；显式 `--provider monid` 或 `--provider tikhub` 优先于规则。启用 Monid 或 treg 不关闭付费确认。YouTube 字幕通过 Monid/Apify，B站字幕和已覆盖的原生接口通过 Monid/TikHub；按公布的整条链费用排序，价格未知时不自动派发。查看与免费刷新报价、密钥配置及恢复边界见 [Monid 与来源优先级](docs/monid.md)。
+
+treg 的 YouTube 字幕默认使用 Crawl4AI，可在配置中选择 ScrapeCreators；双平台元数据、音频和 B站字幕复用已适配的 TikHub 转接，另支持 YouTube 频道目录。执行时自动检查报价有效期（默认 24 小时），过期或缺失时刷新；任务内各阶段和并行条目共用缓存。普通报价查看与 dry-run 使用本地估价；执行前刷新失败会排除该候选。配置和验证边界见 [treg 与报价缓存](docs/treg.md)。
 
 ## 可选 Weir 免费正文来源
 
@@ -87,7 +91,7 @@ uv run soota jobs resume JOB_ID --json
 uv run soota jobs resume JOB_ID --workers 2 --json
 ```
 
-字幕模式：`auto`、`captions-only`、`asr`、`none`。视频字幕默认免费来源优先，再按整条请求链报价选择 TikHub 或已启用的 Monid。`policy set --mode auto` 只改变付费来源的授权方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
+字幕模式：`auto`、`captions-only`、`asr`、`none`。视频字幕默认免费来源优先，再按整条请求链报价选择 TikHub 或已启用的 Monid/treg。`policy set --mode auto` 只改变付费来源的授权方式，不改变来源顺序；`--provider tikhub` 可单次指定。`--max-cost 0` 禁止计费请求。
 
 B站字幕可加 `--prefer-youtube`：匹配同名频道和同一期视频后优先使用 YouTube，并默认排除已有推广标注。`--no-prefer-youtube` 关闭跨平台检查，`--keep-promotions` 保留推广。过滤保留原字幕供追溯；无标注不代表无推广。详细使用与限制见 [字幕选择与过滤](docs/subtitle-selection.md)。
 

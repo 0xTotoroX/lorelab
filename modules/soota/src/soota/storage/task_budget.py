@@ -1,7 +1,7 @@
 """Durable task-wide request reservations.
 
 [INPUT]: RequestRecord prices, optional payment guard, task folder and total cap.
-[OUTPUT]: TaskBudget and context-scoped reserve_active_task before billed sends.
+[OUTPUT]: TaskBudget, pre-send reservations and persistent blocking on settlement discrepancies.
 [POS]: storage budget ledger; thread/file locks serialize reserve and persistence.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -51,6 +51,10 @@ class TaskBudget:
             lock_file(handle)
             try:
                 saved = self.snapshot()
+                if saved.get("blocked_reason"):
+                    raise AuthBudgetError(
+                        "任务费用需要核对，已停止后续收费请求。", details={"reason": saved["blocked_reason"]}
+                    )
                 total = Decimal(saved["reserved_cost_usd"]) + Decimal(str(price))
                 if self.cap is not None and total > self.cap:
                     raise AuthBudgetError("下一次请求将超过任务累计预算，已在发送前停止。")
@@ -58,6 +62,17 @@ class TaskBudget:
                     before(record)
                 saved["reserved_cost_usd"] = str(total)
                 saved["requests"].append(record.model_dump(mode="json"))
+                atomic_write(self.path, json.dumps(saved, ensure_ascii=False, indent=2) + "\n")
+            finally:
+                unlock_file(handle)
+
+    def block(self, reason: str) -> None:
+        """Keep the original reservation and stop spending after a settlement discrepancy."""
+        with self._lock, (self.folder / "budget.lock").open("a") as handle:
+            lock_file(handle)
+            try:
+                saved = self.snapshot()
+                saved["blocked_reason"] = reason
                 atomic_write(self.path, json.dumps(saved, ensure_ascii=False, indent=2) + "\n")
             finally:
                 unlock_file(handle)
@@ -72,6 +87,12 @@ def reserve_active_task(record: RequestRecord, before: Callable[[RequestRecord],
         budget.reserve(record, before)
     elif before is not None:
         before(record)
+
+
+def block_active_task(reason: str) -> None:
+    budget = _ACTIVE.get()
+    if budget is not None:
+        budget.block(reason)
 
 
 @contextmanager

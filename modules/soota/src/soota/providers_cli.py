@@ -19,10 +19,12 @@ from soota.errors import InputError
 from soota.models import CommandResult, SourceRef
 from soota.providers.monid.client import load_key
 from soota.providers.priority import CAPABILITIES, NAMES, ordered_names, quote_rows, rule_for
+from soota.providers.quotes import quote_scope
 from soota.providers.tikhub.registry import PLATFORM_NAMES, load_registry
+from soota.providers.treg.client import load_key as treg_key
 from soota.storage.atomic import atomic_write
 
-app = typer.Typer(help="启用来源、配置 Monid/Weir 凭据，按平台和能力查看或设置优先级。")
+app = typer.Typer(help="启用来源、配置 Monid/treg/Weir 凭据，按平台和能力查看或设置优先级。")
 priority_app = typer.Typer(help="cost 按报价排序；manual 使用指定顺序，未列来源排在后面。")
 app.add_typer(priority_app, name="priority")
 
@@ -39,6 +41,7 @@ def save(settings: SootaSettings) -> None:
                 "routing": settings.routing.model_dump(mode="json"),
                 "monid": settings.monid.model_dump(mode="json"),
                 "weir": settings.weir.model_dump(mode="json"),
+                "treg": settings.treg.model_dump(mode="json"),
             },
             ensure_ascii=False,
             indent=2,
@@ -60,6 +63,8 @@ def toggle(name: str, enabled: bool) -> CommandResult:
         settings.monid.enabled = enabled
     if name == "weir":
         settings.weir.enabled = enabled
+    if name == "treg":
+        settings.treg.enabled = enabled
     save(settings)
     return result("来源策略已保存；付费确认模式未改变。", {"provider": name, "enabled": enabled})
 
@@ -84,6 +89,8 @@ def show(json_output: Annotated[bool, typer.Option("--json")] = False) -> None:
                 "routing": settings.routing.model_dump(mode="json"),
                 "monid": settings.monid.model_dump(),
                 "weir": settings.weir.model_dump(),
+                "treg": settings.treg.model_dump(),
+                "treg_key_present": bool(treg_key(settings)),
                 "monid_key_present": bool(load_key(settings)),
             },
         )
@@ -101,8 +108,8 @@ def auth(
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     def configure() -> CommandResult:
-        if name not in {"monid", "weir"}:
-            raise InputError("此命令配置 Monid/Weir；TikHub 沿用 TIKHUB_API_KEY 或 Keychain。")
+        if name not in {"monid", "treg", "weir"}:
+            raise InputError("此命令配置 Monid/treg/Weir；TikHub 沿用 TIKHUB_API_KEY 或 Keychain。")
         if key_name is not None and name != "weir":
             raise InputError("命名备用 Key 当前仅支持 Weir。")
         key = (
@@ -202,17 +209,19 @@ def show_priority(
             raise InputError("api 报价需提供 --endpoint；不同接口不混合比较。")
         if path and path.split("/")[3] != platform:
             raise InputError("接口不属于所选平台。")
-        names = ["tikhub", "monid"] if capability == "api" else list(NAMES)
+        names = ["tikhub", "monid", "treg"] if capability == "api" else list(NAMES)
         if capability == "audio":
-            names = ["yt-dlp", "tikhub", "monid"]
-        rows = quote_rows(settings, source, capability, names, endpoint=path, refresh=refresh)
+            names = ["yt-dlp", "tikhub", "monid", "treg"]
+        with quote_scope(online=refresh):
+            rows = quote_rows(settings, source, capability, names, endpoint=path, refresh=refresh)
+            order = ordered_names(settings, source, capability, names, endpoint=path)
         return result(
             "来源报价和有效顺序；不包含重试、折扣或转写费用。",
             {
                 "platform": platform,
                 "capability": capability,
                 "rule": rule_for(settings, platform, capability).model_dump(),
-                "order": ordered_names(settings, source, capability, names, endpoint=path),
+                "order": order,
                 "candidates": rows,
             },
         )

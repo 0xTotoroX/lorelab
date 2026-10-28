@@ -57,9 +57,11 @@ soota ingest "文章 URL" --want context --optional images --max-cost 0 --json
 
 ## Provider 优先级
 
-`--provider auto` 使用按平台和能力保存的 cost/manual 规则；`--provider monid` 显式使用可选 Monid。通过 `providers auth/enable/disable/priority set/priority show` 配置，详见 [Monid 与来源优先级](monid.md)。元数据、字幕、目录、原生 API、音频分别比较，不按平台给出一个混合单价。Monid 报价预留与其他付费来源共享任务累计上限，异步恢复查询原 runId；无字幕结果也可能收费。
+`--provider auto` 使用按平台和能力保存的 cost/manual 规则；`--provider monid` 或 `--provider treg` 显式使用对应的可选来源。通过 `providers auth/enable/disable/priority set/priority show` 配置，详见 [Monid 与来源优先级](monid.md)。元数据、字幕、目录、原生 API、音频分别比较，不按平台给出一个混合单价。Monid 报价预留与其他付费来源共享任务累计上限，异步恢复查询原 runId；无字幕结果也可能收费。
 
-`monid.<TikHub 接口 key>` 原生任务只取得已经登记的读取契约，不自动提供任意平台的文章或字幕转换。`tikhub.<key>` 在 auto 下遵守 api 规则，显式 `--provider tikhub` 强制直连。
+`monid.<TikHub 接口 key>` 和 `treg.<TikHub 接口 key>` 原生任务只取得已经登记的读取契约，不自动提供任意平台的文章或字幕转换。`tikhub.<key>` 在 auto 下遵守 api 规则，显式 `--provider tikhub` 强制直连。
+
+在线执行的报价默认 24 小时过期；过期或缺失时自动刷新，阶段、条目及并行 worker 共用报价缓存。刷新失败不会沿用旧价收费。恢复任务会重新核对有效期，但保留原有费用预留。treg 已知实付超价会在任务账本记录暂停原因，阻止后续收费，恢复或提高上限也不清除暂停。treg 的已完成回执可在同一任务恢复时复用；提交结果不明、202 或非完成响应保留回执并停止，当前不自动重发或轮询恢复。支持范围与配置见 [treg](treg.md)。
 
 ## 本地文件、清单与旧内容包
 

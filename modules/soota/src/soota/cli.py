@@ -107,7 +107,7 @@ def doctor(
 def inspect(
     url: Annotated[str, typer.Argument(help="YouTube 或 Bilibili URL")],
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub/monid")
+        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub/monid/treg")
     ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
@@ -132,7 +132,7 @@ def estimate(
     mode: Annotated[str, typer.Option("--mode")] = "ingest",
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     audio_provider: Annotated[
-        str | None, typer.Option("--audio-provider", help="音频来源：auto/yt-dlp/downie/tikhub/monid")
+        str | None, typer.Option("--audio-provider", help="音频来源：auto/yt-dlp/downie/tikhub/monid/treg")
     ] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="目录任务的条数上限")] = 100,
     max_pages: Annotated[int, typer.Option("--max-pages", help="目录任务的分页上限")] = DEFAULT_MAX_PAGES,
@@ -155,7 +155,7 @@ def estimate(
 def catalog(
     url: Annotated[str, typer.Argument(help="X、YouTube 频道或 Bilibili UP 主主页")],
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub/monid")
+        str | None, typer.Option("--provider", help="auto/opencli-mcp/opencli/yt-dlp/tikhub/monid/treg")
     ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     max_items: Annotated[int, typer.Option("--max-items", help="本任务累计收录的条数上限")] = 100,
@@ -215,12 +215,12 @@ def ingest(
     vault: Annotated[Path | None, typer.Option("--vault", hidden=True, help="显式 Obsidian Vault 目录")] = None,
     subdir: Annotated[str, typer.Option("--subdir", hidden=True, help="Vault 内目录，不猜测分类")] = "Soota",
     provider: Annotated[
-        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/monid/weir/http/local/downie")
+        str | None, typer.Option("--provider", help="auto/opencli/yt-dlp/tikhub/monid/treg/weir/http/local/downie")
     ] = None,
     fallback: Annotated[str | None, typer.Option("--fallback", help="显式允许 tikhub 兜底；仅已验证能力")] = None,
     transcript: Annotated[TranscriptMode, typer.Option("--transcript")] = TranscriptMode.AUTO,
     audio_provider: Annotated[
-        str | None, typer.Option("--audio-provider", help="转写用的音频来源：auto/yt-dlp/downie/tikhub/monid")
+        str | None, typer.Option("--audio-provider", help="转写用的音频来源：auto/yt-dlp/downie/tikhub/monid/treg")
     ] = None,
     output: Annotated[Path | None, typer.Option("--output")] = None,
     json_output: Annotated[bool, typer.Option("--json")] = False,
