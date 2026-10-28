@@ -1,7 +1,7 @@
 """Durable task-wide request reservations.
 
 [INPUT]: RequestRecord prices, optional payment guard, task folder and total cap.
-[OUTPUT]: TaskBudget, pre-send reservations and persistent blocking on settlement discrepancies.
+[OUTPUT]: TaskBudget、请求前预留、排序用剩余额度快照和结算差异持久暂停。
 [POS]: storage budget ledger; thread/file locks serialize reserve and persistence.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -107,3 +107,18 @@ def task_budget_scope(budget: TaskBudget) -> Iterator[None]:
 def active_task_identity() -> str | None:
     budget = _ACTIVE.get()
     return str(budget.folder.resolve()) if budget is not None else None
+
+
+def remaining_active_budget(cap: float | None) -> float | None:
+    """用于排序的当前余额快照；实际发送仍必须原子预留。"""
+    budget = _ACTIVE.get()
+    if budget is None:
+        return cap
+    with budget._lock:
+        saved = budget.snapshot()
+        if saved.get("blocked_reason"):
+            return 0
+        if budget.cap is None:
+            return cap
+        remaining = max(Decimal(0), budget.cap - Decimal(saved["reserved_cost_usd"]))
+        return float(min(remaining, Decimal(str(cap))) if cap is not None else remaining)

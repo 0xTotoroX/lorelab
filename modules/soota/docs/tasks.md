@@ -10,6 +10,7 @@ Windows 的任务文件、缓存和恢复输入按 UTF-8 读写，任务锁与�
 
 | 目的 | 入口 | 契约 |
 | --- | --- | --- |
+| 从目标比较方案、保存预设、下次确认复用 | `soota plan create/select/run`、`soota presets` | [目标规划与预设](planning.md) |
 | 采集原文、媒体或数据 | `soota ingest`，以 `soota jobs resume` 接续 | 本文 |
 | 单来源分析、笔记、文章、大纲、渲染或整包导出 | 外部 `lorelab content` | [迁移说明](knowledge.md) |
 | 从 Cubox 收藏或已有内容包整理多源文章、写入并核对 | 外部 `lorelab knowledge` | [迁移说明](knowledge.md) |
@@ -52,6 +53,8 @@ soota ingest "文章 URL" --want context --optional images --max-cost 0 --json
 新 Soota 任务的 `--want` / `--optional` 仅接受以上七种采集目标。保存网站已有文章正文使用 `context` 或 `markdown`；语义文章、分析、笔记和大纲交给 LoreLab content，CLI 不调用大模型。
 
 `--language` 要求实际字幕语言，不能用语言未知或其他语言的轨道冒充。本地字幕未提供可靠语言元数据时保留未知，不按默认偏好填成中文。`--min-height` 指定视频最低高度，`--max-bytes` 限制单个媒体文件大小。字幕导出支持 `srt,vtt,txt,json`；缺少时间轴时可以导出 TXT/JSON，不能生成虚构时间的 SRT/VTT。
+
+包含 `--optional` 时，整批必需目标及其依赖先执行；全部完成后再用剩余额度取得可选产物。必需阶段失败则跳过可选阶段，不自动重试失败条目。两个阶段共用原任务、有效产物和预算预留，避免可选下载挤占后续条目的必需费用。
 
 字幕模式沿用 `auto`、`captions-only`、`asr`、`none`：`auto` 只在确认无字幕时进入本地转写，`asr` 明确要求语音转写，`none` 不请求字幕。只取元数据可用 `inspect` 或 `--want data`；没有可复用正文且禁止取得字幕或转写时，CLI 会报告缺少目标产物。
 

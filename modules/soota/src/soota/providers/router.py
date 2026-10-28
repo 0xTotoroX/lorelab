@@ -1,3 +1,11 @@
+"""来源路由。
+
+[INPUT]: 能力、显式来源、排序规则与剩余预算。
+[OUTPUT]: catalog_provider、inspect_item 与单次请求预算检查。
+[POS]: 复用共享报价/排序，实际收费仍须经 PaymentGate 和持久账本。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import math
@@ -43,7 +51,12 @@ def validate_policy(provider: str, fallback: str | None, max_cost: float | None)
 
 
 def catalog_provider(
-    source: SourceRef, provider: str, *, mcp_available: bool = False, settings: SootaSettings | None = None
+    source: SourceRef,
+    provider: str,
+    *,
+    mcp_available: bool = False,
+    settings: SootaSettings | None = None,
+    max_cost: float | None = None,
 ) -> Literal["opencli-mcp", "opencli", "tikhub", "monid", "treg"]:
     if settings is not None and provider == "auto":
         names = [
@@ -57,8 +70,12 @@ def catalog_provider(
             )
             if cap
         ]
-        ranked = ordered_names(settings, source, "catalog", names)
+        from soota.storage.task_budget import remaining_active_budget
+
+        ranked = ordered_names(settings, source, "catalog", names, max_cost=remaining_active_budget(max_cost))
         if not ranked:
+            if names and remaining_active_budget(max_cost) is not None:
+                raise AuthBudgetError("当前预算内没有报价已知的可用目录来源，未发送请求。")
             raise SourceError("没有可用目录来源。")
         provider = ranked[0]
     if provider in {"monid", "treg"}:

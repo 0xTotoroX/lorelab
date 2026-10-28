@@ -70,6 +70,15 @@ uv run soota providers usage weir --json
 
 ## 命令
 
+自然语言目标由 Agent 转成采集条件，`plan create` 给出可选方案并匹配预设。用户选择后保存，下次匹配先询问是否沿用；报价只在需要时刷新，没有后台轮询。详见[目标规划与预设](docs/planning.md)。
+
+```bash
+soota plan create "视频 URL" --goal "保存原字幕" --want transcript,context --max-cost 0.05 --json
+soota plan select PLAN_ID --option configured --confirm --save-as "视频原字幕" --json
+soota plan run PLAN_ID --json
+soota presets list --json
+```
+
 零费用快照示例：`uv run soota catalog "https://x.com/USERNAME" --max-items 50 --max-cost 0 --json`。完整性未知，不代表全部历史。
 
 ```bash

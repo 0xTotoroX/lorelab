@@ -696,7 +696,9 @@ def ingest_free(
                 captions = None
                 if prefer_youtube and name == "opencli" and source.platform == "bilibili":
                     assert isinstance(client, OpenCLIProvider)
-                    counterpart_fallback = YtDlpProvider(settings) if provider == "auto" else None
+                    counterpart_fallback = (
+                        YtDlpProvider(settings) if provider == "auto" and provider_enabled(settings, "yt-dlp") else None
+                    )
                     candidate_item, captions, notes = youtube_counterpart(client, candidate_item, counterpart_fallback)
                     item = candidate_item
                     warnings.extend(notes)

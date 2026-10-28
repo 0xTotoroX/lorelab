@@ -1,6 +1,6 @@
 """
 [INPUT]: Enabled capabilities, shared TTL quotes, offline snapshots and saved rules
-[OUTPUT]: quote_rows and ordered_names
+[OUTPUT]: quote_rows、rank_quotes 和 ordered_names，规划/执行共用排序
 [POS]: Shared platform and capability routing
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -198,12 +198,29 @@ def ordered_names(
     endpoint: str | None = None,
     max_cost: float | None = None,
 ) -> list[str]:
-    rule = rule_for(settings, source.platform, capability)
     if max_cost == 0:
         names = [name for name in names if name not in {"tikhub", "monid", "treg"}]
     rows = quote_rows(settings, source, capability, names, endpoint=endpoint)
+    return rank_quotes(settings, source, capability, rows, max_cost=max_cost)
+
+
+def rank_quotes(
+    settings: SootaSettings,
+    source: SourceRef,
+    capability: str,
+    rows: list[dict[str, Any]],
+    *,
+    max_cost: float | None = None,
+) -> list[str]:
+    """对已经取得的报价使用同一排序规则，供规划预览复用。"""
+    rule = rule_for(settings, source.platform, capability)
     rows = [
-        r for r in rows if r["enabled"] and r["supported"] and (max_cost is None or r["estimated_cost_usd"] <= max_cost)
+        r
+        for r in rows
+        if r["enabled"]
+        and r["supported"]
+        and (max_cost is None or r["estimated_cost_usd"] <= max_cost)
+        and not (max_cost == 0 and r["provider"] in {"tikhub", "monid", "treg"})
     ]
     order = list(rule.order) + [n for n in NAMES if n not in rule.order]
     rows.sort(key=lambda r: ((r["estimated_cost_usd"] if rule.mode == "cost" else 0), order.index(r["provider"])))

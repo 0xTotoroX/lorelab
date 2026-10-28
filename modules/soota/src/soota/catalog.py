@@ -1,3 +1,11 @@
+"""目录采集与恢复。
+
+[INPUT]: 来源、排序/预算、分页限制与可选的创建回调。
+[OUTPUT]: 目录结果、游标和原请求预留；回调在首个请求前提供子任务身份。
+[POS]: 独立目录入口，供统一任务复用；不清零恢复费用。
+[PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
+"""
+
 from __future__ import annotations
 
 import math
@@ -75,6 +83,7 @@ def estimate_catalog(
         provider,
         mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp),
         settings=settings,
+        max_cost=max_cost,
     )
     selected_provider(settings, selected)
     if fallback:
@@ -157,17 +166,29 @@ def catalog(
     provider: str | None = None,
     fallback: str | None = None,
     requester: Callable[..., Any] | None = None,
+    _on_created: Callable[[CatalogJob], None] | None = None,
 ) -> CommandResult:
     _validate_limits(max_items, max_pages, max_cost)
     source = recognize(url)
     provider = selected_provider(settings, provider)
     validate_policy(provider, fallback, max_cost)
-    selected = catalog_provider(
-        source,
-        provider,
-        mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp),
-        settings=settings,
-    )
+    try:
+        selected = catalog_provider(
+            source,
+            provider,
+            mcp_available=max_items <= 100 and StdioMCPClient.available(settings.opencli_mcp),
+            settings=settings,
+            max_cost=max_cost,
+        )
+    except AuthBudgetError as exc:
+        return CommandResult(
+            ok=False,
+            status="error",
+            code=exc.code,
+            exit_code=exc.exit_code,
+            message=exc.message,
+            data={"request_count": 0, "requests_this_run": 0, "stop_reason": "budget_or_auth", "error": exc.to_dict()},
+        )
     if fallback:
         raise InputError("当前目录来源没有已验证的替代分页契约；不能启用目录 fallback。")
     if selected in {"opencli", "opencli-mcp"} and max_items > (100 if selected == "opencli-mcp" else 200):
@@ -203,6 +224,8 @@ def catalog(
         }
     )
     with store.lock(record["id"]):
+        if _on_created is not None:
+            _on_created(CatalogJob.model_validate(record))
         return _execute(
             settings, CatalogJob.model_validate(record), store, requester, allow_free_fallback=provider == "auto"
         )

@@ -114,9 +114,16 @@ def native_operation(settings: SootaSettings, spec: TaskSpec, seed: InputSpec, w
             chosen = requested
         if chosen == "auto":
             source = SourceRef(platform=endpoint.path.split("/")[3], kind="video", id="api", url="", canonical_url="")
-            choices = ordered_names(settings, source, "api", ["tikhub", "monid", "treg"], endpoint=endpoint.path)
-            if not choices and provider_enabled(settings, "tikhub"):
-                choices = ["tikhub"]
+            from soota.storage.task_budget import remaining_active_budget
+
+            choices = ordered_names(
+                settings,
+                source,
+                "api",
+                ["tikhub", "monid", "treg"],
+                endpoint=endpoint.path,
+                max_cost=remaining_active_budget(spec.max_cost),
+            )
             if not choices:
                 raise SourceError("没有可用的原生接口来源。")
             chosen = choices[0]
@@ -479,10 +486,12 @@ def collect_media(
     if spec.provider == "http" or (
         spec.provider == "auto" and _direct_url(seed.value) and provider_enabled(settings, "http")
     ):
+        selected_provider(settings, "http")
         return MediaBatch(
             [service.from_descriptor(MediaDescriptor(url=seed.value, source_provider="http"), kind=kind, **options)]
         )
     if spec.provider == "downie":
+        selected_provider(settings, "downie")
         provider = DownieProvider(settings)
         item = MediaItem(source=source_for(seed))
         if kind == "audio":

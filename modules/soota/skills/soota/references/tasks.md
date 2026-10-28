@@ -4,6 +4,8 @@ Read this for combinations, batches, local inputs, existing bundles, explicit na
 
 ## Translate the request into targets
 
+Conversational acquisition goals first use [goal planning and presets](planning.md): present alternatives, ask before reusing a matched preset, select/save after confirmation, then execute. Explicit `ingest` calls remain available; they do not automatically create named presets.
+
 Use only targets requested or necessary for the task:
 
 | Request | CLI target |
@@ -18,6 +20,8 @@ Use only targets requested or necessary for the task:
 For downstream knowledge delivery, save pasted text as a `.txt` file and ingest with `--provider local --want context`. Hand the returned v2 bundle to the LoreLab Skill: content handles analysis, notes, articles, outlines and export; knowledge/study handle knowledge and learning delivery. Ordinary chat summaries need no ingest or archive. Do not pass prose or a Cubox response directly as share text or an input list; collection still stops at the requested source artifacts.
 
 `markdown` keeps the same unprocessed-text boundary as context. Do not map “download this article” to a semantic rewrite. Put optional outputs in `--optional`; do not downgrade a user-required target merely to obtain a successful exit code.
+
+Required outputs and their dependencies run across the whole batch before optional acquisition uses the remaining budget. If a required item fails, optional acquisition is skipped; it does not trigger an automatic second attempt. Resume retains the same artifacts and reservations.
 
 Examples use placeholders:
 
@@ -39,7 +43,7 @@ On Windows, external yt-dlp media downloads (including HLS/DASH) and FFmpeg extr
 
 ## Discover only when needed
 
-Known standard tasks can go directly to `ingest`. For an unfamiliar operation, use `capabilities --search ... --json`; inspect the current input contract and state before choosing a command. This discovery does not query websites or authenticate accounts.
+Known standard tasks need no extra capability discovery. For an unfamiliar operation, use `capabilities --search ... --json`; inspect the current input contract and state before choosing a command. This discovery does not query websites or authenticate accounts.
 
 ```bash
 soota capabilities --provider opencli --search search --limit 20 --json

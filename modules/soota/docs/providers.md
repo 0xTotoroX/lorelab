@@ -18,8 +18,15 @@ Downie、macOS Keychain 和 Apple Silicon MLX 是可选 Mac 功能，不能阻�
 
 ```mermaid
 flowchart TD
-    A[链接、媒体、本地文件与目标] --> B[有序枚举与来源去重]
-    B --> H[有界条目调度：1–8 workers]
+    U[用户目标] --> N[Agent：归一输入、目标和约束]
+    N --> PL[planning：匹配预设与比较可选方案]
+    PRE[本地命名预设] --> PL
+    PL -.按需报价.-> P
+    PL --> CONF[用户选择或确认沿用]
+    CONF -->|保存偏好| PRE
+    CONF --> A[已确认任务；原 ingest 也可直接进入]
+    A --> B[有序枚举与来源去重]
+    B --> H[有界条目调度：1–8 workers；全批必需先于可选]
     H --> C[内容获取]
     H -.逐项进度合并与同目录串行.-> S[任务状态与内容包锁]
     C -.排序和收费前检查.-> P[有时效报价：任务内共享与过期刷新]
@@ -36,7 +43,8 @@ flowchart TD
 
 | 黑盒 | 职责 | 代码入口 |
 | --- | --- | --- |
-| 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py` |
+| 规划与预设 | 结构匹配、比较方案、确认后保存、执行前核价；不采集、不后台轮询、不扩大费用权限 | `planning/`、`tasks/policy.py` |
+| 输入与目标 | 识别链接、本地文件、清单与旧内容包，声明必需和可选产物；规划与执行共用依赖判断 | `tasks/entry.py`、`tasks/inputs.py`、`tasks/models.py`、`tasks/dependencies.py` |
 | 采集任务编排 | 有序枚举与去重；有界条目并行，同目录串行；传播上下文，锁内合并进度，复用产物，中断收尾；全批请求前预留 | `tasks/runner.py`、`tasks/scheduler.py`、`tasks/enumeration.py`、`tasks/state.py`、`storage/task_budget.py`、`storage/credit_budget.py` |
 | 报价与排序 | 按能力核对全链价格；共享时效缓存，在线执行过期刷新，离线仅估价 | `providers/quotes.py`、`providers/priority.py` |
 | 内容获取 | 按能力选择 Provider，取得原生数据、正文、字幕或媒体；保留真实获取状态 | `providers/`、`content/native.py`、`tasks/acquire.py` |

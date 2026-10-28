@@ -15,6 +15,8 @@ Single-source analysis, notes, articles, outlines, classification review and bun
 
 ## Choose the requested output
 
+For a new acquisition goal expressed in conversation, first normalize the requested input, required/optional outputs and constraints, then use `plan create INPUT --goal "SHORT_GOAL" --want TARGETS --json`. Read [planning and presets](references/planning.md). Present the returned alternatives and price limits. Matching presets are proposals: ask whether to reuse them, and only pass `plan select ... --confirm` after the user chooses. Selection saves the named preset; `plan run` uses the existing executor. Never infer confirmation from elapsed time or a match. Explicit direct CLI requests and existing job recovery may keep their existing entry points.
+
 Use `ingest INPUT --want ... --json` for explicit artifacts and combinations: `video`, `audio`, `transcript`, `context`, `markdown`, `images`, `data`. `--optional` declares outputs whose failure does not block the required ones. Inputs can be URLs, local files, a bundle directory or manifest, and `--inputs-file` lists. For batch processing, existing bundles, explicit native operations or acquisition recovery, read [task workflow](references/tasks.md).
 
 Unified tasks accept `--workers 1..8` (default 1). Start with the requested bound, or a small bound such as 2 for an authorized batch; enumeration and result ordering remain stable. Resume retains the saved bound unless overridden. All workers share one durable budget; increasing concurrency does not increase the cap. Ctrl-C drains started workers before releasing the job lock, so shutdown can take until provider timeouts.

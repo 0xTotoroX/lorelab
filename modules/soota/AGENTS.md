@@ -28,6 +28,8 @@
 
 ## 处理层与文档同步
 
+- `planning/` 负责采集前的方案比较、结构化预设匹配、确认与保存；自然语言归一和询问由 Agent/Skill 完成。报价按需刷新，不后台轮询。预设不能覆盖当前停用来源或费用保护；执行和恢复继续用 `tasks/` 与原账本。契约见 `docs/planning.md`。
+
 - 高层黑盒流程与模块职责以 `docs/providers.md` 的“处理流程与职责”为主源；采集任务的目标、输入、恢复与 v2 原文产物以 `docs/tasks.md` 为主源；语义目标、分析校验、渲染和整包导出归 LoreLab content，知识整理、学习与交付归 LoreLab knowledge/study；字幕格式与限制以 `docs/subtitle-formats.md` 的“统一转换层”为主源。
 - 修改模块职责、阶段顺序、获取／转换接口、输入输出或实现能力时，同步更新受影响的职责图、入口表和格式能力表；图描述已实现状态，不能把目标或计划写成现有能力。
 - Provider 只负责获取、轨道与获取格式选择、原始正文和获取状态。字幕正文解析集中在 `transcripts/formats/`，统一入口为 `transcripts/conversion.py`；编排层在转换成功后写字幕缓存。新增 Provider 不复制已有格式解析器。

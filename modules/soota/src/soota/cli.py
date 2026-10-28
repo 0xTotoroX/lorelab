@@ -1,7 +1,7 @@
 """Public Typer entry points.
 
 [INPUT]: Command arguments, settings and application command functions.
-[OUTPUT]: 采集与恢复命令；旧知识命令仅转交 LoreLab。
+[OUTPUT]: 目标规划、预设、采集与恢复命令；旧知识命令仅转交 LoreLab。
 [POS]: soota CLI adapter; task execution contracts live in tasks/ and docs/tasks.md.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -28,6 +28,8 @@ from soota.pipeline import estimate as estimate_cmd
 from soota.pipeline import inspect as inspect_cmd
 from soota.pipeline import list_jobs as list_jobs_cmd
 from soota.pipeline import render as render_cmd
+from soota.planning.cli import app as plan_app
+from soota.planning.cli import presets_app
 from soota.platform_support import configure_stdio
 from soota.policy_cli import app as policy_app
 from soota.providers_cli import app as providers_app
@@ -60,6 +62,8 @@ app.add_typer(providers_app, name="providers")
 app.add_typer(features_app, name="features")
 app.add_typer(updates_app, name="updates")
 app.add_typer(mcp_app, name="mcp")
+app.add_typer(plan_app, name="plan")
+app.add_typer(presets_app, name="presets")
 
 
 @app.command(

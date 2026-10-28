@@ -20,7 +20,7 @@
 - `opencli_patches.py`：受管 OpenCLI 命令补丁。
 - `opencli_runtime.py`：OpenCLI 运行环境与安装检查。
 - `quotes.py`：按地址和凭据隔离的时效报价、任务内共享、过期刷新与失败去重。
-- `priority.py`：按平台／能力读取优先级、报价与排序。
+- `priority.py`：按平台／能力读取优先级和报价，规划预览与执行共用 rank_quotes 排序。
 - `process.py`：有超时和输出上限的子进程运行。
 - `process_pipes.py`：受控进程管道读取与资源限制。
 - `router.py`：采集 Provider 路由、策略与预算检查。
