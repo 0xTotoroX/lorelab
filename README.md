@@ -136,6 +136,10 @@ lorelab knowledge verify /path/to/job
 
 文章以足够理解和使用为准，不强制长文、固定要点数量或额外保存一份短笔记。默认在文章写入并回读后完成；只有明确选择同批交付大纲时，才在 `prepare` 加 `--with-outline` 并指定幕布目标。审阅字段、补抓、清理及恢复方法见 [LoreLab 知识流程](docs/knowledge.md)。
 
+### 按主题建立知识图书馆
+
+用 `lorelab knowledge library init` 创建共享分类表，`library tree` 查看编码目录，`library catalog --query 关键词` 查找旧文。文章任务自动绑定分类，归档前校验目录和同名重复，保护人工修改。完整命令与边界见 [知识图书馆](docs/library.md)。
+
 ### 从已有文章制作学习大纲
 
 ```sh

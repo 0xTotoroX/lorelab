@@ -1,4 +1,4 @@
-"""[INPUT]: Agent 审阅 JSON、来源 handoff 和目标规则所在目录。
+"""[INPUT]: Agent 审阅 JSON、来源 handoff、冻结分类体系和目标目录。
 [OUTPUT]: 按文章或组合目标校验/冻结的 approved、Soota 完成回执与产物指纹。
 [POS]: 只验证机械契约；全文阅读、语义覆盖与大纲质量由 Agent 负责。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
@@ -10,6 +10,7 @@ import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
+from . import library
 from .workflow_sources import check_sources
 from .workflow_state import (
     call,
@@ -176,7 +177,11 @@ def validate(job: Path, state: dict, review: dict) -> dict:
         fields = {"title", "relative_path", "source_ids", "markdown", "body_sha256"}
         if wants_outline(spec):
             fields.add("outline")
-        require(fields <= set(note) <= fields | {"evidence"}, "笔记字段不符，不能自行指定 destination/vault。")
+        extra = {"evidence"}
+        if "library" in spec:
+            fields.add("category")
+            extra.add("related_categories")
+        require(fields <= set(note) <= fields | extra, "笔记字段不符，不能自行指定 destination/vault。")
         require(isinstance(note["title"], str) and note["title"].strip(), "笔记标题不能为空。")
         path = destination(spec, note["relative_path"])
         key = path_key(str(path))
@@ -225,6 +230,7 @@ def validate(job: Path, state: dict, review: dict) -> dict:
         )
     if wants_outline(spec):
         validate_outline(notes)
+    library.check_notes(spec, notes)
     return review
 
 

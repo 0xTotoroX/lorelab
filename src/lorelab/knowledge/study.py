@@ -1,4 +1,4 @@
-"""[INPUT]: 显式选择的既有 Markdown 文章、Agent 审阅和共享幕布发布器。
+"""[INPUT]: 显式选择的既有文章、共用标题解析、Agent 审阅和幕布发布器。
 [OUTPUT]: prepare/submit/publish/verify/status；私有文章快照及不可变学习大纲。
 [POS]: 按需学习流程；只读知识库，不采集来源，不调用 Cubox/Soota。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
@@ -6,10 +6,10 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from uuid import uuid4
 
+from .markdown import title as _title
 from .workflow_publish import publish_approved, reconcile, writer
 from .workflow_review import validate_outline
 from .workflow_state import (
@@ -74,41 +74,6 @@ def _article_path(spec: dict, relative: str) -> Path:
     require(path.name.casefold() not in {"agents.override.md", "gemini.md", "skill.md"}, "拒绝选择指令文件。")
     return path
 
-
-def _title(markdown: str, path: Path) -> str:
-    """读取 H1（ATX/Setext）；忽略 front matter 和围栏代码，不生成语义内容。"""
-    lines = markdown.lstrip("\ufeff").splitlines()
-    front_matter = bool(lines and lines[0] == "---" and any(line in {"---", "..."} for line in lines[1:]))
-    fence = None
-    paragraph = []
-    for index, line in enumerate(lines):
-        if front_matter:
-            if index and line in {"---", "..."}:
-                front_matter = False
-            continue
-        if fence:
-            if re.fullmatch(r" {0,3}" + re.escape(fence[0]) + "{" + str(len(fence)) + r",}[ \t]*", line):
-                fence = None
-            continue
-        opening = re.match(r" {0,3}(`{3,}|~{3,})", line)
-        if opening:
-            fence = opening[1]
-            paragraph = []
-            continue
-        heading = re.match(r" {0,3}#[ \t]+(.+)", line)
-        if heading:
-            title = re.sub(r"(?:^|[ \t]+)#+[ \t]*$", "", heading[1]).strip()
-            if title:
-                return title
-        if paragraph and re.fullmatch(r" {0,3}=+[ \t]*", line):
-            return " ".join(paragraph)
-        if line.strip() and not re.match(r"(?: {4}|\t| {0,3}[#>\-*+])", line):
-            paragraph.append(line.strip())
-        else:
-            paragraph = []
-    title = path.stem.strip()
-    require(bool(title), "文章标题和文件名均为空。")
-    return title
 
 
 def _unique(articles: list[dict]):

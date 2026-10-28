@@ -1,4 +1,4 @@
-"""[INPUT]: 显式收藏、目的地、Agent 审阅及 runtime.run_json。
+"""[INPUT]: 显式收藏、目的地及可选分类体系、Agent 审阅与 runtime.run_json。
 [OUTPUT]: 默认文章交付及显式大纲交付的持久化知识流程。
 [POS]: LoreLab 知识交付编排；来源采集和跨来源文章任务分别保留恢复状态。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import uuid4
 
+from . import library
 from .workflow_cleanup import clean, reconcile_delete
 from .workflow_publish import publish_approved, reconcile, writer
 from .workflow_review import check_approved, submit_review, template
@@ -51,6 +52,10 @@ def report(job: Path, state: dict) -> dict:
         "sources": sources,
         "handoffs": bindings,
         "review_template": str(job / "review-template.json"),
+        **({"library": {"taxonomy": spec["library"], "paths": library.paths(spec["library"]),
+                         "catalog_snapshot": str(job / "library-catalog.json"),
+                         "note_fields": ["category", "related_categories (optional)"]}}
+           if "library" in spec else {}),
         "retained_ids": [s["id"] for s in sources if s["id"] not in state.get("cleanup", {}).get("absent_ids", [])],
         "pending_source_ids": [s["id"] for s in sources if s["id"] not in bindings],
         "semantic_review": "完整原文、语义覆盖、目标规则与既有笔记须由 Agent 实读审阅；程序仅校验机械契约。",
@@ -127,7 +132,10 @@ def prepare(
         "source_kind": "bundle" if bundle_inputs else "cubox",
         "bundle_inputs": [str(path) for path in bundle_inputs],
     }
-    destination(spec)
+    target = destination(spec)
+    taxonomy = library.load(target)
+    if taxonomy is not None:
+        spec["library"] = taxonomy
     root = Path(state_root or default_root()).expanduser().resolve()
     require(not root.is_relative_to(vault) and not vault.is_relative_to(root), "状态目录必须与知识库分离。")
     root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -135,6 +143,8 @@ def prepare(
     job.mkdir(mode=0o700)
     state = {"schema_version": 1, "job": str(job), "status": "preparing", "sealed": {}}
     seal(job, state, "spec.json", spec)
+    if taxonomy is not None:
+        seal(job, state, "library-catalog.json", library.catalog(target, taxonomy))
     immutable(job / "selected-ids.txt", ("\n".join(ids) + "\n").encode())
     save(job, state)
     with open_job(str(job)) as (job, state):

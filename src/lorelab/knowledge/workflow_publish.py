@@ -1,4 +1,4 @@
-"""[INPUT]: 冻结 approved、大纲、目标文件及 Mubu 全树回执。
+"""[INPUT]: 冻结 approved、分类、大纲、目标文件及 Mubu 全树回执。
 [OUTPUT]: 独立文章交付、按需单次导入意图和基于节点 ID 的全树对账。
 [POS]: 唯一写入者；遇未知结果只能读取，不重发导入。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md。
@@ -10,6 +10,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import library
 from .workflow_review import check_approved
 from .workflow_state import (
     WorkflowError,
@@ -88,6 +89,7 @@ def document(run, job: Path, spec: dict, name: str) -> dict:
 
 def inspect_notes(job: Path, state: dict, approved: dict, *, require_saved: bool):
     spec = unseal(job, state, "spec.json")
+    library.check_notes(spec, approved["notes"])
     for note in approved["notes"]:
         path = destination(spec, note["relative_path"])
         if require_saved:

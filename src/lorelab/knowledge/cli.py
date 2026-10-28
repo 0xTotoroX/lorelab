@@ -1,5 +1,5 @@
 """[INPUT]: 独立或产品转交的知识命令、用户目的地配置。
-[OUTPUT]: 文章/学习任务参数与结构化结果；旧命令复用相同解析。
+[OUTPUT]: 文章/学习任务、图书馆分类与书目命令；旧命令复用相同解析。
 [POS]: LoreLab 工作流 CLI，语义内容由外部 Agent 提交。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -32,6 +32,17 @@ def register(sub):
     batch = sub.add_parser("knowledge", aliases=["batch"], help="读取、Agent 交接、写入、核对和清理")
     commands = batch.add_subparsers(dest="action", required=True)
     init_arguments(commands.add_parser("init"))
+    library = commands.add_parser("library", help="共享分类体系、目录树与只读文章检索")
+    library_commands = library.add_subparsers(dest="library_action", required=True)
+    for name in ["init", "tree", "catalog"]:
+        action = library_commands.add_parser(name)
+        action.add_argument("--vault", type=Path)
+        action.add_argument("--subdir")
+        if name == "init":
+            action.add_argument("--taxonomy", type=Path, help="自定义分类 JSON；默认采用世界知识分类模板")
+        if name == "catalog":
+            action.add_argument("--query", default="", help="对标题与正文进行字面检索，不作语义判定")
+            action.add_argument("--category", help="按类别编码及其下级过滤")
     prepare = commands.add_parser("prepare")
     sources = prepare.add_mutually_exclusive_group(required=True)
     sources.add_argument("--ids-file", type=Path)
@@ -101,6 +112,24 @@ def dispatch(args):
     if args.command in {"batch", "knowledge"}:
         from . import workflow
 
+        if args.action == "library":
+            from . import library
+            from .workflow_state import inside, require
+
+            config = runtime.read_config()
+            vault = args.vault or config.get("vault")
+            subdir = args.subdir or config.get("subdir")
+            require(vault and subdir, "缺少 vault/subdir，请显式提供或先执行 knowledge init。")
+            vault = Path(vault).expanduser().resolve()
+            root = inside(vault, str(subdir).replace("\\", "/"))
+            if args.library_action == "init":
+                return library.init(root, args.taxonomy)
+            taxonomy = library.load(root)
+            if args.library_action == "tree":
+                require(taxonomy is not None, "未配置分类体系；先运行 knowledge library init。")
+                return {"ok": True, "taxonomy": taxonomy, "paths": library.paths(taxonomy),
+                        "tree": library.tree(taxonomy)}
+            return {"ok": True, **library.catalog(root, taxonomy, args.query, args.category)}
         if args.action == "prepare":
             config = runtime.read_config()
             fields = {}

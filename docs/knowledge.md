@@ -18,6 +18,10 @@ lorelab knowledge verify /path/to/job
 
 `prepare` 返回实际 JOB 和 `review_template`；Agent 阅读来源后填写模板，审核通过再提交。示例路径、ID 和 hash 均为占位符，必须替换为本次真实产物。默认不删除收藏；有适用的明确授权才启用 `--delete-verified`，再执行[清理](#清理门禁)。
 
+## 可选知识图书馆
+
+目的地存在 `分类体系.json` 时，prepare 额外冻结分类表和书目，回执包含 `library`；notes 必须提供 `category`，可选 `related_categories`。提交与发布校验分类路径和跨目录同名文章，未启用分类的旧批次保持原契约。初始化、编码与检索见 [知识图书馆](library.md)。
+
 ## Python 接口
 
 ```python

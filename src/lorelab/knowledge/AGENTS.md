@@ -6,6 +6,9 @@ LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/
 
 - `__init__.py`：知识模块入口。
 - `cli.py`：LoreLab knowledge/study 参数、配置及 init/batch 别名。
+- `library.py`：共享分类表、目录树、只读书目，以及冻结分类和归档前的跨目录重复校验。
+- `markdown.py`：图书馆和 study 共用的 H1 提取，支持 ATX/Setext 并忽略属性及代码围栏。
+- `world_taxonomy.json`：首次初始化可选用的世界知识分类模板；个人分类留在目的地，不随升级覆盖。
 - `runtime.py`：独立 CLI 发现或受管绑定调用；旧配置兼容；JSON 回执与无 shell 的 argv。
 - `workflow.py`：文章批次、可选组合交付、核对与授权清理入口。
 - `bundles.py`：已验证 v2 正文/字幕包输入，源包只读并保留指纹。
