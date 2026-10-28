@@ -57,6 +57,7 @@ Agent 克隆仓库、读取安装指引后执行本机入口。用户不需要�
 | 本机环境 | 在仓库目录执行 |
 | --- | --- |
 | macOS（Apple Silicon / Intel） | `sh install.sh` |
+| Linux（arm64 / x64） | `sh install.sh` |
 | Windows 原生 PowerShell | `powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1` |
 
 安装器复用已有 uv / Go，缺少时从固定官方来源获取到用户目录；Python、依赖、Go 模块和构建缓存共用。四个 CLI 从本仓库绑定的源码构建，安装相同内容时校验后复用当前版本。Windows 使用原生 `.exe` 入口和目录 junction，不要求 WSL 或开发者模式。

@@ -50,7 +50,7 @@ LoreLab content 负责单来源分析、笔记、文章、大纲与整包导出�
 
 ## 安装与组件维护
 
-首次安装和源码更新先读[Agent 安装指引](../../docs/agent-install.md)，详细参数见[安装与恢复](../../docs/installation.md)。使用用户提供的实际仓库地址；本地 Agent 按 macOS `install.sh` / Windows `install.ps1` 选择入口，自动准备缺失工具链并从绑定源码安装四个 CLI 和四套 Skill，不要求下载 LoreLab 安装包。
+首次安装和源码更新先读[Agent 安装指引](../../docs/agent-install.md)，详细参数见[安装与恢复](../../docs/installation.md)。使用用户提供的实际仓库地址；本地 Agent 按 macOS 或 Linux `install.sh` / Windows `install.ps1` 选择入口，自动准备缺失工具链并从绑定源码安装四个 CLI 和四套 Skill，不要求下载 LoreLab 安装包。
 
 `setup --non-interactive` 保留已有配置，只合并显式目的地；不猜知识库路径，检查账号须显式 `--check-accounts`。同名外部内容不覆盖，沿用已有 prefix 和任务。普通更新用 `lorelab update --check`、`lorelab update`；从指定源码更新用 `--from CHECKOUT`，或 `--repo REPOSITORY --ref REF`。来源由安装记录保存，更新使用独立快照，不修改用户工作区；相同内容校验后复用，不重复构建。
 

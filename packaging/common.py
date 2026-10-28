@@ -217,8 +217,9 @@ def build_payload(root: Path, scratch: Path, uv: Path, toolchain: Path | None = 
     from go_toolchain import get_go
 
     target = platform_tag()
-    if target not in {"darwin-arm64", "darwin-amd64", "windows-amd64", "windows-arm64"}:
-        raise PackagingError("supported source targets: macOS arm64/x64 and Windows x64/arm64")
+    if target not in {"darwin-arm64", "darwin-amd64", "windows-amd64", "windows-arm64",
+                      "linux-amd64", "linux-arm64"}:
+        raise PackagingError("supported source targets: macOS, Linux and Windows arm64/x64")
     toolchain = toolchain or scratch
     go = get_go(toolchain, target)
     lock = json.loads((root / "components.lock.json").read_text(encoding="utf-8"))

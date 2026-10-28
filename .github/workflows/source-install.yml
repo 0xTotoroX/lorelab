@@ -11,6 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: ubuntu-latest
+            arguments: --system-path
           - os: macos-15
             arguments: --system-path
           - os: windows-latest

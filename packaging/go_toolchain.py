@@ -18,6 +18,9 @@ from common import PackagingError, sha256
 
 VERSION = "1.27.3"
 ARCHIVES = {
+    # https://go.dev/dl/?mode=json&include=all；归档与 SHA256 固定到同一版本。
+    "linux-amd64": ("tar.gz", "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40"),
+    "linux-arm64": ("tar.gz", "a06e99309dbcbdca1a8ccd2282c3ee146e55930886e26b4f1193269587165f49"),
     "darwin-amd64": ("tar.gz", "b6f8e931e4ab497fcde6da8ae4499a58f9d258e55c8a80824a516eae5950a750"),
     "darwin-arm64": ("tar.gz", "dd3908cf20959d798c1e06ebe5b72213f0505ce01373b40ce3110975a6cd99c2"),
     "windows-amd64": ("zip", "f26081f438319757f8a1b46d7d0b2c5ec7583d4038e485e0aa725cfde7885fff"),
