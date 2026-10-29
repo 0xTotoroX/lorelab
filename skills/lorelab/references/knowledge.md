@@ -26,6 +26,8 @@ After ingest, record the returned v2 bundle directory or manifest in a JSON stri
 
 ## Cubox batches and source snapshots
 
+For an already-collected X export with per-post decisions and externally written articles or saved repository cards, use the [collection ledger](../../../docs/collection.md). It accepts JSON manifests and raw JSON/JSONL file fingerprints, permits several Cubox IDs to share one status/text evidence, and requires no invented Soota jobs. Agent review stays open-ended; verify reads actual article hashes and repository cards. A NotFound evidence record is separate from complete source coverage; AuthorizationError is never unavailability. Missing/unread sources block collection readiness. Keep existing batch jobs on their original interface.
+
 Use the selected IDs with `lorelab knowledge prepare --ids-file FILE`. It calls Cubox CLI to read folders and cards, preserves exact source bytes and source identities, protects GitHub projects and creates the LoreLab content analysis handoffs using Soota source acquisition. Missing or description-only content stays incomplete. See [article workflow](process.md#文章任务) and [source supplementation](../../../docs/knowledge.md#cubox-输入与补抓).
 
 `body_available` means body text exists, not that the original post is complete. Keep Cubox snapshots distinct from supplemental sources. Use existing Soota acquisition for the original URL; a failed read, login problem or `link + null` result remains missing. Never ingest the full CardDetail response as an input list or treat title, AI insight and description as full body text.

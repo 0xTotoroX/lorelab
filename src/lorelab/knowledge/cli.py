@@ -1,5 +1,5 @@
 """[INPUT]: 独立或产品转交的知识命令、用户目的地配置。
-[OUTPUT]: 文章/学习任务、图书馆分类与书目命令；旧命令复用相同解析。
+[OUTPUT]: 文章/学习任务、逐帖 collection 账本、图书馆分类与书目命令；旧命令复用相同解析。
 [POS]: LoreLab 工作流 CLI，语义内容由外部 Agent 提交。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -32,6 +32,18 @@ def register(sub):
     batch = sub.add_parser("knowledge", aliases=["batch"], help="读取、Agent 交接、写入、核对和清理")
     commands = batch.add_subparsers(dest="action", required=True)
     init_arguments(commands.add_parser("init"))
+    collection = commands.add_parser("collection", help="逐帖决策、外部交付核对、策略反馈与授权清理")
+    collection_commands = collection.add_subparsers(dest="collection_action", required=True)
+    collection_prepare = collection_commands.add_parser("prepare")
+    collection_prepare.add_argument("--file", type=Path, required=True)
+    collection_prepare.add_argument("--state-root", type=Path)
+    for name in ("submit", "review", "feedback", "authorize", "status", "verify", "ready", "cleanup"):
+        action = collection_commands.add_parser(name)
+        action.add_argument("job")
+        if name in {"submit", "review", "feedback", "authorize"}:
+            action.add_argument("--file", type=Path, required=True)
+        if name == "cleanup":
+            action.add_argument("--execute", action="store_true")
     library = commands.add_parser("library", help="共享分类体系、目录树与只读文章检索")
     library_commands = library.add_subparsers(dest="library_action", required=True)
     evolve = library_commands.add_parser("evolve", help="按内容和反馈迭代分类，保护原文并保留回退记录")
@@ -123,6 +135,16 @@ def dispatch(args):
         runtime.private_json(runtime.config_path(), value)
         return {"ok": True, "config": str(runtime.config_path()), "settings": value}
     if args.command in {"batch", "knowledge"}:
+        if args.action == "collection":
+            from . import collection
+
+            if args.collection_action == "prepare":
+                return collection.prepare(args.file, args.state_root)
+            if args.collection_action in {"submit", "review", "feedback", "authorize"}:
+                return getattr(collection, args.collection_action)(args.job, args.file)
+            if args.collection_action == "cleanup":
+                return collection.cleanup(args.job, args.execute)
+            return getattr(collection, args.collection_action)(args.job)
         from . import workflow
 
         if args.action == "library":

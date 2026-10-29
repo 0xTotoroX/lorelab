@@ -22,6 +22,7 @@ LoreLab content 负责单来源分析、笔记、文章、大纲与整包导出�
 | 按内容和反馈自适应分类、归类排序、查看与检索 | [图书馆契约](../../docs/library.md)，`lorelab knowledge library init/tree/catalog/evolve`；短名、一层优先，Agent 主动观察与复查，CLI 保留稳定身份、版本和回退 |
 | 整理多源文章、知识归档或恢复交付 | [文章与交付流程](references/process.md)、相关[写作提示](references/prompts.md)；正式命令 `lorelab knowledge` |
 | 已有文章的学习或复习大纲 | [按需学习任务](references/process.md#按需学习任务)，正式命令 `lorelab study` |
+| 已采集大批 X 导出、逐帖决策与外部交付核对 | [集合账本](../../docs/collection.md)，`lorelab knowledge collection prepare/review/verify/status/feedback`；同帖可对应多收藏，清理按真实 Cubox ID |
 | 粘贴文本作为来源、接入已有内容包 | [来源准备](references/knowledge.md)，保留来源身份，不能把粘贴正文当成 URL 清单 |
 | 直接查询或管理收藏 | [Cubox Skill](../../modules/cubox-cli/skills/cubox/SKILL.md)，`lorelab tool cubox -- ORIGINAL_ARGS` |
 | 直接编辑幕布文档、节点与媒体 | [幕布 Skill](../../modules/mubu-cli/SKILL.md)，`lorelab tool mubu -- ORIGINAL_ARGS` |

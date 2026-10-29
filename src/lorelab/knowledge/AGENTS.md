@@ -5,7 +5,9 @@
 LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/`，单来源分析与产物校验调用相邻 `content/`，跨来源知识文章与学习任务在此独立保存状态。此模块复用 Soota 内容包契约，不调用服务私有 API。
 
 - `__init__.py`：知识模块入口。
-- `cli.py`：LoreLab knowledge/study 参数、配置及 init/batch 别名。
+- `cli.py`：LoreLab knowledge/study、collection 参数、配置及 init/batch 别名。
+- `collection.py`：离线冻结 X 导出清单、同帖多收藏身份、Agent 逐帖开放审阅、外部文章/仓库交付核对及策略版本；不生成内容。
+- `collection_cleanup.py`：全批 ready、精确收藏与单独失效删除授权、GitHub 保护、dry-run 和一次删除后的只读对账。
 - `library.py`：共享分类表、目录树、只读书目，以及冻结分类和归档前的跨目录重复校验。
 - `library_taxonomy.py`：自适应分类 v2，稳定身份、名称、显示顺序、原文归属和路径相互独立。
 - `library_allocation.py`：共享的单调编号记录；回滚分类保留已分配 ID，防止旧任务误认新类别。
