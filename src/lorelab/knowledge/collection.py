@@ -1,5 +1,5 @@
 """[INPUT]: 外部 X 材料清单、Agent 开放式审阅、真实文章和 Cubox 仓库卡片。
-[OUTPUT]: 固定来源集合、增量审阅及已读无新知识决策、整体交付核对和版本化策略反馈。
+[OUTPUT]: 固定来源集合、增量审阅与缺口清单、整体交付核对和版本化策略反馈。
 [POS]: knowledge 的轻量集合账本；不生成文章、不调用模型或更改分类。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -307,13 +307,24 @@ def inspect(run, job, state, spec):
     return result
 
 
-def report(job, state):
+def report(job, state, selected=None):
     sources = unseal(job, state, "sources.json")
+    selected = reviews(job, state) if selected is None else selected
+    counts = dict.fromkeys(("processed", "retain", "confirmed-unavailable", "reviewed-no-yield"), 0)
+    for review in selected.values():
+        counts[review["decision"]] += 1
+    pending = [s["id"] for s in sources if s["id"] not in selected]
+    retained = [{"id": source["id"], "status_id": source["status_id"],
+                 "text_file": source["text_file"], "gaps": selected[source["id"]]["gaps"]}
+                for source in sources
+                if selected.get(source["id"], {}).get("decision") == "retain"]
     return {"ok": state.get("cleanup", {}).get("status") != "uncertain", "job": str(job),
             "status": state["status"], "sources": sources, "reviewed_ids": list(state["reviews"]),
             "source_count": len(sources), "status_count": len({s["status_id"] for s in sources}),
+            "reviewed_source_count": len(selected), "review_counts": counts,
+            "pending_source_count": len(pending), "retained_sources": retained,
             "review_files": {key: str(job / name) for key, name in state["reviews"].items()},
-            "pending_source_ids": [s["id"] for s in sources if s["id"] not in state["reviews"]],
+            "pending_source_ids": pending,
             "review_template": str(job / "review-template.json"), "ready": state.get("ready"),
             "strategy_version": len(state["feedback"]), "feedback": list(state["feedback"]),
             "strategy": unseal(job, state, state["feedback"][-1])["strategy"] if state["feedback"] else None,
@@ -325,9 +336,10 @@ def report(job, state):
 def status(job):
     with opened(job) as (folder, state, spec):
         sources = {s["id"]: s for s in unseal(folder, state, "sources.json")}
-        for key, review in reviews(folder, state).items():
+        selected = reviews(folder, state)
+        for key, review in selected.items():
             validate_review(sources[key], review, spec)
-        return report(folder, state)
+        return report(folder, state, selected)
 
 
 def ready(job):

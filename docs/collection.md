@@ -74,7 +74,9 @@ review 文件为 `{"schema_version":1,"sources":[...]}`，可以只包含本轮�
 
 review 接受前会核对全部当前输出，verify 会再次核对实际文章、仓库以及本批尚未删除的 X 卡片身份。至多 100 个卡片使用 `card batch`；更多卡片使用当前 `card list --all` 与 `card list --archived --all` 的完整分页快照，按固定 ID 核对 URL 和文件夹，避免反复请求已保存的全文。快照中的纯文本收藏可以没有 URL，保留在快照中且不扩大本批范围；目标 X 帖子和仓库输出仍须逐项通过准确 URL 校验。快照读取失败、缺少真实 ID 或文件夹信息、URL 类型错误、ID 重复均停止，不使用旧缓存冒充当前状态，也不把元数据核验当作全文实读。整体 ready 要求每个冻结来源都有有效 review，未读或缺失来源阻塞。程序校验不能证明语义理解或价值覆盖。
 
-status 只读取本地证据，不联网；返回来源数、status 数、待审阅 ID、当前 review 文件、最近 ready 记录、策略版本及清理状态。已保存的 ready 仅是上次核对结果；verify/cleanup 必须实时核对。所有任务操作沿用 workflow_state 的锁与原子写入，交付核对沿用共享目的地锁。
+status 只读取本地证据，不联网；返回来源数、status 数、待审阅 ID、当前 review 文件、最近 ready 记录、策略版本及清理状态。`reviewed_source_count` 是已登记审阅的数量；`review_counts` 分别统计 processed、retain、confirmed-unavailable、reviewed-no-yield，`pending_source_count` 单列尚未审阅的数量。`retained_sources` 给出保留来源的收藏 ID、status ID、正文路径及原样缺口，不能把已审阅总数当成已提炼或可删除总数。已保存的 ready 仅是上次核对结果；verify/cleanup 必须实时核对。所有任务操作沿用 workflow_state 的锁与原子写入，交付核对沿用共享目的地锁。
+
+清理前复查保留清单：区分真实缺失、采集失败与尚未处理的可读材料。媒体未出现在某读者的交接表，不证明原图或视频不可获取；回查冻结原始记录里的真实媒体地址和已有内容包，能补的先采集并审阅。已有媒体也可能只有低清图、局部抽帧或失败转写，保留具体证据边界。CLI 展示 Agent 的缺口记录，不按关键词自动闭合缺口，也不把文件存在当作已理解内容。
 
 ### 并行阅读、合并与后续增量
 

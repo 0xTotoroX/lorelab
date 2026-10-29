@@ -154,6 +154,37 @@ def test_shared_x_evidence_for_distinct_cubox_ids(setup):
     assert cleaned["cleanup"]["retained_ids"] == ["1002"] and "1002" in fake.cards
 
 
+def test_status_distinguishes_reviewed_outcomes_from_pending_and_exposes_original_gaps(setup):
+    start, fake, target, material, source = setup
+    sources = [{**source, "id": str(key)} for key in range(1001, 1006)]
+    for entry in sources[1:]:
+        fake.cards[entry["id"]] = card(entry["id"], url=source["url"])
+    result = start(sources)
+    values = review_for(result, target)["sources"][:2]
+    values[1].update(decision="retain", complete=False, outputs=[],
+                     gaps=["原图尚未采集；交接表缺映射不等于远端不可用。"])
+    values.append(no_yield_review(result)["sources"][2])
+    missing = unavailable(result, material)["sources"][0]
+    missing["id"] = "1004"
+    values.append(missing)
+    submit(result, {"schema_version": 1, "sources": values})
+    calls_before = deepcopy(fake.calls)
+    state_before = (Path(result["job"]) / "job.json").read_bytes()
+
+    observed = c.status(result["job"])
+
+    assert observed["reviewed_source_count"] == 4
+    assert observed["review_counts"] == {
+        "processed": 1, "retain": 1, "confirmed-unavailable": 1, "reviewed-no-yield": 1,
+    }
+    assert observed["pending_source_count"] == 1 and observed["pending_source_ids"] == ["1005"]
+    assert observed["retained_sources"] == [{
+        "id": "1002", "status_id": "2001", "text_file": source["text_file"],
+        "gaps": values[1]["gaps"],
+    }]
+    assert fake.calls == calls_before and (Path(result["job"]) / "job.json").read_bytes() == state_before
+
+
 @pytest.mark.parametrize("mutation,match", [
     (lambda v: v["sources"].append(deepcopy(v["sources"][0])), "重复 Cubox"),
     (lambda v: v["sources"][0].update(status_id="8888"), "status ID"),
