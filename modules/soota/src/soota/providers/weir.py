@@ -1,6 +1,6 @@
 """Weir's read-only HTTP acquisition and free-credit guard.
 
-[INPUT]: Ordered private keys, Weir usage response and persistent shared credit ledger.
+[INPUT]: Ordered private keys, key-bound gift confirmations, usage and shared credit ledger.
 [OUTPUT]: Raw single-post/Article/Reddit responses with confirmed credit settlement.
 [POS]: Acquires provider data; content.weir owns source-text conversion.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -18,7 +18,7 @@ import httpx
 from soota.billing import selected_provider
 from soota.config import SootaSettings
 from soota.errors import AuthBudgetError, ContractError, SourceError
-from soota.providers.weir_keys import WeirKey, load_keys, next_start_index
+from soota.providers.weir_keys import WeirKey, gift_credits, load_keys, next_start_index
 from soota.storage.credit_budget import CreditBudget
 from soota.storage.task_budget import active_task_identity
 
@@ -37,19 +37,19 @@ def _integer(data: dict[str, Any], name: str) -> int:
     return value
 
 
-def free_period(data: dict[str, Any], needed: int) -> str:
+def free_period(data: dict[str, Any], needed: int, *, confirmed_gift_credits: int = 0) -> str:
     grant = data.get("freeGrant")
     if not isinstance(grant, dict) or data.get("spendingPaused") is not False:
         raise AuthBudgetError("Weir 没有可确认的免费额度，或账号暂停消费。")
     remaining = _integer(grant, "remaining")
     granted = _integer(grant, "granted")
     balance, reserved, available = (_integer(data, k) for k in ("balance", "reserved", "available"))
-    # No server-side free-only switch: refuse wallets with purchased credits.
-    if balance != remaining or data.get("tier") != "free":
-        raise AuthBudgetError("免费模式拒绝非 free 等级或仍有购买余额的 Weir workspace，避免转扣付费额度。")
+    # A confirmed gift may coexist, but never increases spendable monthly credits.
+    if balance < remaining or data.get("tier") != "free" or balance - remaining > confirmed_gift_credits:
+        raise AuthBudgetError("免费模式拒绝非 free 等级或未经确认的额外余额；赠送额度须由用户明确确认。")
     if remaining > granted or available != balance - reserved:
         raise ContractError("Weir 免费余额状态不一致，未发送数据请求。")
-    if available < needed:
+    if remaining - reserved < needed:
         raise AuthBudgetError("Weir 免费余额不足以覆盖本次最大扣费，未发送。")
     try:
         reset = datetime.fromisoformat(grant["resetsAt"].replace("Z", "+00:00"))
@@ -112,7 +112,8 @@ class WeirClient:
                         raise AuthBudgetError(
                             "无法核实 Weir 免费余额，未发送数据请求。", details={"status": usage.status_code}
                         )
-                    period = free_period(self._data(usage), max_credits)
+                    period = free_period(self._data(usage), max_credits,
+                                         confirmed_gift_credits=gift_credits(self.settings, credential))
                     reservation = budget.reserve(
                         period=period,
                         task=self.task,

@@ -186,7 +186,7 @@ def test_legacy_ledger_counts_before_rotation_without_rewriting(settings, pool):
             else response(request)
         )
 
-    calls = pool(reply)
+    pool(reply)
     ledger = budget(settings)
     ledger.root.mkdir(parents=True)
     legacy = json.dumps(
@@ -364,7 +364,7 @@ def test_backup_must_also_pass_free_only_guard(settings, pool):
     calls = pool(
         lambda key, r: httpx.Response(401) if key == "synthetic-primary" else httpx.Response(200, json={"data": usage})
     )
-    with pytest.raises(AuthBudgetError, match="购买余额"):
+    with pytest.raises(AuthBudgetError, match="额外余额"):
         capture(settings, URL)
     assert not any(p.startswith("/v1/x") for _, p in calls)
 

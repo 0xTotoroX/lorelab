@@ -1,7 +1,7 @@
 """Private, ordered Weir credentials; never serialize keys into command results.
 
 [INPUT]: Environment override, legacy key file and named private credentials.
-[OUTPUT]: Ordered enabled keys and redacted CLI inventory.
+[OUTPUT]: Ordered enabled keys, redacted inventory and key-bound free-gift confirmations.
 [POS]: Credential storage only; HTTP failover belongs to providers.weir.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -95,6 +95,56 @@ def load_keys(settings: SootaSettings) -> list[WeirKey]:
             unique.append(credential)
             seen.add(value)
     return unique
+
+
+def _gifts_path(settings: SootaSettings) -> Path:
+    return settings.config_dir / "credentials" / "weir-gifts.json"
+
+
+def _read_gifts(settings: SootaSettings) -> dict[str, int]:
+    path = _gifts_path(settings)
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict) or value.get("schema_version") != 1:
+            raise ValueError("invalid version")
+        gifts = value["credits_by_key_sha256"]
+        if not isinstance(gifts, dict) or any(
+            not isinstance(key, str) or re.fullmatch(r"[0-9a-f]{64}", key) is None
+            or type(amount) is not int or amount < 0 for key, amount in gifts.items()
+        ):
+            raise ValueError("invalid allowance")
+        return gifts
+    except (OSError, ValueError, KeyError) as exc:
+        raise StorageError("Weir 赠送额度确认文件无效；未重置或放宽免费规则。") from exc
+
+
+def gift_credits(settings: SootaSettings, credential: WeirKey) -> int:
+    fingerprint = hashlib.sha256(credential.key.get_secret_value().encode()).hexdigest()
+    return _read_gifts(settings).get(fingerprint, 0)
+
+
+def confirm_gift(settings: SootaSettings, name: str, credits: int | None = None) -> dict:
+    """Record a user's explicit gift declaration, bound to the current secret's hash."""
+    credential = next((key for key in load_keys(settings) if key.name == name), None)
+    if credential is None:
+        raise InputError("赠送额度确认须指定当前启用的 Key 名称。")
+    if credits is not None:
+        if type(credits) is not int or credits < 0:
+            raise InputError("赠送额度必须是非负整数；0 撤销确认。")
+        with _locked(settings):
+            gifts = _read_gifts(settings)
+            fingerprint = hashlib.sha256(credential.key.get_secret_value().encode()).hexdigest()
+            if credits:
+                gifts[fingerprint] = credits
+            else:
+                gifts.pop(fingerprint, None)
+            path = _gifts_path(settings)
+            atomic_write(path, json.dumps({"schema_version": 1, "credits_by_key_sha256": gifts}) + "\n")
+            path.chmod(0o600)
+    return {"key_name": name, "confirmed_gift_credits": gift_credits(settings, credential),
+            "scope": "当前 Key；仅允许已确认的赠送余额共存，消费仍限月度免费余额。"}
 
 
 def next_start_index(settings: SootaSettings, count: int, *, advance_from: int | None = None) -> int:

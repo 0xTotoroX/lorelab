@@ -27,7 +27,7 @@
 - `soota.py`：旧名称对 yt-dlp Provider 的兼容导入。
 - `tikhub_worker.py`：隔离环境中的 TikHub SDK 桥。
 - `weir.py`：免费余额检查、跨 Key 轮询／401 跳过、HTTP 获取与 credits 回执结算。
-- `weir_keys.py`：私有主用／命名备用凭据、启停、环境覆盖、持久轮询游标与脱敏清单。
+- `weir_keys.py`：私有主用／命名备用凭据、启停、环境覆盖、持久轮询游标、脱敏清单与绑定当前 Key 的赠送额度确认。
 - `windows_process.py`：Windows 进程树与管道控制。
 - `ytdlp.py`：yt-dlp 元数据、字幕和媒体获取。
 - `monid/`：Monid 获取和费用策略，见其局部地图。

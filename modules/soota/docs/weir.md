@@ -11,6 +11,8 @@ soota providers auth weir                    # 隐藏输入 Key；也可从 WEIR
 soota providers auth weir --key-name backup-1 # 添加／更新命名备用 Key，隐藏输入
 soota providers keys weir --json             # 只显示名称、启用状态及有效优先顺序
 soota providers keys weir --disable backup-1  # 停用备用 Key；--enable 可重新启用
+soota providers gift weir --key-name default --credits 1000 --json # 仅在用户明确确认这笔余额免费赠送时
+soota providers gift weir --key-name default --json # 只读当前 Key 的赠送确认；--credits 0 撤销
 soota providers enable weir
 soota providers limits weir --monthly-credits 4000 --task-credits 100 --json
 soota providers show --json
@@ -39,7 +41,9 @@ soota jobs resume JOB_ID --weir-max-credits 100 --json
 
 ## 免费模式与账本
 
-官方目前提供每月 5,000 免费 credits，先消费免费余额，再消费购买余额；数据接口没有已核实的服务端 free-only 开关。因此每次数据请求前免费查询 `/v1/usage`，要求 free tier、`balance == freeGrant.remaining`、有效且未过期的重置时间，并在扣除在途预留后仍有足够余额。无法确认、没有免费 grant、付费等级、购买余额、余额不足或暂停消费时停止。
+官方目前提供每月 5,000 免费 credits，先消费免费余额，再消费购买余额；数据接口没有已核实的服务端 free-only 开关。因此每次数据请求前免费查询 `/v1/usage`，要求 free tier、有效且未过期的重置时间，并在 `freeGrant.remaining` 扣除在途预留后仍足够覆盖本次请求。默认要求 `balance == freeGrant.remaining`；无法确认、没有免费 grant、付费等级、未确认的额外余额、余额不足或暂停消费时停止。
+
+若用户明确确认额外余额来自免费赠送，可用 `providers gift weir --key-name NAME --credits N` 登记。确认保存于私有 `credentials/weir-gifts.json`，绑定当前 Key 的 SHA-256，替换同名 Key 不继承；文件损坏时停止。只允许不超过该数值的额外赠送余额与月度免费余额共存，仍不增加可消费的月度余额，不放宽任务/月度上限，也不允许付费 tier。月度免费额度耗尽时仍停止，不自动转用赠送或购买余额。不可根据 API 的余额差值自动推断赠送；登记前必须有用户确认。`--credits 0` 撤销确认。
 
 **此模式适用于不充值的免费 workspace。** 运行期间不要从其他客户端充值；本地余额查询与远端扣费不是一个原子事务，无法拦截并发充值。其他工具共享免费余额时可能先耗尽，需由服务端拒绝；本地配额只能约束共享同一个 Soota data 目录的调用，不控制其他设备、应用或 Weir 监控任务。
 

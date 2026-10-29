@@ -1,6 +1,6 @@
 """
 [INPUT]: Settings, credential file and priority planner
-[OUTPUT]: Provider policy, private credentials and redacted Weir key inventory
+[OUTPUT]: Provider policy, credentials, redacted inventory and explicit gift confirmation
 [POS]: User configuration entry point
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -164,6 +164,25 @@ def source_for(platform: str, capability: str) -> SourceRef:
         url="",
         canonical_url="",
     )
+
+
+@app.command("gift")
+def gift(
+    name: str,
+    key_name: Annotated[str, typer.Option("--key-name")],
+    credits: Annotated[int | None, typer.Option("--credits", min=0,
+        help="用户明确确认的赠送额度；0 撤销，不指定时只读。")] = None,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    def configure() -> CommandResult:
+        from soota.providers.weir_keys import confirm_gift
+
+        if name != "weir":
+            raise InputError("赠送额度确认当前适用于 Weir。")
+        return result("赠送额度确认不增加月度可用余额、任务上限或付费授权。",
+                      confirm_gift(load_settings(), key_name, credits))
+
+    run(json_output, configure)
 
 
 @priority_app.command("set")
