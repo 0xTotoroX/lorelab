@@ -14,7 +14,7 @@ LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/
 - `library_evolution.py`：内容与反馈观察、Agent 审阅、影响预览、幂等应用及冲突保护回退；不搬文章。
 - `markdown.py`：图书馆和 study 共用的 H1 提取，支持 ATX/Setext 并忽略属性及代码围栏。
 - `world_taxonomy.json`：历史固定分类的可选模板；默认改为从空分类按实际需要生长，旧 v1 任务继续兼容。
-- `runtime.py`：独立 CLI 发现或受管绑定调用；旧配置兼容；JSON 回执与无 shell 的 argv。
+- `runtime.py`：独立 CLI 发现或受管绑定单次调用；旧配置兼容；JSON 回执、非 JSON/超时的私有有界诊断与无 shell 的 argv。
 - `workflow.py`：文章批次、可选组合交付、核对与授权清理入口。
 - `bundles.py`：已验证 v2 正文/字幕包输入，源包只读并保留指纹。
 - `workflow_sources.py`：Cubox 来源与保护范围、补抓及 LoreLab content 采集/分析任务交接。

@@ -1,5 +1,5 @@
 """[INPUT]: 独立 CLI 配置、可选分发器绑定清单和用户环境。
-[OUTPUT]: 固定 argv 调用、私有 JSON 回执、兼容知识配置路径。
+[OUTPUT]: 固定 argv 单次调用、私有 JSON 回执及有界脱敏诊断、兼容知识配置路径。
 [POS]: LoreLab 知识流程的组件进程边界与配置兼容。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -125,17 +126,76 @@ def tool_environment() -> dict[str, str]:
     return {**os.environ, "SOOTA_AUTO_UPDATE": "false", "CUBOX_NO_UPDATE_NOTIFIER": "1", "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
 
+def _output_metadata(output: str | bytes | None) -> dict:
+    # 未知格式无法可靠逐字段脱敏；只记录类型和大小，不保存正文或摘要哈希。
+    if output is None:
+        return {"type": "none", "size_bytes": 0}
+    if isinstance(output, bytes):
+        return {"type": "bytes", "size_bytes": len(output)}
+    return {"type": "text", "size_bytes": len(output.encode("utf-8", errors="replace"))}
+
+
+def _stderr_metadata(output: str | bytes | None) -> dict:
+    metadata = _output_metadata(output)
+    if output is None:
+        return metadata
+    # 只检查前 4 KiB；仅允许 CLI 的固定起始包装，不搜索正文或解码 JSON 字段。
+    prefix = output[:4096]
+    if isinstance(prefix, str):
+        prefix = prefix.encode("utf-8", errors="replace")[:4096]
+    for wrapper in (b"Error: ", b'{"error":"', b'{\n  "error": "'):
+        if prefix.startswith(wrapper):
+            prefix = prefix[len(wrapper):]
+            break
+    match = re.match(rb"(?:HTTP ([1-5][0-9]{2})|API error ([+-]?[0-9]{1,10})):", prefix)
+    if match:
+        if match[1] is not None:
+            metadata["http_status"] = int(match[1])
+        else:
+            metadata["api_error_code"] = int(match[2])
+    return metadata
+
+
+def _failure_diagnostic(
+    receipt: Path | None, failure: str, returncode: int | None, stdout: str | bytes | None, stderr: str | bytes | None
+) -> str:
+    from .workflow_state import WorkflowError
+
+    if receipt is None:
+        return "未指定私有回执路径，未保存诊断。"
+    path = Path(receipt).absolute().with_name(Path(receipt).name + ".diagnostic.json")
+    diagnostic = {
+        "schema_version": 1,
+        "failure": failure,
+        "returncode": returncode,
+        "stdout": _output_metadata(stdout),
+        "stderr": _stderr_metadata(stderr),
+    }
+    try:
+        private_json(path, diagnostic)
+    except (OSError, WorkflowError):
+        # 文件系统错误也可能带私有正文；保留原失败语义，不重发命令。
+        return f"私有诊断未能保存，目标位置：{path}。"
+    return f"私有诊断：{path}。"
+
+
 def run_json(tool: str, args: list[str], receipt: Path | None = None, acceptable_codes: tuple[int, ...] = (0,)):
     try:
         result = subprocess.run(
             tool_command(tool) + args, capture_output=True, text=True, encoding="utf-8", env=tool_environment(), timeout=600, check=False
         )
     except subprocess.TimeoutExpired as exc:
-        raise ToolError(f"{tool} 超时；若是云端写入，先只读对账，不可直接重发。") from exc
+        diagnostic = _failure_diagnostic(receipt, "timeout", None, exc.stdout, exc.stderr)
+        # TimeoutExpired 的异常链含完整 argv，不能暴露给公开调用方。
+        raise ToolError(f"{tool} 超时；{diagnostic}若是云端写入，先只读对账，不可直接重发。") from None
     try:
         value = json.loads(result.stdout)
-    except json.JSONDecodeError as exc:
-        raise ToolError(f"{tool} 未返回有效 JSON（退出码 {result.returncode}）。") from exc
+    except json.JSONDecodeError:
+        diagnostic = _failure_diagnostic(receipt, "invalid_json", result.returncode, result.stdout, result.stderr)
+        raise ToolError(
+            f"{tool} 未返回有效 JSON（退出码 {result.returncode}）；{diagnostic}"
+            "若是云端写入，先只读对账，不可直接重发。"
+        ) from None
     if receipt is not None:
         private_json(receipt, value)
     if result.returncode not in acceptable_codes:

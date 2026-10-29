@@ -58,6 +58,8 @@ Python 接口位于 `lorelab.knowledge.workflow`，学习接口位于 `lorelab.k
 
 流程的进程边界返回 CLI 的 JSON 结果，不自动重试。语义任务内部调用 LoreLab content；采集由 content 复用 Soota，独立运行时使用当前 Python 环境中的 Soota；Cubox 和幕布使用已配置或发现的各自 CLI。受管安装只使用当前 release 绑定的入口，强制 `SOOTA_AUTO_UPDATE=false`，缺失时不退回 PATH。知识模块不查服务私有 API。Cubox 输出指定 `-o json`；幕布所有调用均以全局 `--agent --auth desktop` 开头，可显式选择 `password`。
 
+子命令非 JSON 或超时时仍抛 `ToolError`，不重试、不覆盖已有 JSON 回执。指定 receipt 时，在旁边保存 `<receipt文件名>.diagnostic.json`（权限 `0600`）：包含失败类别、退出码（超时为 null）和 stdout/stderr 的类型、字节数。stderr 另有严格白名单：仅查看前 4 KiB，从开头识别 `HTTP NNN:`（100–599）或 `API error N:`（最多 10 位 ASCII 数字，可带正负号），在 `stderr` 对象内保存整数 `http_status` 或 `api_error_code`；只允许无包装、固定 `Error: `、紧凑 JSON 的 `{"error":"` 或缩进 JSON 的 `{\n  "error": "` 起始包装。不搜索后续正文、URL 或嵌入的错误字样；未匹配仍只有类型与大小，也不推断网络故障类别。不记录原始正文、完整 argv 或认证字段，文件大小不随输出正文增长。异常只给诊断位置及只读对账提示；诊断保存失败时明确报告目标位置，仍保持原调用失败。未指定 receipt 时不落盘。成功和可接受退出码的有效 JSON 契约保持不变；诊断代表该路径最近一次非 JSON/超时失败，不作为成功回执。进程输出仍由原有 `capture_output` 在内存中捕获，诊断大小边界不等于子进程输出的内存限制。
+
 ## 配置、独立组件与兼容入口
 
 `lorelab knowledge init` 保存知识目的地、可选幕布目标及删除意图。读取配置的顺序如下：
