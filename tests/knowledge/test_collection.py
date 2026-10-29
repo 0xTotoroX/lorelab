@@ -501,7 +501,8 @@ def test_status_alias_still_rejects_wrong_identity(url):
         c.x_status(url, "2001")
 
 
-@pytest.mark.parametrize("mode", ["missing", "changed_url", "missing_folder", "duplicate"])
+@pytest.mark.parametrize("mode", ["missing", "changed_url", "empty_url", "null_url", "missing_url",
+                                  "missing_folder", "duplicate"])
 def test_large_scope_inventory_rejects_incomplete_or_changed_snapshot(setup, monkeypatch, mode):
     start, fake, target, _material, source = setup
     sources = [{**source, "id": str(1001 + i)} for i in range(101)]
@@ -513,6 +514,10 @@ def test_large_scope_inventory_rejects_incomplete_or_changed_snapshot(setup, mon
         fake.cards.pop("1001")
     elif mode == "changed_url":
         fake.cards["1001"]["card"]["url"] = "https://x.com/example/status/9999"
+    elif mode in {"empty_url", "null_url"}:
+        fake.cards["1001"]["card"]["url"] = "" if mode == "empty_url" else None
+    elif mode == "missing_url":
+        fake.cards["1001"]["card"].pop("url")
     elif mode == "missing_folder":
         fake.cards["1001"]["card"].pop("folder")
     else:
@@ -530,7 +535,8 @@ def test_large_scope_inventory_rejects_incomplete_or_changed_snapshot(setup, mon
     assert not fake.deletes
 
 
-def test_large_repository_delivery_uses_current_inventory(setup):
+@pytest.mark.parametrize("replacement", ["https://github.com/example/changed", "", None])
+def test_large_repository_delivery_uses_current_inventory(setup, replacement):
     start, fake, target, _material, _source = setup
     result = start()
     outputs = []
@@ -540,9 +546,42 @@ def test_large_repository_delivery_uses_current_inventory(setup):
         outputs.append({"kind": "repository", "url": url, "cubox_id": key})
     submit(result, review_for(result, target, outputs=outputs))
     assert not any(args[:2] == ["card", "batch"] for _, args, _ in fake.calls)
-    fake.cards["9001"]["card"]["url"] = "https://github.com/example/changed"
-    with pytest.raises(WorkflowError, match="URL 不符"):
+    fake.cards["9001"]["card"]["url"] = replacement
+    with pytest.raises(WorkflowError):
         c.verify(result["job"])
+
+
+@pytest.mark.parametrize("url", ["", None])
+def test_bulk_collection_preserves_unrelated_text_cards_without_urls(setup, url):
+    start, fake, target, _material, source = setup
+    sources = [{**source, "id": str(1001 + i)} for i in range(101)]
+    for entry in sources:
+        fake.cards[entry["id"]] = card(entry["id"], url=source["url"])
+    outputs = []
+    for i in range(101):
+        key, repo_url = str(9001 + i), f"https://github.com/example/repo{i}"
+        fake.cards[key] = card(key, url=repo_url)
+        outputs.append({"kind": "repository", "url": repo_url, "cubox_id": key})
+    for key in ("99001", "99002"):
+        fake.cards[key] = card(key)
+        fake.cards[key]["card"]["url"] = url
+    fake.cards["99003"] = card("99003")
+    fake.cards["99003"]["card"].pop("url")
+    fake.archived.add("99002")
+    text_cards = {key: deepcopy(fake.cards[key]) for key in ("99001", "99002", "99003")}
+    before = set(fake.cards)
+    result = start(sources)
+    submit(result, review_for(result, target, outputs=outputs))
+    assert c.verify(result["job"])["ok"]
+    ids = [entry["id"] for entry in sources]
+    authorization(result, ids=ids)
+    preview = c.cleanup(result["job"])
+    assert set(preview["cleanup_preview"]["eligible_ids"]) == set(ids)
+    assert not fake.deletes
+    assert c.cleanup(result["job"], True)["status"] == "cleaned"
+    assert set(fake.cards) == before - set(ids)
+    assert {key: fake.cards[key] for key in text_cards} == text_cards
+    assert fake.deletes == 1
 
 
 def test_real_runtime_subprocess_cli_with_synthetic_cubox(setup, tmp_path):

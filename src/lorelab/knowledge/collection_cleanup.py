@@ -1,5 +1,5 @@
 """[INPUT]: collection 全批审阅、真实交付、固定 X 收藏及失效/无新知识的单独删除授权。
-[OUTPUT]: dry-run、持久删除意图、active/archived 只读对账。
+[OUTPUT]: dry-run、持久删除意图、active/archived 只读对账；无网址的文本收藏留在快照中。
 [POS]: collection 清理门禁；复用 workflow 的 CLI 回执、保护检查与状态锁。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -45,7 +45,7 @@ def authorize(job, file):
 
 
 def inventory(run, job, name):
-    """读取当前完整分页元数据；只用于身份核验，不替代正文实读。"""
+    """读取完整元数据；文本收藏可无 URL，目标 X/仓库身份由调用方逐项核对。"""
     cards = {}
     for archived in (False, True):
         args = ["card", "list", "--all", "-o", "json"]
@@ -56,7 +56,7 @@ def inventory(run, job, name):
             key = value.get("id")
             require(isinstance(key, str) and key.isdigit(), "收藏快照缺少真实 ID。")
             require(key not in cards, "收藏快照存在重复 ID；状态可能在分页期间改变。")
-            require(isinstance(value.get("url"), str) and value["url"].strip(), "收藏快照缺少 URL。")
+            require(value.get("url") is None or isinstance(value["url"], str), "收藏快照 URL 类型无效。")
             require("folder" in value and (value["folder"] is None or isinstance(value["folder"], dict)),
                     "收藏快照缺少文件夹信息，无法核实保护范围。")
             cards[key] = value

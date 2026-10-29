@@ -70,7 +70,7 @@ review 文件为 `{"schema_version":1,"sources":[...]}`，可以只包含本轮�
 - `retain`：`complete=false`，保留来源。可以记录部分交付和缺口；要通过全批 ready 仍须有实际文本和相符的 `read_sha256`，不能用 retain 绕过未读来源。retain 永不进入删除集合。
 - `confirmed-unavailable`：独立的远端不可用判断，必须 `complete=false`、非空 gaps、`outputs=[]`；不计为正文完整、已总结或有交付。还须附 `unavailable_evidence`：`code` 为 `NotFound/HTTP404/HTTP410`、同帖 `url`、具体 `reason`、带时区 `observed_at`，以及 `files` 的绝对 path/sha256 数组。文件须真实存在于 materials_root。`AuthorizationError`、超时和登录失败不能作为失效依据；有缓存正文时继续读取，否则保留并阻塞 ready。失效语义仍由 Agent 对照原始响应判断。
 
-review 接受前会核对全部当前输出，verify 会再次核对实际文章、仓库以及本批尚未删除的 X 卡片身份。至多 100 个卡片使用 `card batch`；更多卡片使用当前 `card list --all` 与 `card list --archived --all` 的完整分页快照，按固定 ID 核对 URL 和文件夹，避免反复请求已保存的全文。快照读取失败、缺字段或 ID 重复均停止，不使用旧缓存冒充当前状态，也不把元数据核验当作全文实读。整体 ready 要求每个冻结来源都有有效 review，未读或缺失来源阻塞。程序校验不能证明语义理解或价值覆盖。
+review 接受前会核对全部当前输出，verify 会再次核对实际文章、仓库以及本批尚未删除的 X 卡片身份。至多 100 个卡片使用 `card batch`；更多卡片使用当前 `card list --all` 与 `card list --archived --all` 的完整分页快照，按固定 ID 核对 URL 和文件夹，避免反复请求已保存的全文。快照中的纯文本收藏可以没有 URL，保留在快照中且不扩大本批范围；目标 X 帖子和仓库输出仍须逐项通过准确 URL 校验。快照读取失败、缺少真实 ID 或文件夹信息、URL 类型错误、ID 重复均停止，不使用旧缓存冒充当前状态，也不把元数据核验当作全文实读。整体 ready 要求每个冻结来源都有有效 review，未读或缺失来源阻塞。程序校验不能证明语义理解或价值覆盖。
 
 status 只读取本地证据，不联网；返回来源数、status 数、待审阅 ID、当前 review 文件、最近 ready 记录、策略版本及清理状态。已保存的 ready 仅是上次核对结果；verify/cleanup 必须实时核对。所有任务操作沿用 workflow_state 的锁与原子写入，交付核对沿用共享目的地锁。
 
