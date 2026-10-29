@@ -1,0 +1,37 @@
+/* 只修正诊断页：复用前三页 176px 标题列及统一内容列。 */
+.style-unified .diagnostic-groups .diagnostic-group-actions { display: flex; justify-content: flex-end; margin-bottom: 18px; }
+.style-unified .diagnostic-groups .group-content { min-width: 0; }
+.style-unified .diagnostic-groups .health-table th { border: 0; padding: 0 0 16px; }
+.style-unified .diagnostic-groups .health-table td { border: 0; padding: 7px 0; }
+.style-unified .diagnostic-groups .health-table .button { min-height: 54px; }
+.style-unified .diagnostic-groups .task-section > .section-heading { display: flex; justify-content: flex-end; margin: 0 0 18px; padding: 0; min-height: 44px; }
+.style-unified .diagnostic-groups .task-table th { border: 0; padding-bottom: 16px; }
+.style-unified .diagnostic-groups .task-table td { border: 0; padding: 14px 10px 14px 0; }
+.style-unified .diagnostic-groups .task-table td:last-child { padding-right: 0; }
+.style-unified .diagnostic-groups .diagnostic-detail-row > td { padding: 10px 0 24px; }
+.style-unified .diagnostic-groups .diagnostic-inspector { border: 0; border-radius: 10px; background: var(--surface); padding: 24px; margin: 0; scroll-margin-top: 24px; }
+.style-unified .diagnostic-groups .inspector-heading { border: 0; padding: 0; min-height: 0; }
+.style-unified .diagnostic-groups .inspector-heading h3 { font-size: 16px; font-weight: 500; }
+.style-unified .diagnostic-groups .task-details { padding: 24px 0 0; }
+.style-unified .diagnostic-groups .task-details h3 { font-size: 15px; }
+.style-unified .diagnostic-groups .task-error { border: 0; padding-block: 8px; }
+.style-unified .diagnostic-groups .service-inspection { padding-bottom: 0; }
+.style-unified .diagnostic-groups .inspection-result { border: 0; padding: 0; }
+.style-unified .diagnostic-groups .inspector-followup { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; border: 0; padding-top: 24px; }
+.style-unified .diagnostic-groups .inspector-followup > .button { width: auto; }
+.style-unified .diagnostic-groups .logs-panel { border: 0; padding: 0; margin: 0; }
+.style-unified .diagnostic-groups .logs-heading { margin-bottom: 18px; padding: 0; min-height: 44px; }
+.style-unified .diagnostic-groups .log-count { color: var(--muted); font-size: 13px; }
+.style-unified .diagnostic-groups .log-entry { border: 0; }
+.style-unified .diagnostic-groups .log-summary { padding: 16px 8px; }
+.style-unified .diagnostic-groups .log-entries { max-height: none; overflow: visible; }
+@media (max-width: 760px) {
+  .style-unified .diagnostic-groups .diagnostic-inspector { padding: 22px 16px; }
+  .style-unified .diagnostic-groups .task-table tr { border: 0; }
+  .style-unified .diagnostic-groups .task-table .diagnostic-detail-row { display: block; padding: 0; }
+  .style-unified .diagnostic-groups .task-table .diagnostic-detail-row > td { display: block; width: 100%; }
+  .style-unified .diagnostic-groups .task-table td { padding: 14px 6px 14px 0; }
+  .style-unified .diagnostic-groups .diagnostic-detail-row > td { padding: 10px 0 24px; }
+  .style-unified .diagnostic-groups .task-stage { display: none; }
+  .style-unified .diagnostic-groups .task-table .task-name { font-size: 13px; }
+}

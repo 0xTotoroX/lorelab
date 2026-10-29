@@ -1,0 +1,148 @@
+/*
+ * [INPUT]: Obsidian 官方 CSS 变量参考和官网可观察的黑紫配色。
+ * [OUTPUT]: 官方基础/语义变量与 LoreLab 现有控件变量的映射，支持深浅主题。
+ * [POS]: 主题基础层；只复用规范与颜色值，不加载 Obsidian 应用、品牌资产或整站样式。
+ * 来源: https://docs.obsidian.md/Reference/CSS%20variables/Foundations/Colors
+ * 字体/圆角/间距/控件: 同一官方 CSS variables 目录。适配说明见 DESIGN.md。
+ */
+:root[data-design="flow"] {
+  color-scheme: dark;
+  --color-base-00: #1c1c1c;
+  --color-base-05: #212121;
+  --color-base-10: #232323;
+  --color-base-20: #282828;
+  --color-base-25: #2e2e2e;
+  --color-base-30: #333333;
+  --color-base-35: #3f3f3f;
+  --color-base-40: #555555;
+  --color-base-50: #666666;
+  --color-base-60: #999999;
+  --color-base-70: #b3b3b3;
+  --color-base-100: #dadada;
+  --color-purple: #a882ff;
+  --color-green: #44cf6e;
+  --color-orange: #e9973f;
+  --color-red: #fb464c;
+  --color-accent: #8c5cf5;
+  --color-accent-1: #7c3aed;
+  --color-accent-2: #6d28d9;
+
+  --background-primary: var(--color-base-00);
+  --background-primary-alt: var(--color-base-20);
+  --background-secondary: var(--color-base-10);
+  --background-secondary-alt: var(--color-base-25);
+  --background-modifier-hover: var(--color-base-30);
+  --background-modifier-border: var(--color-base-35);
+  /* 表单边界和语义状态单独校正，保证小字与控件的可辨认性。 */
+  --background-modifier-border-hover: #999999;
+  --background-modifier-border-focus: var(--color-purple);
+  --background-modifier-form-field: var(--color-base-20);
+  --interactive-normal: var(--color-base-20);
+  --interactive-hover: var(--color-base-30);
+  --interactive-accent: var(--color-accent-1);
+  --interactive-accent-hover: var(--color-accent-2);
+  --text-normal: var(--color-base-100);
+  --text-muted: var(--color-base-70);
+  --text-on-accent: #ffffff;
+  --text-accent: #b69df8;
+  --text-accent-hover: #c4b5fd;
+  --text-success: var(--color-green);
+  --text-warning: var(--color-orange);
+  --text-error: #ff7e83;
+  --text-selection: #493b66;
+  --caret-color: var(--text-accent);
+
+  --font-interface-theme: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-monospace-theme: "SFMono-Regular", Consolas, monospace;
+  --font-ui-smaller: 12px;
+  --font-ui-small: 13px;
+  --font-ui-medium: 15px;
+  --font-ui-large: 20px;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --line-height-normal: 1.5;
+  --line-height-tight: 1.3;
+  --radius-s: 4px;
+  --radius-m: 8px;
+  --radius-l: 12px;
+  --radius-xl: 16px;
+  --size-4-1: 4px;
+  --size-4-2: 8px;
+  --size-4-3: 12px;
+  --size-4-4: 16px;
+  --size-4-5: 20px;
+  --size-4-6: 24px;
+  --size-4-8: 32px;
+  --size-4-9: 36px;
+  --size-4-12: 48px;
+  --button-radius: var(--radius-m);
+  --input-radius: var(--radius-s);
+  --input-height: 44px;
+  --input-border-width: 1px;
+  --input-font-weight: var(--font-normal);
+  --nav-item-size: 14px;
+  --nav-item-color: var(--text-muted);
+  --nav-item-color-active: var(--text-normal);
+  --nav-item-background-hover: var(--color-base-25);
+  --nav-item-background-active: var(--color-base-30);
+
+  /* 兼容现有组件和 Canvas 的主题入口，不改变业务组件。 */
+  --bg: var(--background-primary);
+  --surface: var(--background-primary-alt);
+  --fg: var(--text-normal);
+  --muted: var(--text-muted);
+  --border: var(--background-modifier-border);
+  --accent: var(--text-accent);
+  --accent-fg: var(--text-on-accent);
+  --selected: #30263f;
+  --hover: var(--background-modifier-hover);
+  --hover-fg: var(--text-normal);
+  --danger: var(--text-error);
+  --warn: var(--text-warning);
+  --success: var(--text-success);
+  --control-border: #777777;
+  --overlay: #000000b8;
+  --shadow: 0 20px 64px #00000070;
+  --flow-track: var(--color-base-40);
+  --flow-track-ready: #786197;
+  --flow-particle: var(--color-purple);
+  --flow-particle-alt: #ddd0ff;
+  --primary-hover: var(--interactive-accent-hover);
+  --font-body: var(--font-interface-theme);
+  --font-display: var(--font-interface-theme);
+  --font-mono: var(--font-monospace-theme);
+  --radius: var(--radius-m);
+}
+:root[data-design="flow"][data-theme="light"] {
+  color-scheme: light;
+  --color-base-00: #ffffff;
+  --color-base-05: #fcfcfc;
+  --color-base-10: #fafafa;
+  --color-base-20: #f6f6f6;
+  --color-base-25: #efefef;
+  --color-base-30: #e4e4e4;
+  --color-base-35: #dadada;
+  --color-base-40: #bdbdbd;
+  --color-base-50: #ababab;
+  --color-base-60: #707070;
+  --color-base-70: #5c5c5c;
+  --color-base-100: #222222;
+  --color-purple: #7852ee;
+  --color-green: #08b94e;
+  --color-orange: #ec7500;
+  --color-red: #e93147;
+  --text-accent: #6d28d9;
+  --text-accent-hover: #5b21b6;
+  --text-success: #247a3c;
+  --text-warning: #865500;
+  --text-error: #b92536;
+  --text-selection: #e8ddff;
+  --background-modifier-border-hover: #707070;
+  --selected: #efe9fb;
+  --control-border: #8c8c8c;
+  --overlay: #00000066;
+  --shadow: 0 20px 64px #00000026;
+  --flow-track-ready: #a392c4;
+  --flow-particle-alt: #a37bf2;
+}

@@ -1,0 +1,123 @@
+/* D — a light configuration workspace with restrained, functional flow motion. */
+:root[data-design="flow"] {
+  color-scheme: light;
+  --bg: oklch(.978 .004 250);
+  --surface: oklch(.997 .001 250);
+  --fg: oklch(.27 .018 250);
+  --muted: oklch(.48 .018 250);
+  --border: oklch(.875 .012 250);
+  --accent: oklch(.49 .16 250);
+  --accent-fg: oklch(.997 .001 250);
+  --selected: oklch(.947 .022 250);
+  --hover: oklch(.93 .014 250);
+  --hover-fg: oklch(.19 .018 250);
+  --danger: oklch(.48 .15 28);
+  --warn: oklch(.43 .07 65);
+  --success: oklch(.43 .065 160);
+  --overlay: oklch(.19 .018 250 / .32);
+  --control-border: oklch(.62 .018 250);
+  --flow-track: oklch(.81 .017 250);
+  --flow-track-ready: oklch(.76 .055 240);
+  --flow-particle: oklch(.59 .18 250);
+  --flow-particle-alt: oklch(.64 .12 210);
+  --radius: 8px;
+}
+.style-flow .configuration-app { flex-direction: column; }
+.flow-topbar { display: flex; align-items: center; gap: 40px; padding: 0 28px; background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.flow-topbar .config-brand { padding: 14px 0; font-size: 19px; }
+.flow-topbar .brand-symbol { color: var(--accent); }
+.flow-topbar .config-brand small { display: none; }
+.flow-topbar .category-navigation { flex-direction: row; padding: 0; gap: 4px; }
+.flow-topbar .category-button { min-height: 44px; padding-inline: 13px; }
+.flow-topbar .category-button.current-category { background: var(--selected); }
+.flow-workspace-label { margin-left: auto; font-size: 11px; color: var(--muted); }
+.style-flow .content-width { max-width: 1660px; padding: 27px clamp(18px, 2.2vw, 38px) 30px; }
+.style-flow .breadcrumb { display: none; }
+.style-flow .page-heading { margin-bottom: 22px; }
+.style-flow .page-heading h1 { font-size: clamp(22px, 1.8vw, 26px); }
+.style-flow .page-heading p { margin-top: 6px; }
+.style-flow .environment-label { border: none; }
+.flow-workspace { display: grid; grid-template-columns: minmax(0,1fr) 300px; grid-template-areas: 'map editor' 'services editor'; gap: 24px; align-items: start; }
+.flow-map { grid-area: map; min-width: 0; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); container-type: inline-size; }
+.flow-map-heading { min-height: 46px; padding: 2px 12px 2px 17px; display: flex; align-items: center; gap: 6px; justify-content: space-between; border-bottom: 1px solid var(--border); }
+.flow-map-heading h2 { font-size: 13px; font-weight: 600; }
+.flow-map-heading h2 span { font-weight: 400; color: var(--muted); }
+.flow-map-controls { display: flex; gap: 0; align-items: center; }
+.flow-map-controls .button { font-size: 11px; gap: 5px; padding-inline: 8px; }
+.flow-map-controls .icon-button { width: 36px; }
+.flow-stage { position: relative; width: 100%; isolation: isolate; }
+.flow-tracks, .flow-particles { width: 100%; height: 100%; position: absolute; inset: 0; pointer-events: none; }
+.flow-tracks { z-index: 0; }
+.flow-particles { z-index: 1; }
+.flow-track { fill: none; stroke: var(--flow-track); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.flow-track.is-ready { stroke: var(--flow-track-ready); }
+.flow-track.is-testing { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.flow-node { position: absolute; transform: translate(-50%, -50%); min-height: 44px; padding: 4px 6px; display: flex; flex-direction: column; gap: 0; justify-content: center; z-index: 2; background: var(--surface); border: 1px solid var(--border); border-radius: 7px; letter-spacing: 0; }
+.flow-node strong { font-size: 12px; line-height: 1.45; font-weight: 500; }
+.flow-node small { display: block; font-size: 10px; letter-spacing: .01em; color: var(--muted); line-height: 1.6; }
+.flow-node.is-selected { border-color: var(--accent); background: var(--selected); }
+.flow-node.is-selected strong { color: var(--accent); }
+.flow-node.has-failure small { color: var(--danger); }
+.flow-node.is-testing small { color: var(--accent); }
+.flow-node:hover:not(:disabled) { background: var(--hover); color: var(--hover-fg); border-color: var(--muted); }
+.flow-node:hover:not(:disabled) strong, .flow-node:hover:not(:disabled) small { color: var(--hover-fg); }
+.flow-node:active:not(:disabled) { transform: translate(-50%, calc(-50% + 1px)); }
+.flow-node:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+.flow-map-caption { display: flex; align-items: center; justify-content: space-between; gap: 8px 15px; font-size: 11px; line-height: 1.7; color: var(--muted); padding: 8px 15px; border-top: 1px solid var(--border); }
+.motion-status { font-family: var(--font-mono); font-size: 10px; flex-shrink: 0; }
+/* Keep long credential forms in the main scroll flow so the save bar cannot cover actions. */
+.flow-editor { grid-area: editor; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); position: static; min-width: 0; }
+.flow-editor .inspector-heading { gap: 8px; padding: 15px 17px; }
+.flow-editor .inspector-heading > span { margin-left: auto; font-size: 11px; color: var(--muted); }
+.flow-editor .service-editor { padding: 18px; }
+.flow-editor .editor-field .input { font-family: var(--font-mono); font-size: 12px; }
+.flow-service-list { grid-area: services; min-width: 0; }
+.style-flow .service-rows { border-inline: 0; border-radius: 0; background: transparent; }
+.style-flow .service-row { grid-template-columns: minmax(130px,1fr) 76px 72px 102px 36px; min-height: 64px; padding: 6px 5px; gap: 7px; }
+.style-flow .service-toggle { gap: 7px; }
+.style-flow .service-glyph { width: 25px; }
+.style-flow .service-name-button { gap: 8px; }
+.style-flow .service-name-button strong { font-size: 13px; }
+.style-flow .service-name-button small { font-size: 11px; }
+.style-flow .service-group + .service-group { margin-top: 22px; }
+.style-flow .section-heading > span { font-size: 11px; }
+.style-flow .section-heading h2 { font-size: 13px; }
+.style-flow .configuration-groups { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 28px; align-items: start; }
+.style-flow .form-row { grid-template-columns: minmax(110px,.8fr) minmax(150px,1fr); padding: 16px; gap: 15px; }
+.style-flow .form-group .section-heading { min-height: 42px; }
+@container (max-width: 500px) {
+  .flow-map-heading { padding-left: 12px; }
+  .flow-map-caption { flex-wrap: wrap; }
+}
+@media (max-width: 1100px) {
+  .flow-workspace { grid-template-columns: minmax(0,1fr); grid-template-areas: 'map' 'editor' 'services'; gap: 20px; }
+  .flow-editor { position: static; }
+  .flow-editor .service-editor { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 0 24px; }
+  .flow-editor .editor-status, .flow-editor .connection-message, .flow-editor .field-error, .flow-editor .editor-actions { grid-column: 1 / -1; }
+  .flow-editor .credential-field { padding: 0; border: 0; }
+  .flow-editor .editor-actions { display: flex; justify-content: flex-end; }
+  .flow-topbar { gap: 20px; padding-inline: 20px; }
+  .flow-workspace-label { display: none; }
+  .style-flow .configuration-groups { gap: 20px; }
+  .style-flow .form-row { grid-template-columns: minmax(0,1fr); }
+  .style-flow .form-control > .switch, .style-flow .short-input { float: none; }
+  .style-flow .fixed-value { text-align: left; }
+}
+@media (max-width: 760px) {
+  .flow-topbar { display: block; padding: 0 12px 10px; }
+  .flow-topbar .config-brand { padding: 16px 6px 10px; }
+  .flow-topbar .category-navigation { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .flow-topbar .category-button { padding-inline: 10px; }
+  .style-flow .content-width { padding: 22px 16px 26px; }
+  .style-flow .page-heading { margin-bottom: 18px; }
+  .flow-editor .service-editor { display: block; }
+  .flow-editor .credential-field { padding-top: 18px; border-top: 1px solid var(--border); }
+  .style-flow .service-row { grid-template-columns: minmax(0,1fr) 70px 38px; gap: 2px 8px; padding: 10px 6px; }
+  .style-flow .service-name-button strong { font-size: 14px; }
+  .style-flow .service-row > .connection-state { padding-left: 33px; }
+  .style-flow .configuration-groups { grid-template-columns: minmax(0,1fr); }
+  .flow-map-caption { font-size: 10px; }
+  .flow-map-heading h2 { font-size: 12px; }
+  .flow-map-controls .button { font-size: 10px; padding-inline: 6px; }
+  .flow-node small { font-size: 10px; }
+}
