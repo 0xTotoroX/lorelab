@@ -8,6 +8,8 @@
 
 先补齐长文、链接与缓存正文再冻结来源；AuthorizationError 继续读缓存，不标为失效。NotFound 仅在保留原始响应证据、明确缺口的独立 confirmed-unavailable 状态下记录；绝不计为已总结。verify 对整批来源与真实交付回读，未读来源阻塞；status 只看本地记录。观察真实交付后用 feedback 保存策略调整原因、来源证据和版本回退，分类仍走 library evolve。全部处理后清理必须全批 ready、精确 delete_ids 授权，失效来源还须单列 unavailable_ids；cleanup 先 dry-run，--execute 后未知写入只读对账。旧批次按原入口恢复，不混用状态。
 
+完整实读后若只有未获回复的投票或重复感叹、没有新知识，使用 `reviewed-no-yield`，保留非空 no_yield_reason，coverage 明确正文和媒体核对，outputs=[]，不为了满足 processed 而编空文章。它要求完整来源、source/read 指纹一致、complete=true、gaps=[]；缺正文或关键媒体仍未读时保留原缺口。该状态可进入整体 ready，删除须在适用授权下单列精确 no_yield_ids；旧授权不含此字段视为[]。无产出来源不用于 feedback，策略反馈仍需已 processed 的真实交付证据。
+
 ## 文章任务
 
 明确请求知识整理后的默认流程是 Cubox 收藏或现有 Soota 内容包输入 → 完整、连贯的文章 → 保存到 Obsidian 或明确知识目的地 → 回读后结束。没有学习或复习请求就停在文章，不要求幕布。普通咨询不触发归档，下载请求不隐含提炼，整理请求不隐含删除。

@@ -41,6 +41,8 @@ LoreLab content 负责单来源分析、笔记、文章、大纲与整包导出�
 
 默认保留收藏；仅适用的明确授权、完整来源覆盖和所选交付回读均满足后，才经 `knowledge cleanup` 预览和执行。资料不全与 GitHub 项目保留，内容包来源和 study 不清理原始资料。一次派发结果不确定时只读对账，不重新导入或删除。具体字段、门槛和恢复以 [工作流契约](../../docs/knowledge.md) 为准。
 
+collection 的 `reviewed-no-yield` 仅用于来源与关键媒体已实读、文字充分却无新知识的项目：指纹一致、complete=true、gaps=[]、outputs=[]，填 no_yield_reason 并在 coverage 说明文字/媒体核对，不编空文章。未读媒体或来源不可得不能这样标。清理须另列精确 no_yield_ids，旧授权缺省为空，不静默扩大；feedback 继续只基于有真实输出的 processed。完整字段见[集合契约](../../docs/collection.md)。
+
 ## 旧命令与任务
 
 `lorelab content` 是语义内容与导出的正式入口，旧 `soota ingest` 的语义目标/导出参数、旧语义或交付任务的 `soota jobs resume` 和 `soota render` 仅作隐藏兼容转发，动态调用同一 Python 环境的 LoreLab，不从 PATH 另选产品。未安装 LoreLab 时明确报需要安装，在修改任务、预算或产物前停止；采集与原文包不依赖 LoreLab。详情见[内容兼容契约](../../docs/content.md#旧入口与恢复)。

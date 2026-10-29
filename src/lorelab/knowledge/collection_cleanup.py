@@ -1,4 +1,4 @@
-"""[INPUT]: collection 全批审阅、真实交付、固定 X 收藏删除授权。
+"""[INPUT]: collection 全批审阅、真实交付、固定 X 收藏及失效/无新知识的单独删除授权。
 [OUTPUT]: dry-run、持久删除意图、active/archived 只读对账。
 [POS]: collection 清理门禁；复用 workflow 的 CLI 回执、保护检查与状态锁。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
@@ -14,15 +14,18 @@ from .workflow_state import call, data, digest, encoded, read_json, require, row
 def validate_authorization(value, selected, sources):
     require(isinstance(value, dict) and value.get("schema_version") == 1, "删除授权版本无效。")
     c.text(value.get("reason"), "用户明确删除授权的理由/范围")
-    for field in ("delete_ids", "unavailable_ids"):
-        ids = value.get(field)
+    for field in ("delete_ids", "unavailable_ids", "no_yield_ids"):
+        ids = value.get(field, []) if field == "no_yield_ids" else value.get(field)
         require(isinstance(ids, list) and all(isinstance(x, str) for x in ids) and len(set(ids)) == len(ids),
                 "删除授权必须是无重复的明确 ID 数组。")
     ids, unavailable = value["delete_ids"], value["unavailable_ids"]
     require(ids and set(ids) <= set(sources) and set(ids) <= set(selected), "删除目标为空、越界或尚未审阅。")
     expected = {key for key in ids if selected[key]["decision"] == "confirmed-unavailable"}
     require(set(unavailable) == expected, "失效来源必须有单独且精确的 unavailable_ids 删除授权。")
-    require(all(selected[key]["decision"] in {"processed", "confirmed-unavailable"} for key in ids),
+    expected_no_yield = {key for key in ids if selected[key]["decision"] == "reviewed-no-yield"}
+    require(set(value.get("no_yield_ids", [])) == expected_no_yield,
+            "无新知识来源必须有单独且精确的 no_yield_ids 删除授权。")
+    require(all(selected[key]["decision"] in {"processed", "confirmed-unavailable", "reviewed-no-yield"} for key in ids),
             "retain/缺失来源必须保留。")
     return ids
 

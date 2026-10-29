@@ -75,11 +75,24 @@ def submit(result, value):
     return c.submit(result["job"], path)
 
 
-def authorization(result, ids=None, unavailable=None):
+def authorization(result, ids=None, unavailable=None, no_yield=None):
     path = Path(result["job"]) / "authorization-input.json"
-    write(path, {"schema_version": 1, "reason": "合成测试明确授权，真实账号未访问",
-                 "delete_ids": ids or ["1001"], "unavailable_ids": unavailable or []})
+    value = {"schema_version": 1, "reason": "合成测试明确授权，真实账号未访问",
+             "delete_ids": ids or ["1001"], "unavailable_ids": unavailable or []}
+    if no_yield is not None:
+        value["no_yield_ids"] = no_yield
+    write(path, value)
     return c.authorize(result["job"], path)
+
+
+def no_yield_review(result):
+    value = json.loads(Path(result["review_template"]).read_text())
+    for entry in value["sources"]:
+        entry.update(read_sha256=entry["source_sha256"], decision="reviewed-no-yield", complete=True,
+                     strategy="实读后留存无新知识判断", rationale="只有重复感叹，不凑文章",
+                     coverage="已读全部文字；无关键媒体、引用或未取得的内容。", gaps=[], outputs=[],
+                     no_yield_reason="没有具体观点、回复或可沉淀的新知识。")
+    return value
 
 
 def unavailable(result, material, code="NotFound"):
@@ -566,3 +579,92 @@ else:
     assert invoke("verify", result["job"])["ready"]["ready"]
     recovered = invoke("status", result["job"])
     assert recovered["ready"]["checked_at"] and recovered["review_files"]["1001"]
+
+
+def test_no_yield_ready_and_explicit_cleanup_without_dummy_article(setup):
+    start, fake, target, _material, _source = setup
+    result = start()
+    submit(result, no_yield_review(result))
+    assert c.verify(result["job"])["ready"]["verification"] == {"articles": {}, "repositories": {}}
+    assert not list(target.iterdir())
+    with pytest.raises(WorkflowError, match="no_yield_ids"):
+        authorization(result)  # 旧字段缺省为空，不能据此扩大到无产出来源。
+    authorization(result, no_yield=["1001"])
+    assert c.cleanup(result["job"])["cleanup_preview"]["eligible_ids"] == ["1001"]
+    assert not fake.deletes
+    assert c.cleanup(result["job"], True)["status"] == "cleaned"
+    assert c.cleanup(result["job"], True)["status"] == "cleaned"
+    assert fake.deletes == 1 and "9001" in fake.cards
+
+
+@pytest.mark.parametrize("change", [
+    {"source_sha256": None}, {"read_sha256": None}, {"read_sha256": "0" * 64},
+    {"complete": False}, {"gaps": ["关键视频未读"]}, {"outputs": [{"kind": "article"}]},
+    {"no_yield_reason": "  "}, {"coverage": ""},
+])
+def test_no_yield_requires_full_read_no_gaps_no_outputs_and_reason(setup, change):
+    start, fake, _target, _material, _source = setup
+    result = start()
+    value = no_yield_review(result)
+    value["sources"][0].update(change)
+    with pytest.raises(WorkflowError):
+        submit(result, value)
+    assert c.status(result["job"])["pending_source_ids"] == ["1001"]
+    assert not fake.calls
+
+
+def test_no_yield_missing_source_and_feedback_are_rejected(setup):
+    start, fake, _target, _material, source = setup
+    result = start([{**source, "availability": "missing", "text_file": None}])
+    with pytest.raises(WorkflowError, match="reviewed-no-yield"):
+        submit(result, no_yield_review(result))
+    assert not fake.deletes
+
+
+def test_no_yield_cannot_supply_strategy_feedback(setup):
+    start, _fake, _target, _material, _source = setup
+    result = start()
+    submit(result, no_yield_review(result))
+    path = Path(result["job"]) / "feedback-input.json"
+    write(path, {"schema_version": 1, "base_version": 0, "strategy": "调整策略", "rationale": "不能虚构交付证据",
+                 "source_ids": ["1001"], "rollback_to": None})
+    with pytest.raises(WorkflowError, match="真实交付"):
+        c.feedback(result["job"], path)
+    assert c.status(result["job"])["strategy_version"] == 0
+
+
+@pytest.mark.parametrize("ids", [[], ["9001"], ["1001", "1001"]])
+def test_no_yield_authorization_must_be_exact(setup, ids):
+    start, fake, _target, _material, _source = setup
+    result = start()
+    submit(result, no_yield_review(result))
+    with pytest.raises(WorkflowError):
+        authorization(result, no_yield=ids)
+    assert not fake.deletes
+
+
+def test_no_yield_ids_cannot_cover_processed_and_legacy_authorization_cannot_expand(setup):
+    start, fake, target, _material, _source = setup
+    result = start()
+    submit(result, review_for(result, target))
+    with pytest.raises(WorkflowError, match="no_yield_ids"):
+        authorization(result, no_yield=["1001"])
+    approved = authorization(result)  # 旧格式对processed继续有效，原授权字节不重写。
+    authorization_path = Path(result["job"]) / approved["authorization"]
+    original = authorization_path.read_bytes()
+    submit(result, no_yield_review(result))
+    with pytest.raises(WorkflowError, match="no_yield_ids"):
+        c.cleanup(result["job"], True)
+    assert authorization_path.read_bytes() == original and not fake.deletes
+
+
+def test_no_yield_still_protects_github_folder(setup):
+    start, fake, _target, _material, _source = setup
+    result = start()
+    submit(result, no_yield_review(result))
+    authorization(result, no_yield=["1001"])
+    fake.folder_rows = [{"id": "github", "name": "GitHub", "parent_id": None}]
+    fake.cards["1001"]["card"]["folder"] = {"id": "github", "name": "GitHub"}
+    with pytest.raises(WorkflowError, match="保护"):
+        c.cleanup(result["job"], True)
+    assert not fake.deletes

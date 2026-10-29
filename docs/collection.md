@@ -66,6 +66,7 @@ review 文件为 `{"schema_version":1,"sources":[...]}`，可以只包含本轮�
 `strategy/rationale/coverage` 是开放文字，`gaps` 是文字数组。一帖可对应多文章、多仓库，多帖可共用一篇文章。文章由 Agent 按目标规则编写或合并后登记；collection 仅在固定 destination 内回读真实 Markdown 和 hash，不改写目标。仓库必须提供直接 GitHub 仓库 URL 与真实 Cubox 卡片 ID，经 Cubox 当前数据核对存在和 URL；标题提及 GitHub、只有链接或没有保存的卡片均不能算仓库交付。仓库卡片不允许与来源 ID 重叠。
 
 - `processed`：非空来源已实读、`complete=true`、`gaps=[]`、至少一个真实输出。
+- `reviewed-no-yield`：来源文本非空，`source_sha256` 与 `read_sha256` 一致，`complete=true`、`gaps=[]`、`outputs=[]`，另须非空 `no_yield_reason`。Agent 在 `coverage` 中说明文字及媒体如何核对，例如完整阅读的未获回复投票、重复感叹确无新知识时使用，不为满足产物要求编空文章。无法取得来源、文字截断、关键媒体未读或无法访问时仍须保留缺口，不能使用此状态。CLI 校验字段与指纹，内容价值和媒体覆盖仍由 Agent 实读判断，不以关键词判断。
 - `retain`：`complete=false`，保留来源。可以记录部分交付和缺口；要通过全批 ready 仍须有实际文本和相符的 `read_sha256`，不能用 retain 绕过未读来源。retain 永不进入删除集合。
 - `confirmed-unavailable`：独立的远端不可用判断，必须 `complete=false`、非空 gaps、`outputs=[]`；不计为正文完整、已总结或有交付。还须附 `unavailable_evidence`：`code` 为 `NotFound/HTTP404/HTTP410`、同帖 `url`、具体 `reason`、带时区 `observed_at`，以及 `files` 的绝对 path/sha256 数组。文件须真实存在于 materials_root。`AuthorizationError`、超时和登录失败不能作为失效依据；有缓存正文时继续读取，否则保留并阻塞 ready。失效语义仍由 Agent 对照原始响应判断。
 
@@ -84,10 +85,12 @@ status 只读取本地证据，不联网；返回来源数、status 数、待审
 ## 授权清理与恢复
 
 ```json
-{"schema_version":1,"reason":"当前用户明确授权的范围","delete_ids":["1001"],"unavailable_ids":[]}
+{"schema_version":1,"reason":"当前用户明确授权的范围","delete_ids":["1001"],"unavailable_ids":[],"no_yield_ids":[]}
 ```
 
 授权只接受固定集合内已经审阅的精确 ID。失效来源必须另列于 `unavailable_ids`，且该数组须精确等于 delete_ids 中的失效子集；默认缺失、retain 和未声明授权的来源全部保留。CLI 保存的是调用者提交的授权记录，不能代替人类授权。
+
+`reviewed-no-yield` 只有另列在 `no_yield_ids` 中才允许删除，且该数组必须精确等于 `delete_ids` 中此 decision 的子集，不能缺少、重复或夹带其他 ID。`no_yield_ids` 可省略，旧契约省略时按 `[]` 校验，不重写历史授权；若旧授权后续把 review 改成无新知识，cleanup 会停止，须按适用的人类授权重新提交精确名单。此状态可通过全批 ready，但不是文章或仓库交付，也不能用于策略 feedback；feedback 仍只接受有真实输出的 `processed`。
 
 cleanup 先要求全批 ready、核对当前 X 身份及 GitHub 目录保护，再对精确 ID 执行 `delete --dry-run --keep-empty-tags` 并校验完整 ID 列表。`--execute` 再实时核对，fsync 保存不可变意图后仅派发一次删除。不删仓库输出卡片，不清理标签，不清空回收站，不删除原始材料。
 

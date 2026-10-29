@@ -1,5 +1,5 @@
 """[INPUT]: 外部 X 材料清单、Agent 开放式审阅、真实文章和 Cubox 仓库卡片。
-[OUTPUT]: 固定来源集合、增量审阅、整体交付核对和版本化策略反馈。
+[OUTPUT]: 固定来源集合、增量审阅及已读无新知识决策、整体交付核对和版本化策略反馈。
 [POS]: knowledge 的轻量集合账本；不生成文章、不调用模型或更改分类。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
@@ -186,7 +186,7 @@ def validate_review(source, review, spec):
             "gaps 必须是文字数组。")
     require(isinstance(review.get("outputs"), list), "outputs 必须是数组。")
     decision = review.get("decision")
-    require(decision in {"processed", "retain", "confirmed-unavailable"}, "decision 无效。")
+    require(decision in {"processed", "retain", "confirmed-unavailable", "reviewed-no-yield"}, "decision 无效。")
     if decision == "confirmed-unavailable":
         require(review["complete"] is False and review["gaps"] and not review["outputs"],
                 "失效不能伪装正文完整或已总结，必须保留 gaps，不能登记交付。")
@@ -202,6 +202,11 @@ def validate_review(source, review, spec):
         except ValueError as exc:
             raise WorkflowError("失效观察时间无效。") from exc
         files(evidence.get("files"), Path(spec["materials_root"]))
+    elif decision == "reviewed-no-yield":
+        require(source["text_sha256"] and review.get("read_sha256") == source["text_sha256"]
+                and review["complete"] is True and review["gaps"] == [] and review["outputs"] == [],
+                "reviewed-no-yield 必须完整实读、无 gaps 且 outputs=[]；缺失来源或未读媒体不能冒充无新知识。")
+        text(review.get("no_yield_reason"), "no_yield_reason")
     elif decision == "processed":
         require(source["text_sha256"] and review.get("read_sha256") == source["text_sha256"]
                 and review["complete"] is True and review["gaps"] == [] and review["outputs"],
