@@ -30,7 +30,8 @@ removing them. This is especially recommended when scripting or when
 an AI Agent is performing deletions on behalf of a user.
 
 When deleting up to 3 cards, the CLI shows titles and URLs in the preview.
-For larger batches, it shows only the card count and predicted empty tags.
+For larger batches, text shows only the card count and predicted empty tags.
+JSON previews always include every requested ID, without fetching large-batch details.
 
 After a successful deletion, the CLI checks tags that were on those cards.
 Empty leaf tags with no active or archived cards are deleted automatically.
@@ -102,6 +103,11 @@ func outputDryRun(ctx context.Context, c *client.Client, ids []string, keepTags 
 	}
 	if count <= detailPreviewThreshold {
 		result.Cards = fetchDeletePreviews(c, ids)
+	} else if outputFormat != "text" {
+		result.Cards = make([]deletePreview, 0, count)
+		for _, id := range ids {
+			result.Cards = append(result.Cards, deletePreview{ID: id})
+		}
 	}
 	if !keepTags {
 		tags, err := c.ListTags()

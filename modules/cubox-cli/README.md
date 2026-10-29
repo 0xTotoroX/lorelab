@@ -479,7 +479,7 @@ cubox-cli delete --id CARD_ID [flags]
 | `--keep-empty-tags` | Keep empty tags after card deletion instead of pruning them |
 
 
-**Dry Run:** Use `--dry-run` first. It also predicts which affected tags would become empty, without writing to Cubox. For ≤ 3 cards it includes title and URL; larger batches omit per-card details. Before a real deletion, the CLI reads the target cards and their tags; if it cannot match a tag safely, it stops before deleting cards. After deletion it checks both active and archived cards and child tags, then verifies any tag deletion. Card and tag deletion are not transactional: if cleanup fails, the cards may already be gone and the command reports this explicitly.
+**Dry Run:** Use `--dry-run` first. It also predicts which affected tags would become empty, without writing to Cubox. For ≤ 3 cards it includes title and URL; larger batches omit title/URL lookups. JSON dry-run always includes every requested ID in `cards`; text keeps the count-only card display for large batches. With `--keep-empty-tags`, large-batch dry-run makes no HTTP requests. Before a real deletion, the CLI reads the target cards and their tags; if it cannot match a tag safely, it stops before deleting cards. After deletion it checks both active and archived cards and child tags, then verifies any tag deletion. Card and tag deletion are not transactional: if cleanup fails, the cards may already be gone and the command reports this explicitly.
 
 ```bash
 # Preview

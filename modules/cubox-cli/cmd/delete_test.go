@@ -2,9 +2,15 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/OLCUBO/cubox-cli/internal/client"
@@ -269,5 +275,101 @@ func TestDeletePrunesEmptySourceChildButKeepsSourceRoot(t *testing.T) {
 	if err != nil || len(report.Tags.Deleted) != 1 || report.Tags.Deleted[0].Name != "来源/PICSED" ||
 		len(store.tags) != 1 || store.tags[0].ID != root {
 		t.Fatalf("source child cleanup changed the root or failed: %+v %v", report, err)
+	}
+}
+
+// Capture actual serialized output, including large batches without pipe limits.
+func captureDeleteDryRun(t *testing.T, c *client.Client, ids []string, format string) (string, string) {
+	t.Helper()
+	oldOut, oldErr, oldFormat, oldInfo := os.Stdout, os.Stderr, outputFormat, updateInfo
+	stdout, err := os.Create(filepath.Join(t.TempDir(), "stdout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdout.Close()
+	stderr, err := os.Create(filepath.Join(t.TempDir(), "stderr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stderr.Close()
+	os.Stdout, os.Stderr, outputFormat, updateInfo = stdout, stderr, format, nil
+	defer func() { os.Stdout, os.Stderr, outputFormat, updateInfo = oldOut, oldErr, oldFormat, oldInfo }()
+	if err := outputDryRun(context.Background(), c, ids, true); err != nil {
+		t.Fatal(err)
+	}
+	out, err := os.ReadFile(stdout.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	log, err := os.ReadFile(stderr.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out), string(log)
+}
+
+func TestDeleteDryRunLargeJSONListsExactIDsWithoutRequests(t *testing.T) {
+	for _, count := range []int{4, 4096} {
+		t.Run(fmt.Sprint(count), func(t *testing.T) {
+			var requests atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests.Add(1)
+				http.Error(w, "dry-run must not call any endpoint", http.StatusInternalServerError)
+			}))
+			defer server.Close()
+			ids := make([]string, count)
+			for i := range ids {
+				ids[i] = fmt.Sprintf("7435692934957%06d", count-i)
+			}
+			for _, format := range []string{"json", "pretty"} {
+				out, _ := captureDeleteDryRun(t, client.New(server.URL, "test"), ids, format)
+				var result deleteResult
+				if err := json.Unmarshal([]byte(out), &result); err != nil {
+					t.Fatal(err)
+				}
+				if !result.DryRun || result.Count != count || len(result.Cards) != count || result.Tags != nil {
+					t.Fatalf("wrong preview: count=%d cards=%d", result.Count, len(result.Cards))
+				}
+				for i, card := range result.Cards {
+					if card.ID != ids[i] || card.Title != "" || card.URL != "" {
+						t.Fatalf("wrong card %d: %+v", i, card)
+					}
+				}
+			}
+			out, log := captureDeleteDryRun(t, client.New(server.URL, "test"), ids, "text")
+			if out != "" || !strings.Contains(log, fmt.Sprintf("Would delete %d card(s)", count)) || strings.Contains(log, ids[0]) {
+				t.Fatalf("large text preview changed: %q %q", out, log)
+			}
+			if requests.Load() != 0 {
+				t.Fatalf("preview made %d HTTP requests, including possible writes", requests.Load())
+			}
+		})
+	}
+}
+
+func TestDeleteDryRunSmallJSONRetainsDetails(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.Method != http.MethodGet || r.URL.Path != "/c/api/cli/card/detail" {
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+		id := r.URL.Query().Get("id")
+		_ = json.NewEncoder(w).Encode(map[string]any{"code": 200, "data": client.CardDetail{ID: id, Title: "Title " + id, URL: "https://example.com/" + id}})
+	}))
+	defer server.Close()
+	ids := []string{"a", "b", "c"}
+	out, _ := captureDeleteDryRun(t, client.New(server.URL, "test"), ids, "json")
+	var result deleteResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.DryRun || result.Count != 3 || len(result.Cards) != 3 || requests.Load() != 3 {
+		t.Fatalf("small preview changed: %+v requests=%d", result, requests.Load())
+	}
+	for i, card := range result.Cards {
+		if card.ID != ids[i] || card.Title != "Title "+ids[i] || card.URL != "https://example.com/"+ids[i] {
+			t.Fatalf("missing detail: %+v", card)
+		}
 	}
 }

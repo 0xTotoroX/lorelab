@@ -13,14 +13,17 @@ cubox-cli delete --id CARD_ID [--id ID2,...] [--dry-run]
 | ------------- | -------------------------------------------------------------- |
 | `--id ID,...` | Card IDs to delete (comma-separated, required)                 |
 | `--dry-run`   | Preview which cards would be deleted without actually deleting |
+| `--keep-empty-tags` | Skip empty-tag inspection and cleanup |
 
 
 ## Output
 
 Returns: `{ "dry_run": bool, "count": N, "cards": [...], "message": "..." }`
 
-- When ≤ 3 cards: `cards` array includes `id`, `title`, `url` fetched from server.
-- When > 3 cards: `cards` is omitted; only `count` is shown (avoids heavy per-card API calls).
+- JSON (`-o json` or `-o pretty`) dry-run always returns every requested ID in `cards`, in input order, with `count` matching the list length.
+- When ≤ 3 cards: previews also fetch `title` and `url` when available.
+- When > 3 cards: JSON entries contain only `id`; no per-card detail requests are made. Text mode keeps the count-only card display.
+- With `--keep-empty-tags`, large-batch dry-run makes no HTTP requests; without it, the existing read-only tag prediction still runs.
 
 ## Dry Run Policy for AI Agents
 

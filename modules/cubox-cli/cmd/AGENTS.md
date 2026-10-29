@@ -22,8 +22,8 @@ top level. Other commands retain the existing output/notification helpers.
 - `save.go`: Save and verify cards.
 - `update.go`: Update card fields.
 - `archive.go`: Archive/unarchive cards and folder resolution.
-- `delete.go`: Preview and delete cards, optionally prune affected tags.
-- `delete_test.go`: Deletion/pruning checks.
+- `delete.go`: Preview and delete cards, optionally prune affected tags; JSON dry-run lists every requested ID without large-batch detail requests.
+- `delete_test.go`: Deletion/pruning checks and actual JSON/text dry-run output contracts.
 - `annotation.go`: Annotation listing.
 - `marks.go`: Web/app highlight operations.
 - `recycle.go`: Recycle-bin operations.
