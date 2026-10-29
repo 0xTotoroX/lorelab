@@ -14,6 +14,7 @@ def fake_audio_decode_for_routing_contracts(monkeypatch):
     # These tests use synthetic byte placeholders and fake ASR. Actual decoding
     # and final media acceptance are covered by test_media_* and content tasks.
     monkeypatch.setattr("soota.transcripts.resolver.ensure_audio", lambda path, **kwargs: path)
+    monkeypatch.setattr("soota.transcripts.quality.audio_duration_ms", lambda path: 1000)
 
 
 class FakeAsr:

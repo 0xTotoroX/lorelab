@@ -1,7 +1,7 @@
 """
 [INPUT]: Task inputs, provider policy and artifact goals.
 [OUTPUT]: Raw source text, transcript or media collection results.
-[POS]: Shared task acquisition; Weir USD-zero policy reaches body capture.
+[POS]: Shared task acquisition; local ASR passes timeline/repetition acceptance guards.
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 
@@ -55,6 +55,7 @@ from soota.tasks.models import InputSpec, TaskSpec
 from soota.transcripts.asr import resolve_engine
 from soota.transcripts.captions import parse_transcript_markdown
 from soota.transcripts.conversion import parse_payload
+from soota.transcripts.quality import parse_asr_payload
 
 
 class MediaOptions(TypedDict):
@@ -271,9 +272,7 @@ def _collect_text(
         raw = engine.transcribe(audio.path, language=spec.language)
         if isinstance(raw, list):
             raw = CaptionPayload(format="soota-segments", body=[s.model_dump() for s in raw])
-        segments = parse_payload(raw, language=spec.language, source=TranscriptSource.ASR)
-        if not segments:
-            raise SourceError("本地转写未取得文字。")
+        segments = parse_asr_payload(raw, audio.path, language=spec.language)
         item.provenance = {"provider": "local", "asr_engine": engine.name, "caption_format": raw.format}
         return Collection(
             item,
