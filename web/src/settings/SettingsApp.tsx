@@ -5,7 +5,7 @@
  * [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Activity, ArrowRight, Check, Circle, FileDiff, FolderOpen, Layers2, Plug, RotateCcw, Save, SlidersHorizontal, Sun, Moon } from 'lucide-react';
+import { Activity, ArrowRight, Check, Circle, FileDiff, FolderOpen, Plug, RotateCcw, Save, SlidersHorizontal, Sun, Moon } from 'lucide-react';
 import { Button, Modal, Segments, SwitchField } from '../components/ui';
 import { Capture, Storage } from './ConfigSections';
 import { FlowMap } from './FlowMap';
@@ -95,7 +95,7 @@ export function SettingsApp() {
     <div className="configuration-app">
       <aside className="workbench-sidebar" aria-label="LoreLab 工作区">
         <header className="workbench-header">
-          <div className="workbench-brand"><Layers2 size={20} /><strong>LoreLab</strong></div>
+          <div className="workbench-brand"><span className="brand-mark" aria-hidden="true" /><strong>LoreLab</strong></div>
           <Button variant="ghost" className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             aria-label={theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}
             title={theme === 'dark' ? '切换为浅色主题' : '切换为深色主题'}>

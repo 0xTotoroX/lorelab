@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-labelledby="title">
+  <title id="title">LoreLab · 错榫</title>
+  <style>
+    :root { color: #6d28d9; }
+    @media (prefers-color-scheme: dark) { :root { color: #b69df8; } }
+  </style>
+  <path fill="currentColor" d="M32 32H80V176H224V200L200 224H32Z M112 32H160V96H224V120L200 144H112Z"/>
+</svg>
