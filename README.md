@@ -1,3 +1,7 @@
+<p>
+  <img src="web/src/lorelab-mark.svg" alt="LoreLab 错榫标志" width="80" height="80" />
+</p>
+
 # LoreLab
 
 **采集内容，整理知识，按需学习。**
