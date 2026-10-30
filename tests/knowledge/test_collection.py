@@ -408,7 +408,9 @@ def test_remaining_card_with_changed_url_is_not_reported_deleted(setup, monkeypa
         return real(tool, args, receipt)
 
     monkeypatch.setattr(fake, "_run", changed_url)
-    result = c.cleanup(result["job"], True)
+    with pytest.raises(WorkflowError, match="保全"):
+        c.cleanup(result["job"], True)
+    result = c.status(result["job"])
     assert not result["ok"] and result["cleanup"]["remaining_ids"] == ["1001"]
     assert fake.deletes == 1
 
@@ -612,7 +614,7 @@ def test_bulk_collection_preserves_unrelated_text_cards_without_urls(setup, url)
     assert c.cleanup(result["job"], True)["status"] == "cleaned"
     assert set(fake.cards) == before - set(ids)
     assert {key: fake.cards[key] for key in text_cards} == text_cards
-    assert fake.deletes == 1
+    assert fake.deletes == 2  # 默认每批 100，101 条拆成两批。
 
 
 def test_real_runtime_subprocess_cli_with_synthetic_cubox(setup, tmp_path):

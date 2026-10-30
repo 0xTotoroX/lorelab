@@ -216,7 +216,7 @@ def validate_review(source, review, spec):
     return review
 
 
-def verify_outputs(run, job, state, spec, selected):
+def verify_outputs(run, job, state, spec, selected, *, cards=None):
     repositories, seen_articles = {}, {}
     source_ids = {s["id"] for s in unseal(job, state, "sources.json")}
     for source_id, review in selected.items():
@@ -246,14 +246,15 @@ def verify_outputs(run, job, state, spec, selected):
                 raise WorkflowError("输出仅支持真实 article/repository 引用。")
             require(key not in seen, f"{source_id} 重复输出引用。")
             seen.add(key)
-    if len(repositories) > 100:
+    if cards is not None or len(repositories) > 100:
         from .collection_cleanup import inventory
 
-        cards = inventory(run, job, "collection-repositories")
+        if cards is None:
+            cards = inventory(run, job, "collection-repositories")
         for card_id, identity in repositories.items():
             require(card_id in cards, "GitHub 输出卡片未真实回读。")
             require(repository(cards[card_id].get("url")) == identity, "GitHub 输出卡片 URL 不符。")
-    for offset in range(0, len(repositories) if len(repositories) <= 100 else 0, 100):
+    for offset in range(0, len(repositories) if cards is None else 0, 100):
         result = batch(run, job, list(repositories)[offset:offset + 100], f"collection-repositories-{offset}")
         for item in result["items"]:
             require(item["status"] == "ok", "GitHub 输出卡片未真实回读。")
@@ -287,7 +288,7 @@ def submit(job: str, file: Path):
         return report(folder, state)
 
 
-def inspect(run, job, state, spec):
+def inspect(run, job, state, spec, *, cards=None):
     selected, blockers = reviews(job, state), []
     for source in unseal(job, state, "sources.json"):
         key, review = source["id"], selected.get(source["id"])
@@ -298,7 +299,7 @@ def inspect(run, job, state, spec):
         if review["decision"] == "retain" and not (source["text_sha256"]
                                                     and review.get("read_sha256") == source["text_sha256"]):
             blockers.append({"id": key, "reason": "未读或缺失来源仍保留，阻塞全批 ready"})
-    proof = verify_outputs(run, job, state, spec, selected)
+    proof = verify_outputs(run, job, state, spec, selected, cards=cards)
     result = {"ready": not blockers, "blockers": blockers, "verification": proof,
               "checked_at": datetime.now(UTC).isoformat(),
               "review_sha256": {key: state["sealed"][name] for key, name in state["reviews"].items()}}
@@ -318,7 +319,7 @@ def report(job, state, selected=None):
                  "text_file": source["text_file"], "gaps": selected[source["id"]]["gaps"]}
                 for source in sources
                 if selected.get(source["id"], {}).get("decision") == "retain"]
-    return {"ok": state.get("cleanup", {}).get("status") != "uncertain", "job": str(job),
+    return {"ok": state["status"] not in {"cleanup_uncertain", "cleanup_blocked"}, "job": str(job),
             "status": state["status"], "sources": sources, "reviewed_ids": list(state["reviews"]),
             "source_count": len(sources), "status_count": len({s["status_id"] for s in sources}),
             "reviewed_source_count": len(selected), "review_counts": counts,
@@ -329,6 +330,7 @@ def report(job, state, selected=None):
             "strategy_version": len(state["feedback"]), "feedback": list(state["feedback"]),
             "strategy": unseal(job, state, state["feedback"][-1])["strategy"] if state["feedback"] else None,
             "authorization": state.get("authorization"), "cleanup": state.get("cleanup"),
+            "cleanup_error": state.get("cleanup_error"),
             "cleanup_preview": state.get("cleanup_preview"),
             "scope": "本地状态不代表云端当前状态；ready/cleanup 实时核对，完整性与语义仍须 Agent 实读。"}
 
@@ -396,7 +398,7 @@ def authorize(job, file):
     return authorize_cleanup(job, file)
 
 
-def cleanup(job, execute=False):
+def cleanup(job, execute=False, *, batch_size=100, max_batches=None, resume=False):
     from .collection_cleanup import cleanup as clean
 
-    return clean(job, execute)
+    return clean(job, execute, batch_size=batch_size, max_batches=max_batches, resume=resume)

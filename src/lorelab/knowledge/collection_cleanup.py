@@ -1,14 +1,12 @@
 """[INPUT]: collection 全批审阅、真实交付、固定 X 收藏及失效/无新知识的单独删除授权。
-[OUTPUT]: dry-run、持久删除意图、active/archived 只读对账；无网址的文本收藏留在快照中。
-[POS]: collection 清理门禁；复用 workflow 的 CLI 回执、保护检查与状态锁。
+[OUTPUT]: 授权、完整收藏快照及只读对账；分批执行交给 collection_cleanup_batches。
+[POS]: collection 清理的共用校验；无网址的文本收藏保留，CLI 自动分页至空页。
 [PROTOCOL]: 变更时更新此头部，然后检查 AGENTS.md
 """
 
 from . import collection as c
-from . import runtime
-from .workflow_publish import writer
-from .workflow_sources import batch, folders, protected
-from .workflow_state import call, data, digest, encoded, read_json, require, rows, save, seal, unseal
+from .workflow_sources import batch
+from .workflow_state import call, digest, encoded, read_json, require, rows, save, seal, unseal
 
 
 def validate_authorization(value, selected, sources):
@@ -48,7 +46,7 @@ def inventory(run, job, name):
     """读取完整元数据；文本收藏可无 URL，目标 X/仓库身份由调用方逐项核对。"""
     cards = {}
     for archived in (False, True):
-        args = ["card", "list", "--all", "-o", "json"]
+        args = ["card", "list", "--all", "--limit", "500", "-o", "json"]
         if archived:
             args.append("--archived")
         values = rows(call(run, job, "cubox", args, f"{name}-{int(archived)}"), "完整收藏列表")
@@ -82,83 +80,63 @@ def live_sources(run, job, sources, ids, name):
     return cards
 
 
+def metadata(card):
+    return {key: card.get(key) for key in
+            ("title", "article_title", "description", "url", "domain", "read", "starred", "tags", "folder")}
+
+
+def ensure_baseline(job, state, cards):
+    name = "cleanup-baseline.json"
+    if name not in state.get("sealed", {}):
+        # 兼容曾完成试删但尚未保存基线的开发版本，优先采用第一批派发前的完整快照。
+        batches = state.get("cleanup", {}).get("batches", [])
+        if batches:
+            prefix = batches[0]["receipt"].removesuffix("-execute.json")
+            cards = {}
+            for archived in (0, 1):
+                for card in rows(read_json(job / f"{prefix}-before-{archived}.json"), "原批前快照"):
+                    key = card.get("id")
+                    require(isinstance(key, str) and key.isdigit() and key not in cards, "原批前快照 ID 无效。")
+                    cards[key] = card
+        seal(job, state, name, {key: metadata(card) for key, card in cards.items()})
+        save(job, state)
+
+
+def preservation(job, state, cards):
+    name = "cleanup-baseline.json"
+    if name not in state.get("sealed", {}):
+        return  # 旧版本未保存基线时，不虚构历史保全证据。
+    baseline = unseal(job, state, name)
+    targets = set(state["cleanup"]["ids"])
+    require(baseline.keys() - targets <= cards.keys(), "非删除目标有收藏缺失；保全问题尚未解决。")
+    require(all(metadata(cards[key]) == original for key, original in baseline.items() if key in cards),
+            "收藏人工元数据与清理基线不同；保全问题尚未解决。")
+
+
 def reconcile(run, job, state, spec):
     intent = state["cleanup"]
     sources = {s["id"]: s for s in unseal(job, state, "sources.json")}
-    remaining = set()
     # 未知写入只查询；即使删除回执失败或进程曾中断，也绝不重发。
-    for archived in (False, True):
-        args = ["card", "list", "--all", "-o", "json"]
-        if archived:
-            args.append("--archived")
-        values = rows(call(run, job, "cubox", args, f"collection-lookup-{int(archived)}"), "完整收藏列表")
-        require(all(isinstance(v.get("id"), str) for v in values), "删除回查缺少真实 ID。")
-        require(len({v["id"] for v in values}) == len(values), "删除回查列表存在重复 ID。")
-        remaining.update(v["id"] for v in values if v["id"] in intent["ids"])
+    from uuid import uuid4
+
+    cards = inventory(run, job, "collection-lookup-" + uuid4().hex)
+    preservation(job, state, cards)
+    remaining = set(intent["ids"]) & cards.keys()
     retained = [key for key in sources if key not in intent["ids"]]
-    live_sources(run, job, sources, retained, "collection-retained")
-    result = c.inspect(run, job, state, spec)
+    require(set(retained) <= cards.keys(), "保留来源缺失，停止清理。")
+    for key in retained:
+        c.x_status(cards[key].get("url"), sources[key]["status_id"])
+    result = c.inspect(run, job, state, spec, cards=cards)
     require(result["ready"], "删除后交付核对失效。")
-    intent.update(status="uncertain" if remaining else "verified", remaining_ids=sorted(remaining),
+    paused = bool(remaining) and intent.get("status") == "paused"
+    intent.update(status=("paused" if paused else "uncertain") if remaining else "verified", remaining_ids=sorted(remaining),
                   absent_ids=[key for key in intent["ids"] if key not in remaining], retained_ids=retained)
-    state["status"] = "cleanup_uncertain" if remaining else "cleaned"
+    state["status"] = ("cleanup_paused" if paused else "cleanup_uncertain") if remaining else "cleaned"
+    state.pop("cleanup_error", None)
     save(job, state)
 
 
-def cleanup(job, execute=False):
-    require(type(execute) is bool, "execute 必须是布尔值。")
-    with c.opened(job) as (folder, state, spec), writer(spec):
-        if state.get("cleanup"):
-            try:
-                reconcile(runtime.run_json, folder, state, spec)
-            except Exception:
-                state["cleanup"]["status"] = "uncertain"
-                state["status"] = "cleanup_uncertain"
-                save(folder, state)
-                raise
-            return c.report(folder, state)
-        require(state.get("authorization"), "未声明删除授权；默认保留全部来源。")
-        sources = {s["id"]: s for s in unseal(folder, state, "sources.json")}
-        authorization = unseal(folder, state, state["authorization"])
-        ids = validate_authorization(authorization, c.reviews(folder, state), sources)
-        require(c.inspect(runtime.run_json, folder, state, spec)["ready"], "全批仍有未读/未处理来源，不能清理。")
-        listing = folders(runtime.run_json, folder, "collection-cleanup-folders")
-        cards = live_sources(runtime.run_json, folder, sources, list(sources), "collection-cleanup-before")
-        require(all(not protected(cards[key], listing) for key in ids), "GitHub 卡片或保护目录中的收藏不能删除。")
-        args = ["delete", "--id", ",".join(ids), "--keep-empty-tags", "-o", "json"]
-        preview = data(call(runtime.run_json, folder, "cubox", [*args, "--dry-run"], "collection-cleanup-preview"))
-        require(isinstance(preview, dict) and preview.get("dry_run") is True and preview.get("count") == len(ids),
-                "dry-run 与固定授权范围不符。")
-        preview_cards = preview.get("cards")
-        require(isinstance(preview_cards, list) and len(preview_cards) == len(ids)
-                and all(isinstance(card, dict) and isinstance(card.get("id"), str) for card in preview_cards)
-                and {card["id"] for card in preview_cards} == set(ids), "dry-run 必须返回精确删除 ID。")
-        state["cleanup_preview"] = {"eligible_ids": ids, "retained_ids": [key for key in sources if key not in ids],
-                                    "authorization_sha256": state["sealed"][state["authorization"]],
-                                    "executed": False}
-        save(folder, state)
-        if not execute:
-            return c.report(folder, state)
-        # dry-run 后再次核对交付、来源身份和保护范围；随后 fsync 意图才派发一次删除。
-        require(c.inspect(runtime.run_json, folder, state, spec)["ready"], "交付核对已失效。")
-        listing = folders(runtime.run_json, folder, "collection-cleanup-final-folders")
-        cards = live_sources(runtime.run_json, folder, sources, list(sources), "collection-cleanup-final")
-        require(all(not protected(cards[key], listing) for key in ids), "来源已进入 GitHub 保护范围。")
-        intent = {"ids": ids, "lookup_urls": list(dict.fromkeys(
-            url for key in ids for url in (sources[key]["url"], cards[key]["url"]))),
-            "authorization_sha256": state["sealed"][state["authorization"]],
-            "review_sha256": state["ready"]["review_sha256"]}
-        name = "cleanup-intent.json"
-        seal(folder, state, name, intent)
-        state["cleanup"] = {**intent, "status": "intent"}
-        state["status"] = "cleaning"
-        save(folder, state)
-        try:
-            call(runtime.run_json, folder, "cubox", args, "collection-cleanup-execute", (0, 1))
-            reconcile(runtime.run_json, folder, state, spec)
-        except Exception:
-            state["cleanup"]["status"] = "uncertain"
-            state["status"] = "cleanup_uncertain"
-            save(folder, state)
-            raise
-        return c.report(folder, state)
+def cleanup(job, execute=False, *, batch_size=100, max_batches=None, resume=False):
+    from .collection_cleanup_batches import cleanup as clean_batches
+
+    return clean_batches(job, execute, batch_size=batch_size, max_batches=max_batches, resume=resume)

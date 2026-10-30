@@ -23,6 +23,21 @@ def diagnostic_path(receipt):
     return receipt.with_name(receipt.name + ".diagnostic.json")
 
 
+@pytest.mark.parametrize("stderr,expected", [
+    ('{"error":"HTTP 413: private upstream body"}', "HTTP 413"),
+    ('{"error":"API error -1025: private upstream body"}', "API error -1025"),
+    ('{"error":"unclassified private error"}', "子命令执行失败"),
+])
+def test_public_failure_identifies_safe_error_code_without_copying_body(tmp_path, process, stderr, expected):
+    process.return_value = subprocess.CompletedProcess([], 1, "", stderr)
+    with pytest.raises(runtime.ToolError) as error:
+        runtime.run_json("cubox", ["synthetic-operation"], tmp_path / "receipt.json")
+    assert expected in str(error.value)
+    assert "private upstream body" not in str(error.value)
+    assert "unclassified private error" not in str(error.value)
+    process.assert_called_once()
+
+
 def public_trace(error):
     return "".join(traceback.format_exception(error.value))
 

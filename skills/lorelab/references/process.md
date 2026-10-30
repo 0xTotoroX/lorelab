@@ -6,7 +6,7 @@
 
 大批已有 JSON/JSONL 导出使用 [`knowledge collection`](../../../docs/collection.md)，先固定真实 Cubox ID、X status 身份、完整已抓文本与原始文件指纹。多个收藏可共用一份原帖证据，不创建虚构 Soota job。Agent 逐帖实读，自主填写 strategy/rationale/coverage/gaps，按目标规则写文章或保存真实仓库卡片后，以实际 hash/卡片 ID 登记，可增量 review。
 
-先补齐长文、链接与缓存正文再冻结来源；AuthorizationError 继续读缓存，不标为失效。NotFound 仅在保留原始响应证据、明确缺口的独立 confirmed-unavailable 状态下记录；绝不计为已总结。verify 对整批来源与真实交付回读，未读来源阻塞；status 只看本地记录。观察真实交付后用 feedback 保存策略调整原因、来源证据和版本回退，分类仍走 library evolve。全部处理后清理必须全批 ready、精确 delete_ids 授权，失效来源还须单列 unavailable_ids；cleanup 先 dry-run，--execute 后未知写入只读对账。旧批次按原入口恢复，不混用状态。
+先补齐长文、链接与缓存正文再冻结来源；AuthorizationError 继续读缓存，不标为失效。NotFound 仅在保留原始响应证据、明确缺口的独立 confirmed-unavailable 状态下记录；绝不计为已总结。verify 对整批来源与真实交付回读，未读来源阻塞；status 只看本地记录。观察真实交付后用 feedback 保存策略调整原因、来源证据和版本回退，分类仍走 library evolve。全部处理后清理必须全批 ready、精确 delete_ids 授权，失效来源还须单列 unavailable_ids；cleanup 先 dry-run，默认每批 100，逐批回读，失败停批。重复 cleanup 默认只读；用户明确要求继续后，才对同 JOB 使用 --execute --resume，重新核对原名单中仍存在项。可用 --batch-size 3 --max-batches 1 先验证小批，不能另建任务或修改旧意图绕过恢复。详细参数和边界见[集合契约](../../../docs/collection.md#授权清理与恢复)。
 
 完整实读后若只有未获回复的投票或重复感叹、没有新知识，使用 `reviewed-no-yield`，保留非空 no_yield_reason，coverage 明确正文和媒体核对，outputs=[]，不为了满足 processed 而编空文章。它要求完整来源、source/read 指纹一致、complete=true、gaps=[]；缺正文或关键媒体仍未读时保留原缺口。该状态可进入整体 ready，删除须在适用授权下单列精确 no_yield_ids；旧授权不含此字段视为[]。无产出来源不用于 feedback，策略反馈仍需已 processed 的真实交付证据。
 

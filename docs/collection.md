@@ -108,6 +108,17 @@ status 只读取本地证据，不联网；返回来源数、status 数、待审
 
 `reviewed-no-yield` 只有另列在 `no_yield_ids` 中才允许删除，且该数组必须精确等于 `delete_ids` 中此 decision 的子集，不能缺少、重复或夹带其他 ID。`no_yield_ids` 可省略，旧契约省略时按 `[]` 校验，不重写历史授权；若旧授权后续把 review 改成无新知识，cleanup 会停止，须按适用的人类授权重新提交精确名单。此状态可通过全批 ready，但不是文章或仓库交付，也不能用于策略 feedback；feedback 仍只接受有真实输出的 `processed`。
 
-cleanup 先要求全批 ready、核对当前 X 身份及 GitHub 目录保护，再对精确 ID 执行 `delete --dry-run --keep-empty-tags` 并校验完整 ID 列表。`--execute` 再实时核对，fsync 保存不可变意图后仅派发一次删除。不删仓库输出卡片，不清理标签，不清空回收站，不删除原始材料。
+cleanup 先要求全批 ready、核对当前 X 身份及 GitHub 目录保护，再对精确 ID 执行 `delete --dry-run --keep-empty-tags` 并校验完整 ID 列表。`--execute` 默认串行每批 100 条，可设 `--batch-size 1..100`。这是本地保守策略，不代表已知服务端上限。`--max-batches 1` 只运行一批，成功后剩余任务记为 `cleanup_paused`。不删仓库输出卡片，不清理标签，不清空回收站，不删除原始材料。
 
-删除回执成功后仍分别用 `card list --all` 与 `--archived` 完整读取活动/归档列表，按固定 ID 对账，并核对保留来源和全部交付。完整列表由 Cubox CLI 自动分页；不以旧 URL 查无代替 ID 已删除，避免卡片改 URL 后误报。超时、中断、部分结果或读回失败标记 uncertain；后续 cleanup 只读对账，绝不重发。删除意图形成后冻结 review、策略与授权，不得通过更正数据另发删除。`cleaned` 仅表示固定删除名单已查无，不表示集合所有来源都被删除。测试和本地回执验证不代表真实内容交付。
+```text
+lorelab knowledge collection cleanup JOB
+lorelab knowledge collection cleanup JOB --execute --batch-size 3 --max-batches 1
+# 已有删除意图时，用户明确要求继续才使用：
+lorelab knowledge collection cleanup JOB --execute --resume --batch-size 100
+```
+
+全局 `cleanup-intent.json` 保持不可变，`cleanup-baseline.json` 冻结清理前人工字段。每次显式执行在 `cleanup-attempts/` 留下独立请求，每批单独保存 dry-run、执行前快照、文件夹树、fsync 意图、CLI 回执和执行后快照；同一批意图只派发一次。写前再次核对原授权、审阅指纹、文章字节、真实 GitHub 输出和当前保护目录；比较上一批回读与本批快照，人工元数据变化会停止。写后检查本批 ID 从活动/归档列表消失，其他收藏和人工元数据保全，再继续下一批。CLI 的成功 count 不是逐项删除证明。
+
+完整列表使用 `card list --all --limit 500` 和 `--archived`，CLI 自动分页至空页，保留无 URL 文本收藏；不以旧 URL 查无代替 ID 不存在。列表不是服务端原子快照，观察到缺失、重复、身份或人工字段变化立即停止，不能声称排除了所有并发移动。超时、错误、部分成功或读回失败立即停批并保留 `cleanup_uncertain`；失败后只读回查，不自动重发或继续下一批。子命令非 JSON/超时诊断见[运行时错误](knowledge.md#配置独立组件与兼容入口)。
+
+重复 cleanup（包括只有 `--execute`）仍只读。用户明确要求恢复时，`--execute --resume` 重新读取两类列表并检查交付、保护和原冻结名单，仅为原名单仍存在的 ID 建立新的批次意图；已查无的 ID 不再发送。旧版本一次派发的任务可原地恢复，原授权、review、策略、意图和历史回执不重写。预检拒绝持久化为 `cleanup_blocked`、`ok:false`，已派发后失败为 `cleanup_uncertain`；两者不能继续显示成功暂停。普通对账和空剩余恢复也须通过已保存基线的保全校验，不能仅因目标查无解除其他收藏缺失的异常。`--resume` 是执行者对本次授权的显式声明，不会自行取得人类授权。`cleaned` 只表示固定名单在活动/归档中全部查无，不表示所有来源被删除或回收站已清空。

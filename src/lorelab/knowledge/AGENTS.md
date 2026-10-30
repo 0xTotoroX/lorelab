@@ -7,7 +7,8 @@ LoreLab 负责知识流程的唯一实现；采集任务仍归 Soota 的 `tasks/
 - `__init__.py`：知识模块入口。
 - `cli.py`：LoreLab knowledge/study、collection 参数、配置及 init/batch 别名。
 - `collection.py`：离线冻结 X 导出清单、同帖多收藏身份、Agent 逐帖开放审阅与 reviewed-no-yield、外部文章/仓库核对及策略版本；状态分别汇总审阅结论、未审来源与保留缺口。无新知识不造文章，反馈仍要求真实交付。
-- `collection_cleanup.py`：全批 ready、精确收藏与单独失效/无新知识删除授权、GitHub 保护、dry-run 和一次删除后的只读对账；完整快照允许无网址的文本收藏，目标 X/仓库仍逐项验证 URL；旧授权缺少 no_yield_ids 按空数组处理。
+- `collection_cleanup.py`：精确收藏及失效/无新知识授权、完整 active/archived 快照和只读对账；文本收藏可无网址，目标 X/仓库逐项验证身份；旧授权缺少 no_yield_ids 按空数组处理。
+- `collection_cleanup_batches.py`：默认每批 100 的串行删除；逐批预览、持久意图、回读与人工元数据保护；失败停批，同 JOB 显式 resume 才继续原名单仍存在项，历史意图与回执保留。
 - `library.py`：共享分类表、目录树、只读书目，以及冻结分类和归档前的跨目录重复校验。
 - `library_taxonomy.py`：自适应分类 v2，稳定身份、名称、显示顺序、原文归属和路径相互独立。
 - `library_allocation.py`：共享的单调编号记录；回滚分类保留已分配 ID，防止旧任务误认新类别。

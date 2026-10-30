@@ -39,7 +39,7 @@ LoreLab content 负责单来源分析、笔记、文章、大纲与整包导出�
 
 文章写成连贯、足够理解和使用的内容，可综合多个来源，不强制长度、要点数量或双份笔记。默认到文章写入并回读结束。只有明确学习请求才从选定文章启动 `lorelab study`；同批文章和大纲须显式 `--with-outline`。学习节点保留完整意思，层级反映真实关系，不拆碎句，不建立幕布回写 Obsidian 的索引。
 
-默认保留收藏；仅适用的明确授权、完整来源覆盖和所选交付回读均满足后，才经 `knowledge cleanup` 预览和执行。资料不全与 GitHub 项目保留，内容包来源和 study 不清理原始资料。一次派发结果不确定时只读对账，不重新导入或删除。具体字段、门槛和恢复以 [工作流契约](../../docs/knowledge.md) 为准。
+默认保留收藏；仅适用的明确授权、完整来源覆盖和所选交付回读均满足后，才经 `knowledge cleanup` 预览和执行。资料不全与 GitHub 项目保留，内容包来源和 study 不清理原始资料。写入结果不确定时默认只读对账。collection 支持用户明确要求后的同 JOB 分批恢复：`cleanup --execute --resume --batch-size N`，只处理实时仍存在的原授权 ID；可用 `--max-batches 1` 小批验证。每批失败立即停，不自动重试、改原意图或另建任务绕过状态；普通文章批次及幕布仍不重发。具体字段和门槛见[集合契约](../../docs/collection.md)与[工作流契约](../../docs/knowledge.md)。
 
 collection 的 `reviewed-no-yield` 仅用于来源与关键媒体已实读、文字充分却无新知识的项目：指纹一致、complete=true、gaps=[]、outputs=[]，填 no_yield_reason 并在 coverage 说明文字/媒体核对，不编空文章。未读媒体或来源不可得不能这样标。清理须另列精确 no_yield_ids，旧授权缺省为空，不静默扩大；feedback 继续只基于有真实输出的 processed。完整字段见[集合契约](../../docs/collection.md)。
 

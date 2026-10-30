@@ -44,6 +44,9 @@ def register(sub):
             action.add_argument("--file", type=Path, required=True)
         if name == "cleanup":
             action.add_argument("--execute", action="store_true")
+            action.add_argument("--batch-size", type=int, default=100, help="每批删除数量，1–100；默认 100")
+            action.add_argument("--max-batches", type=int, help="本轮最多执行几批；可先执行一批验证")
+            action.add_argument("--resume", action="store_true", help="明确授权：实时对账后仅继续尚存在的原名单")
     library = commands.add_parser("library", help="共享分类体系、目录树与只读文章检索")
     library_commands = library.add_subparsers(dest="library_action", required=True)
     evolve = library_commands.add_parser("evolve", help="按内容和反馈迭代分类，保护原文并保留回退记录")
@@ -143,7 +146,8 @@ def dispatch(args):
             if args.collection_action in {"submit", "review", "feedback", "authorize"}:
                 return getattr(collection, args.collection_action)(args.job, args.file)
             if args.collection_action == "cleanup":
-                return collection.cleanup(args.job, args.execute)
+                return collection.cleanup(args.job, args.execute, batch_size=args.batch_size,
+                                          max_batches=args.max_batches, resume=args.resume)
             return getattr(collection, args.collection_action)(args.job)
         from . import workflow
 

@@ -192,8 +192,15 @@ def run_json(tool: str, args: list[str], receipt: Path | None = None, acceptable
         value = json.loads(result.stdout)
     except json.JSONDecodeError:
         diagnostic = _failure_diagnostic(receipt, "invalid_json", result.returncode, result.stdout, result.stderr)
+        details = _stderr_metadata(result.stderr)
+        if "http_status" in details:
+            reason = f"HTTP {details['http_status']}；"
+        elif "api_error_code" in details:
+            reason = f"API error {details['api_error_code']}；"
+        else:
+            reason = "子命令执行失败；" if result.returncode else ""
         raise ToolError(
-            f"{tool} 未返回有效 JSON（退出码 {result.returncode}）；{diagnostic}"
+            f"{tool} {reason}未返回有效 JSON（退出码 {result.returncode}）；{diagnostic}"
             "若是云端写入，先只读对账，不可直接重发。"
         ) from None
     if receipt is not None:
